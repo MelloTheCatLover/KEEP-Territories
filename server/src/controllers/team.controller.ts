@@ -1,0 +1,82 @@
+import { Request, Response, NextFunction } from 'express';
+import * as teamService from '../services/team.service';
+import { AppError } from '../types/errors';
+
+export async function create(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const team = await teamService.create(
+      {
+        name: req.body.name.trim(),
+        influence: req.body.influence,
+        experience: req.body.experience,
+        strength: req.body.strength,
+        intelligence: req.body.intelligence,
+        endurance: req.body.endurance,
+        leadership: req.body.leadership,
+        luck: req.body.luck,
+      },
+      req.user!.userId
+    );
+
+    res.status(201).json(team);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getById(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const team = await teamService.getById(req.params.id);
+    res.status(200).json(team);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function join(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const team = await teamService.join(req.params.id, req.user!.userId);
+    res.status(200).json(team);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function leave(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    await teamService.leave(req.user!.userId);
+    res.status(200).json({ message: 'You have left the team' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function transferCaptain(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { newCaptainId } = req.body;
+
+    if (!newCaptainId || typeof newCaptainId !== 'string') {
+      throw new AppError(400, 'newCaptainId is required');
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(newCaptainId)) {
+      throw new AppError(400, 'Invalid newCaptainId format');
+    }
+    if (newCaptainId === req.user!.userId) {
+      throw new AppError(400, 'Cannot transfer captain role to yourself');
+    }
+
+    await teamService.transferCaptain(req.user!.userId, newCaptainId);
+    res.status(200).json({ message: 'Captain role transferred successfully' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getAll(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const teams = await teamService.getAll();
+    res.status(200).json(teams);
+  } catch (error) {
+    next(error);
+  }
+}
