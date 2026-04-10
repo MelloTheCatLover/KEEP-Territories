@@ -6,6 +6,11 @@ import { validateEnv, env } from './config/env';
 import { testConnection } from './config/db';
 import authRoutes from './routes/auth.routes';
 import teamRoutes from './routes/team.routes';
+import taskRoutes from './routes/task.routes';
+import sectorRoutes from './routes/sector.routes';
+import captureRoutes from './routes/capture.routes';
+import teamStatsRoutes from './routes/team-stats.routes';
+import gameSettingsRoutes from './routes/game-settings.routes';
 import { errorHandler } from './middleware/error.middleware';
 import { AppError } from './types/errors';
 
@@ -23,6 +28,11 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/teams', teamRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/sectors', sectorRoutes);
+app.use('/api/sectors', captureRoutes);
+app.use('/api/teams/:teamId/stats', teamStatsRoutes);
+app.use('/api/settings', gameSettingsRoutes);
 
 app.use((_req, _res, next) => {
   next(new AppError(404, 'Route not found'));
