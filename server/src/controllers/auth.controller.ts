@@ -35,7 +35,7 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
 export async function getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const user = await authService.getUserById(req.user!.userId);
-    res.status(200).json(user);
+    res.status(200).json({ user });
   } catch (error) {
     next(error);
   }

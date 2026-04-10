@@ -1,9 +1,10 @@
 import { pool } from '../config/db';
-import { Team, CreateTeamDto, TeamWithMembers } from '../types/team';
-import { UserPublic } from '../types/user';
+import { Team, CreateTeamDto } from '../types/team';
+import { TeamFullStats } from '../types/team-stats';
 import { AppError } from '../types/errors';
+import * as teamStatsService from './team-stats.service';
 
-export async function create(dto: CreateTeamDto, userId: string): Promise<TeamWithMembers> {
+export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFullStats> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -19,11 +20,19 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamWi
       throw new AppError(400, 'You are already in a team');
     }
 
+    const nameCheck = await client.query(
+      'SELECT id FROM teams WHERE name = $1',
+      [dto.name]
+    );
+    if (nameCheck.rows.length > 0) {
+      throw new AppError(400, 'Team with this name already exists');
+    }
+
     const teamResult = await client.query<Team>(
-      `INSERT INTO teams (name, influence, experience, strength, intelligence, endurance, leadership, luck)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO teams (name, color)
+       VALUES ($1, $2)
        RETURNING *`,
-      [dto.name, dto.influence, dto.experience, dto.strength, dto.intelligence, dto.endurance, dto.leadership, dto.luck]
+      [dto.name, dto.color ?? null]
     );
     const team = teamResult.rows[0];
 
@@ -32,15 +41,9 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamWi
       [team.id, userId]
     );
 
-    const memberResult = await client.query<UserPublic>(
-      `SELECT id, email, username, team_id, team_role, created_at
-       FROM users WHERE id = $1`,
-      [userId]
-    );
-
     await client.query('COMMIT');
 
-    return { ...team, members: memberResult.rows };
+    return teamStatsService.getFullStats(team.id);
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -49,25 +52,11 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamWi
   }
 }
 
-export async function getById(teamId: string): Promise<TeamWithMembers> {
-  const teamResult = await pool.query<Team>(
-    'SELECT * FROM teams WHERE id = $1',
-    [teamId]
-  );
-  if (teamResult.rows.length === 0) {
-    throw new AppError(404, 'Team not found');
-  }
-
-  const membersResult = await pool.query<UserPublic>(
-    `SELECT id, email, username, team_id, team_role, created_at
-     FROM users WHERE team_id = $1`,
-    [teamId]
-  );
-
-  return { ...teamResult.rows[0], members: membersResult.rows };
+export async function getById(teamId: string): Promise<TeamFullStats> {
+  return teamStatsService.getFullStats(teamId);
 }
 
-export async function join(teamId: string, userId: string): Promise<TeamWithMembers> {
+export async function join(teamId: string, userId: string): Promise<TeamFullStats> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -156,7 +145,7 @@ export async function leave(userId: string): Promise<void> {
   }
 }
 
-export async function transferCaptain(currentUserId: string, newCaptainId: string): Promise<void> {
+export async function transferCaptain(currentUserId: string, newCaptainId: string): Promise<string> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -195,6 +184,7 @@ export async function transferCaptain(currentUserId: string, newCaptainId: strin
     );
 
     await client.query('COMMIT');
+    return teamId;
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

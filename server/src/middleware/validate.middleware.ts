@@ -1,11 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../types/errors';
 
-const STAT_FIELDS = ['influence', 'experience', 'strength', 'intelligence', 'endurance', 'leadership', 'luck'] as const;
 const USERNAME_REGEX = /^[a-zA-Zа-яА-ЯёЁ0-9_-]+$/;
+const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
 const MAX_USERNAME_LENGTH = 30;
 const MAX_TEAM_NAME_LENGTH = 50;
-const MAX_STAT_VALUE = 1000;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function validateRegister(req: Request, _res: Response, next: NextFunction): void {
@@ -62,16 +61,10 @@ export function validateCreateTeam(req: Request, _res: Response, next: NextFunct
     return next(new AppError(400, `Team name must be at most ${MAX_TEAM_NAME_LENGTH} characters`));
   }
 
-  for (const field of STAT_FIELDS) {
-    const value = req.body[field];
-    if (value === undefined || value === null || typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-      return next(new AppError(400, `${field} must be a finite number >= 0`));
-    }
-    if (!Number.isInteger(value)) {
-      return next(new AppError(400, `${field} must be an integer`));
-    }
-    if (value > MAX_STAT_VALUE) {
-      return next(new AppError(400, `${field} must be at most ${MAX_STAT_VALUE}`));
+  const { color } = req.body;
+  if (color !== undefined && color !== null) {
+    if (typeof color !== 'string' || !HEX_COLOR_REGEX.test(color)) {
+      return next(new AppError(400, 'Color must be a valid hex color (e.g. #FF5733)'));
     }
   }
 
