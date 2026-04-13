@@ -143,6 +143,12 @@ module.exports = {
         glass:          'rgba(255, 255, 255, 0.06)',
         'glass-strong': 'rgba(255, 255, 255, 0.10)',
       },
+      animation: {
+        spin: 'spin 1s linear infinite',
+      },
+      keyframes: {
+        spin: { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } },
+      },
     },
   },
   plugins: [],
