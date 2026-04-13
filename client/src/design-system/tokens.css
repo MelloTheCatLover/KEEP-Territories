@@ -1,0 +1,275 @@
+/* ============================================================
+   DESIGN TOKENS — Educational Gamification Platform
+   Dark-first, competitive, glass. Brand: Byzantine Purple.
+   ============================================================ */
+
+/* ---- Font loading (cyrillic primary) ---- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rubik:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext');
+
+:root {
+  /* ============================================================
+     COLOR — NEUTRALS (cool graphite scale)
+     ============================================================ */
+  --color-neutral-0:    #08090B;
+  --color-neutral-50:   #0D0E11;
+  --color-neutral-100:  #121418;
+  --color-neutral-200:  #1A1D22;
+  --color-neutral-300:  #24282F;
+  --color-neutral-400:  #2F343C;
+  --color-neutral-500:  #3D434D;
+  --color-neutral-600:  #5A626E;
+  --color-neutral-700:  #858D9A;
+  --color-neutral-800:  #B4BAC4;
+  --color-neutral-900:  #D8DCE3;
+  --color-neutral-1000: #F2F4F8;
+
+  /* ============================================================
+     COLOR — BRAND (Byzantine Purple)
+     ============================================================ */
+  --color-brand-50:  #F6ECFB;
+  --color-brand-100: #EAD0F5;
+  --color-brand-200: #D4A5EC;
+  --color-brand-300: #BD7AE2;
+  --color-brand-400: #A855D6;
+  --color-brand-500: #9D4EDD;
+  --color-brand-600: #7B2CBF;
+  --color-brand-700: #5A189A;
+  --color-brand-800: #3C0F6B;
+  --color-brand-900: #240A40;
+
+  /* ============================================================
+     COLOR — SEMANTIC
+     ============================================================ */
+  --color-success-bg:   #0F2A1F;
+  --color-success:      #22C55E;
+  --color-success-hover:#16A34A;
+  --color-success-text: #86EFAC;
+
+  --color-warning-bg:   #2A220A;
+  --color-warning:      #F59E0B;
+  --color-warning-hover:#D97706;
+  --color-warning-text: #FCD34D;
+
+  --color-danger-bg:   #2A1014;
+  --color-danger:      #EF4444;
+  --color-danger-hover:#DC2626;
+  --color-danger-text: #FCA5A5;
+
+  --color-info-bg:   #0F1E2A;
+  --color-info:      #3B82F6;
+  --color-info-hover:#2563EB;
+  --color-info-text: #93C5FD;
+
+  /* ============================================================
+     COLOR — TEAMS (8, ordered for max hue separation)
+     Order: crimson → coral → amber → emerald → cyan → azure → indigo → magenta
+     ============================================================ */
+  --team-crimson-base:    #E53935;
+  --team-crimson-bright:  #FF5A52;
+  --team-crimson-muted:   #8C2A28;
+
+  --team-coral-base:      #F06A2C;
+  --team-coral-bright:    #FF8A4C;
+  --team-coral-muted:     #924019;
+
+  --team-amber-base:      #E6B422;
+  --team-amber-bright:    #FFD340;
+  --team-amber-muted:     #8C6D14;
+
+  --team-emerald-base:    #2BA84A;
+  --team-emerald-bright:  #4CD964;
+  --team-emerald-muted:   #1A6B30;
+
+  --team-cyan-base:       #1BB5D4;
+  --team-cyan-bright:     #3FD8F5;
+  --team-cyan-muted:      #0E6478;
+
+  --team-azure-base:      #2952D9;
+  --team-azure-bright:    #4D78FF;
+  --team-azure-muted:     #17327F;
+
+  --team-indigo-base:     #6366F1;
+  --team-indigo-bright:   #8689FF;
+  --team-indigo-muted:    #3A3D99;
+
+  --team-magenta-base:    #D6409F;
+  --team-magenta-bright:  #F45EBB;
+  --team-magenta-muted:   #842863;
+
+  /* ============================================================
+     COLOR — DIFFICULTY (temperature scale)
+     ============================================================ */
+  --difficulty-easy:   #6EE7B7;
+  --difficulty-medium: #FCD34D;
+  --difficulty-hard:   #FB923C;
+  --difficulty-core:   #E11D48;
+
+  /* ============================================================
+     GLASS
+     ============================================================ */
+  --glass-bg-subtle:    rgba(26, 29, 34, 0.60);
+  --glass-bg-medium:    rgba(26, 29, 34, 0.75);
+  --glass-bg-strong:    rgba(18, 20, 24, 0.88);
+  --glass-border:       rgba(255, 255, 255, 0.06);
+  --glass-border-strong:rgba(255, 255, 255, 0.10);
+  --glass-blur:         blur(20px);
+  --glass-blur-strong:  blur(32px);
+
+  /* ============================================================
+     STATE OVERLAYS
+     ============================================================ */
+  --state-hover:           rgba(255, 255, 255, 0.06);
+  --state-hover-brand:     rgba(157, 78, 221, 0.12);
+  --state-active:          rgba(255, 255, 255, 0.10);
+  --state-focus-ring:      rgba(157, 78, 221, 0.45);
+  --state-selected:        rgba(157, 78, 221, 0.15);
+  --state-overlay-backdrop:rgba(8, 9, 11, 0.72);
+  --state-disabled-opacity:0.4;
+
+  /* ============================================================
+     TYPOGRAPHY — FAMILIES
+     ============================================================ */
+  --font-display: "Rubik", "Inter", system-ui, sans-serif;
+  --font-sans:    "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono:    "JetBrains Mono", "SF Mono", Menlo, monospace;
+
+  /* ============================================================
+     TYPOGRAPHY — WEIGHTS
+     ============================================================ */
+  --font-weight-regular:  400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  /* ============================================================
+     TYPOGRAPHY — SIZE SCALE
+     ============================================================ */
+  --text-2xs:     0.6875rem; /* 11 */
+  --text-xs:      0.75rem;   /* 12 */
+  --text-sm:      0.875rem;  /* 14 */
+  --text-base:    1rem;      /* 16 */
+  --text-lg:      1.125rem;  /* 18 */
+  --text-xl:      1.25rem;   /* 20 */
+  --heading-sm:   1.5rem;    /* 24 */
+  --heading-md:   2rem;      /* 32 */
+  --heading-lg:   2.75rem;   /* 44 */
+  --heading-xl:   3.75rem;   /* 60 */
+  --display:      5rem;      /* 80 */
+
+  /* ============================================================
+     SPACING (base 4px)
+     ============================================================ */
+  --space-0:   0;
+  --space-px:  1px;
+  --space-0-5: 2px;
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   24px;
+  --space-6:   32px;
+  --space-7:   48px;
+  --space-8:   64px;
+  --space-9:   96px;
+
+  /* ============================================================
+     RADIUS
+     ============================================================ */
+  --radius-none: 0;
+  --radius-xs:   4px;
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-xl:   20px;
+  --radius-full: 9999px;
+
+  /* ============================================================
+     ELEVATION (shadows)
+     ============================================================ */
+  --elevation-0: none;
+  --elevation-1: 0 1px 2px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.04);
+  --elevation-2: 0 4px 12px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.06);
+  --elevation-3: 0 8px 24px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.08);
+  --elevation-4: 0 16px 48px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.1);
+  --elevation-glow-brand: 0 0 0 1px var(--color-brand-500), 0 0 24px rgba(157,78,221,0.35);
+
+  /* ============================================================
+     MOTION
+     ============================================================ */
+  --duration-instant: 80ms;
+  --duration-fast:    150ms;
+  --duration-base:    220ms;
+  --duration-slow:    320ms;
+  --duration-slower:  500ms;
+
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-in:     cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-linear: linear;
+
+  --transition-colors:    color var(--duration-fast) var(--ease-out),
+                          background-color var(--duration-fast) var(--ease-out),
+                          border-color var(--duration-fast) var(--ease-out);
+  --transition-transform: transform var(--duration-base) var(--ease-out);
+  --transition-all:       all var(--duration-fast) var(--ease-out);
+  --transition-glass:     backdrop-filter var(--duration-base) var(--ease-out),
+                          background-color var(--duration-base) var(--ease-out);
+
+  /* ============================================================
+     Z-INDEX
+     ============================================================ */
+  --z-base:     0;
+  --z-raised:   10;
+  --z-sticky:   100;
+  --z-dropdown: 1000;
+  --z-overlay:  5000;
+  --z-modal:    5100;
+  --z-toast:    9000;
+}
+
+/* ============================================================
+   GLOBAL BASE
+   ============================================================ */
+html, body {
+  background: var(--color-neutral-50);
+  color: var(--color-neutral-900);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Numeric utility for stats — tabular figures */
+.numeric {
+  font-family: var(--font-display);
+  font-feature-settings: "tnum", "lnum";
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.015em;
+}
+
+/* Label utility — uppercase spaced caps */
+.label {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Focus ring — use on all interactive elements */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--state-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* Motion safety */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
