@@ -2,12 +2,35 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from './features/auth/LoginPage';
 import { MapPage } from './features/map/MapPage';
 import { TeamPage } from './features/team/TeamPage';
+import { ProtectedRoute } from './features/auth/ProtectedRoute';
+import { GuestRoute } from './features/auth/GuestRoute';
 
 export const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/map" replace /> },
-  { path: '/login', element: <LoginPage /> },
-  { path: '/map', element: <MapPage /> },
-  { path: '/team', element: <TeamPage /> },
+  {
+    path: '/login',
+    element: (
+      <GuestRoute>
+        <LoginPage />
+      </GuestRoute>
+    ),
+  },
+  {
+    path: '/map',
+    element: (
+      <ProtectedRoute>
+        <MapPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/team',
+    element: (
+      <ProtectedRoute>
+        <TeamPage />
+      </ProtectedRoute>
+    ),
+  },
   { path: '*', element: <NotFound /> },
 ]);
 
