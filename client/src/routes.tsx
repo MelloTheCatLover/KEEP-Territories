@@ -6,6 +6,7 @@ import { MapPage } from './features/map/MapPage';
 import { TeamPage } from './features/team/TeamPage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
 import { GuestRoute } from './features/auth/GuestRoute';
+import { AppLayout } from './shared/ui/AppLayout';
 
 export const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/map" replace /> },
@@ -26,28 +27,16 @@ export const router = createBrowserRouter([
     ),
   },
   {
-    path: '/map',
     element: (
       <ProtectedRoute>
-        <MapPage />
+        <AppLayout />
       </ProtectedRoute>
     ),
-  },
-  {
-    path: '/team',
-    element: (
-      <ProtectedRoute>
-        <TeamPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/profile',
-    element: (
-      <ProtectedRoute>
-        <ProfilePage />
-      </ProtectedRoute>
-    ),
+    children: [
+      { path: '/map', element: <MapPage /> },
+      { path: '/team', element: <TeamPage /> },
+      { path: '/profile', element: <ProfilePage /> },
+    ],
   },
   { path: '*', element: <NotFound /> },
 ]);

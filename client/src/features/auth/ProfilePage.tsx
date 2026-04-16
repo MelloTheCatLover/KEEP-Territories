@@ -16,7 +16,7 @@ export function ProfilePage() {
   ];
 
   return (
-    <main className="min-h-screen bg-neutral-50 flex items-center justify-center px-4">
+    <div className="flex-1 flex items-center justify-center px-4">
       <Card className="w-full max-w-md">
         <h1 className="font-display text-heading-md text-neutral-1000 mb-5">Profile</h1>
 
@@ -33,6 +33,6 @@ export function ProfilePage() {
           Log out
         </Button>
       </Card>
-    </main>
+    </div>
   );
 }
