@@ -21,10 +21,10 @@ export function RegisterPage() {
 
   function validate() {
     const errors: typeof fieldErrors = {};
-    if (!email.includes('@')) errors.email = 'Invalid email';
-    if (username.length < 3) errors.username = 'At least 3 characters';
-    if (password.length < 8) errors.password = 'At least 8 characters';
-    if (passwordConfirm !== password) errors.passwordConfirm = 'Passwords do not match';
+    if (!email.includes('@')) errors.email = 'Неверный email';
+    if (username.length < 3) errors.username = 'Минимум 3 символа';
+    if (password.length < 8) errors.password = 'Минимум 8 символов';
+    if (passwordConfirm !== password) errors.passwordConfirm = 'Пароли не совпадают';
     return errors;
   }
 
@@ -42,7 +42,7 @@ export function RegisterPage() {
       if (err instanceof ApiError) {
         setSubmitError(err.message);
       } else {
-        setSubmitError('Network error. Try again.');
+        setSubmitError('Ошибка сети. Попробуйте снова.');
       }
     } finally {
       setIsSubmitting(false);
@@ -52,8 +52,8 @@ export function RegisterPage() {
   return (
     <main className="min-h-screen bg-neutral-50 flex items-center justify-center px-4">
       <Card className="w-full max-w-md">
-        <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Create account</h1>
-        <p className="text-sm text-neutral-700 mb-5">Join the platform</p>
+        <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Создать аккаунт</h1>
+        <p className="text-sm text-neutral-700 mb-5">Присоединяйтесь к платформе</p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <FormField
@@ -67,7 +67,7 @@ export function RegisterPage() {
             disabled={isSubmitting}
           />
           <FormField
-            label="Username"
+            label="Никнейм"
             htmlFor="reg-username"
             error={fieldErrors.username}
             type="text"
@@ -77,7 +77,7 @@ export function RegisterPage() {
             disabled={isSubmitting}
           />
           <FormField
-            label="Password"
+            label="Пароль"
             htmlFor="reg-password"
             error={fieldErrors.password}
             type="password"
@@ -87,7 +87,7 @@ export function RegisterPage() {
             disabled={isSubmitting}
           />
           <FormField
-            label="Confirm password"
+            label="Подтверждение пароля"
             htmlFor="reg-passwordConfirm"
             error={fieldErrors.passwordConfirm}
             type="password"
@@ -100,13 +100,13 @@ export function RegisterPage() {
           <ErrorBanner message={submitError} />
 
           <Button type="submit" variant="primary" isLoading={isSubmitting} className="w-full">
-            Create account
+            Зарегистрироваться
           </Button>
         </form>
 
         <p className="text-sm text-neutral-700 text-center mt-5">
-          Already have an account?{' '}
-          <Link to="/login" className="text-brand-400 hover:text-brand-300">Log in</Link>
+          Уже есть аккаунт?{' '}
+          <Link to="/login" className="text-brand-400 hover:text-brand-300">Войти</Link>
         </p>
       </Card>
     </main>

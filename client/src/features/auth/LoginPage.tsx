@@ -14,8 +14,8 @@ export function LoginPage() {
 
   function validate() {
     const errors: { email?: string; password?: string } = {};
-    if (!email.includes('@')) errors.email = 'Invalid email';
-    if (password.length < 8) errors.password = 'At least 8 characters';
+    if (!email.includes('@')) errors.email = 'Неверный email';
+    if (password.length < 8) errors.password = 'Минимум 8 символов';
     return errors;
   }
 
@@ -33,7 +33,7 @@ export function LoginPage() {
       if (err instanceof ApiError) {
         setSubmitError(err.message);
       } else {
-        setSubmitError('Network error. Try again.');
+        setSubmitError('Ошибка сети. Попробуйте снова.');
       }
     } finally {
       setIsSubmitting(false);
@@ -43,8 +43,8 @@ export function LoginPage() {
   return (
     <main className="min-h-screen bg-neutral-50 flex items-center justify-center px-4">
       <Card className="w-full max-w-md">
-        <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Welcome back</h1>
-        <p className="text-sm text-neutral-700 mb-5">Sign in to continue</p>
+        <h1 className="font-display text-heading-md text-neutral-1000 mb-1">С возвращением</h1>
+        <p className="text-sm text-neutral-700 mb-5">Войдите, чтобы продолжить</p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <FormField
@@ -58,7 +58,7 @@ export function LoginPage() {
             disabled={isSubmitting}
           />
           <FormField
-            label="Password"
+            label="Пароль"
             htmlFor="password"
             error={fieldErrors.password}
             type="password"
@@ -71,13 +71,13 @@ export function LoginPage() {
           <ErrorBanner message={submitError} />
 
           <Button type="submit" variant="primary" isLoading={isSubmitting} className="w-full">
-            Log in
+            Войти
           </Button>
         </form>
 
         <p className="text-sm text-neutral-700 text-center mt-5">
-          No account?{' '}
-          <Link to="/register" className="text-brand-400 hover:text-brand-300">Sign up</Link>
+          Нет аккаунта?{' '}
+          <Link to="/register" className="text-brand-400 hover:text-brand-300">Зарегистрируйтесь</Link>
         </p>
       </Card>
     </main>

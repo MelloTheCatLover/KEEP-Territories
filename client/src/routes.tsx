@@ -49,7 +49,7 @@ function NotFound() {
     <main className="min-h-screen bg-neutral-50 text-neutral-900 flex items-center justify-center">
       <div className="text-center">
         <h1 className="font-display text-heading-md text-neutral-1000 mb-2">404</h1>
-        <p className="text-neutral-700">Page not found.</p>
+        <p className="text-neutral-700">Страница не найдена.</p>
       </div>
     </main>
   );
