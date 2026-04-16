@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { ApiError } from '../../shared/api/client';
+import { Card, FormField, ErrorBanner, Button } from '../../shared/ui';
 
 export function RegisterPage() {
   const { register } = useAuth();
@@ -50,103 +51,64 @@ export function RegisterPage() {
 
   return (
     <main className="min-h-screen bg-neutral-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-glass-medium backdrop-blur-glass border border-glass rounded-lg shadow-2 p-6">
+      <Card className="w-full max-w-md">
         <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Create account</h1>
         <p className="text-sm text-neutral-700 mb-5">Join the platform</p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div>
-            <label className="label text-neutral-800 block mb-1" htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={isSubmitting}
-              className={`w-full bg-neutral-200 border rounded-sm px-3 py-2 text-base text-neutral-900 focus:border-brand-500 focus:outline-none disabled:opacity-40 ${
-                fieldErrors.email ? 'border-danger' : 'border-neutral-400'
-              }`}
-            />
-            {fieldErrors.email && (
-              <p className="text-xs text-danger-text mt-1">{fieldErrors.email}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="label text-neutral-800 block mb-1" htmlFor="username">Username</label>
-            <input
-              id="username"
-              type="text"
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              disabled={isSubmitting}
-              className={`w-full bg-neutral-200 border rounded-sm px-3 py-2 text-base text-neutral-900 focus:border-brand-500 focus:outline-none disabled:opacity-40 ${
-                fieldErrors.username ? 'border-danger' : 'border-neutral-400'
-              }`}
-            />
-            {fieldErrors.username && (
-              <p className="text-xs text-danger-text mt-1">{fieldErrors.username}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="label text-neutral-800 block mb-1" htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={isSubmitting}
-              className={`w-full bg-neutral-200 border rounded-sm px-3 py-2 text-base text-neutral-900 focus:border-brand-500 focus:outline-none disabled:opacity-40 ${
-                fieldErrors.password ? 'border-danger' : 'border-neutral-400'
-              }`}
-            />
-            {fieldErrors.password && (
-              <p className="text-xs text-danger-text mt-1">{fieldErrors.password}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="label text-neutral-800 block mb-1" htmlFor="passwordConfirm">Confirm password</label>
-            <input
-              id="passwordConfirm"
-              type="password"
-              autoComplete="new-password"
-              value={passwordConfirm}
-              onChange={(e) => setPasswordConfirm(e.target.value)}
-              disabled={isSubmitting}
-              className={`w-full bg-neutral-200 border rounded-sm px-3 py-2 text-base text-neutral-900 focus:border-brand-500 focus:outline-none disabled:opacity-40 ${
-                fieldErrors.passwordConfirm ? 'border-danger' : 'border-neutral-400'
-              }`}
-            />
-            {fieldErrors.passwordConfirm && (
-              <p className="text-xs text-danger-text mt-1">{fieldErrors.passwordConfirm}</p>
-            )}
-          </div>
-
-          {submitError && (
-            <div className="bg-danger-bg text-danger-text text-sm px-3 py-2 rounded-sm border border-danger">
-              {submitError}
-            </div>
-          )}
-
-          <button
-            type="submit"
+          <FormField
+            label="Email"
+            htmlFor="reg-email"
+            error={fieldErrors.email}
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             disabled={isSubmitting}
-            className="w-full bg-brand-500 hover:bg-brand-400 active:bg-brand-600 text-neutral-1000 font-semibold text-base px-4 py-2 rounded-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? 'Creating account...' : 'Create account'}
-          </button>
+          />
+          <FormField
+            label="Username"
+            htmlFor="reg-username"
+            error={fieldErrors.username}
+            type="text"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            disabled={isSubmitting}
+          />
+          <FormField
+            label="Password"
+            htmlFor="reg-password"
+            error={fieldErrors.password}
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={isSubmitting}
+          />
+          <FormField
+            label="Confirm password"
+            htmlFor="reg-passwordConfirm"
+            error={fieldErrors.passwordConfirm}
+            type="password"
+            autoComplete="new-password"
+            value={passwordConfirm}
+            onChange={(e) => setPasswordConfirm(e.target.value)}
+            disabled={isSubmitting}
+          />
+
+          <ErrorBanner message={submitError} />
+
+          <Button type="submit" variant="primary" isLoading={isSubmitting} className="w-full">
+            Create account
+          </Button>
         </form>
 
         <p className="text-sm text-neutral-700 text-center mt-5">
           Already have an account?{' '}
           <Link to="/login" className="text-brand-400 hover:text-brand-300">Log in</Link>
         </p>
-      </div>
+      </Card>
     </main>
   );
 }

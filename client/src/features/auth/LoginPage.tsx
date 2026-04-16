@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { ApiError } from '../../shared/api/client';
+import { Card, FormField, ErrorBanner, Button } from '../../shared/ui';
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -41,67 +42,44 @@ export function LoginPage() {
 
   return (
     <main className="min-h-screen bg-neutral-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-glass-medium backdrop-blur-glass border border-glass rounded-lg shadow-2 p-6">
+      <Card className="w-full max-w-md">
         <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Welcome back</h1>
         <p className="text-sm text-neutral-700 mb-5">Sign in to continue</p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div>
-            <label className="label text-neutral-800 block mb-1" htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={isSubmitting}
-              className={`w-full bg-neutral-200 border rounded-sm px-3 py-2 text-base text-neutral-900 focus:border-brand-500 focus:outline-none disabled:opacity-40 ${
-                fieldErrors.email ? 'border-danger' : 'border-neutral-400'
-              }`}
-            />
-            {fieldErrors.email && (
-              <p className="text-xs text-danger-text mt-1">{fieldErrors.email}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="label text-neutral-800 block mb-1" htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={isSubmitting}
-              className={`w-full bg-neutral-200 border rounded-sm px-3 py-2 text-base text-neutral-900 focus:border-brand-500 focus:outline-none disabled:opacity-40 ${
-                fieldErrors.password ? 'border-danger' : 'border-neutral-400'
-              }`}
-            />
-            {fieldErrors.password && (
-              <p className="text-xs text-danger-text mt-1">{fieldErrors.password}</p>
-            )}
-          </div>
-
-          {submitError && (
-            <div className="bg-danger-bg text-danger-text text-sm px-3 py-2 rounded-sm border border-danger">
-              {submitError}
-            </div>
-          )}
-
-          <button
-            type="submit"
+          <FormField
+            label="Email"
+            htmlFor="email"
+            error={fieldErrors.email}
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             disabled={isSubmitting}
-            className="w-full bg-brand-500 hover:bg-brand-400 active:bg-brand-600 text-neutral-1000 font-semibold text-base px-4 py-2 rounded-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? 'Logging in...' : 'Log in'}
-          </button>
+          />
+          <FormField
+            label="Password"
+            htmlFor="password"
+            error={fieldErrors.password}
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={isSubmitting}
+          />
+
+          <ErrorBanner message={submitError} />
+
+          <Button type="submit" variant="primary" isLoading={isSubmitting} className="w-full">
+            Log in
+          </Button>
         </form>
 
         <p className="text-sm text-neutral-700 text-center mt-5">
           No account?{' '}
           <Link to="/register" className="text-brand-400 hover:text-brand-300">Sign up</Link>
         </p>
-      </div>
+      </Card>
     </main>
   );
 }
