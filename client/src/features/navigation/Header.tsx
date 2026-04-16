@@ -6,7 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 const navLinks = [
   { to: '/map', label: 'Карта' },
   { to: '/team', label: 'Команда' },
-  { to: '/admin/submissions', label: 'Админ' },
+  { to: '/admin/submissions', label: 'Админ', adminOnly: true },
 ];
 
 function navLinkClass({ isActive }: { isActive: boolean }) {
@@ -47,7 +47,9 @@ export function Header() {
       </Link>
 
       <nav className="flex items-center gap-1">
-        {navLinks.map((link) => (
+        {navLinks
+          .filter((link) => !link.adminOnly || user?.role === 'admin')
+          .map((link) => (
           <NavLink key={link.to} to={link.to} className={navLinkClass}>
             {link.label}
           </NavLink>

@@ -8,7 +8,7 @@ export function AdminSubmissionsPage() {
 
   if (!isAdmin) {
     return (
-      <div className="max-w-2xl mx-auto mt-8 px-4">
+      <div className="max-w-2xl mx-auto px-4">
         <Card>
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
@@ -23,7 +23,7 @@ export function AdminSubmissionsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto mt-8 px-4">
+    <div className="max-w-4xl mx-auto px-4">
       <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Админ — очередь проверки</h1>
       <p className="text-sm text-neutral-700 mb-6">Заглушка. Функциональность добавится позже.</p>
     </div>
