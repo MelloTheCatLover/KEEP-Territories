@@ -4,6 +4,7 @@ import { RegisterPage } from './features/auth/RegisterPage';
 import { ProfilePage } from './features/auth/ProfilePage';
 import { MapPage } from './features/map/MapPage';
 import { TeamPage } from './features/team/TeamPage';
+import { AdminSubmissionsPage } from './features/admin/AdminSubmissionsPage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
 import { GuestRoute } from './features/auth/GuestRoute';
 import { AppLayout } from './shared/ui/AppLayout';
@@ -36,6 +37,8 @@ export const router = createBrowserRouter([
       { path: '/map', element: <MapPage /> },
       { path: '/team', element: <TeamPage /> },
       { path: '/profile', element: <ProfilePage /> },
+      { path: '/admin', element: <Navigate to="/admin/submissions" replace /> },
+      { path: '/admin/submissions', element: <AdminSubmissionsPage /> },
     ],
   },
   { path: '*', element: <NotFound /> },
