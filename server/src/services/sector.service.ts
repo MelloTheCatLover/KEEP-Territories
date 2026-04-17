@@ -41,6 +41,10 @@ function rowToSectorPublic(row: SectorRow): SectorPublic {
     captured_by_team_id: row.captured_by_team_id,
     capturing_by_team_id: row.capturing_by_team_id,
     capture_started_at: row.capture_started_at,
+    fortification_level: row.fortification_level,
+    is_home_base: row.is_home_base,
+    home_team_id: row.home_team_id,
+    current_action_type: row.current_action_type,
     difficulty,
   };
 }
