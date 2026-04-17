@@ -19,3 +19,16 @@ export function startAction(
     action_type: actionType,
   });
 }
+
+export type GenerateMapResponse = {
+  sectors: Sector[];
+  count: number;
+};
+
+export function generateMap(): Promise<GenerateMapResponse> {
+  return api.post<GenerateMapResponse>('/sectors/generate-map');
+}
+
+export function deleteAllSectors(): Promise<{ deleted_count: number }> {
+  return api.delete<{ deleted_count: number }>('/sectors/all');
+}

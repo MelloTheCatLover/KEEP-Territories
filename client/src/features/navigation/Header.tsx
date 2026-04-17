@@ -6,7 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 const navLinks = [
   { to: '/map', label: 'Карта' },
   { to: '/team', label: 'Команда' },
-  { to: '/admin/submissions', label: 'Админ', adminOnly: true },
+  { to: '/admin', label: 'Админ', adminOnly: true },
 ];
 
 function navLinkClass({ isActive }: { isActive: boolean }) {
