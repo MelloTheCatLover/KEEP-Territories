@@ -47,7 +47,8 @@ export function MapPage() {
     <div className="max-w-7xl mx-auto px-4">
       <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Карта</h1>
       <p className="text-sm text-neutral-700 mb-6">
-        Гексагональное поле — 127 секторов.
+        Гексагональное поле
+        {state.status === 'ready' ? ` — ${state.sectors.length} секторов.` : '.'}
       </p>
 
       {state.status === 'loading' && (

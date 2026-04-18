@@ -4,15 +4,15 @@ import { AppError } from '../types/errors';
 import { SectorPublic } from '../types/sector';
 import { DifficultyLevel, DifficultySlug } from '../types/difficulty';
 
-const MAP_RADIUS = 6;
+const MAP_RADIUS = 3;
 
 const HOME_BASE_COORDS: ReadonlyArray<{ q: number; r: number }> = [
-  { q: 6, r: 0 },
-  { q: 6, r: -6 },
-  { q: 0, r: -6 },
-  { q: -6, r: 0 },
-  { q: -6, r: 6 },
-  { q: 0, r: 6 },
+  { q: 3, r: 0 },
+  { q: 3, r: -3 },
+  { q: 0, r: -3 },
+  { q: -3, r: 0 },
+  { q: -3, r: 3 },
+  { q: 0, r: 3 },
 ];
 
 export function generateHexCoordinates(radius: number): Array<{ q: number; r: number }> {
@@ -33,9 +33,8 @@ export function getRing(q: number, r: number): number {
 
 export function getDifficultySlugForRing(ring: number): DifficultySlug {
   if (ring === 0) return 'core';
-  if (ring === 1 || ring === 2) return 'hard';
-  if (ring === 3 || ring === 4) return 'medium';
-  if (ring === 5 || ring === 6) return 'easy';
+  if (ring === 1) return 'hard';
+  if (ring === 2) return 'medium';
   return 'easy';
 }
 
