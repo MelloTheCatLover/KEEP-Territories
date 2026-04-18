@@ -7,6 +7,7 @@ import { TeamPage } from './features/team/TeamPage';
 import { AdminSubmissionsPage } from './features/admin/AdminSubmissionsPage';
 import { AdminMapPage } from './features/admin/AdminMapPage';
 import { AdminTasksPage } from './features/admin/AdminTasksPage';
+import { AdminSettingsPage } from './features/admin/AdminSettingsPage';
 import { AdminHubPage } from './features/admin/AdminHubPage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
 import { GuestRoute } from './features/auth/GuestRoute';
@@ -43,6 +44,7 @@ export const router = createBrowserRouter([
       { path: '/admin', element: <AdminHubPage /> },
       { path: '/admin/map', element: <AdminMapPage /> },
       { path: '/admin/tasks', element: <AdminTasksPage /> },
+      { path: '/admin/settings', element: <AdminSettingsPage /> },
       { path: '/admin/submissions', element: <AdminSubmissionsPage /> },
     ],
   },
