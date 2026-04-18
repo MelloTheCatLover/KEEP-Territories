@@ -1,29 +1,36 @@
 import { useEffect, useState } from 'react';
 import { getSectorsMap } from './api';
 import type { Sector } from './types';
-import { HexMap } from './HexMap';
-import { ApiError } from '../../shared/api/client';
+import { HexMap, type TeamInfo } from './HexMap';
+import { api, ApiError } from '../../shared/api/client';
 import { Loader2 } from 'lucide-react';
+
+type TeamDto = { id: string; name: string };
 
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'empty' }
-  | { status: 'ready'; sectors: Sector[] };
+  | { status: 'ready'; sectors: Sector[]; teamsById: Record<string, TeamInfo> };
 
 export function MapPage() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
-    getSectorsMap()
-      .then((sectors) => {
+    Promise.all([getSectorsMap(), api.get<TeamDto[]>('/teams')])
+      .then(([sectors, teams]) => {
         if (cancelled) return;
         if (sectors.length === 0) {
           setState({ status: 'empty' });
-        } else {
-          setState({ status: 'ready', sectors });
+          return;
         }
+        const sorted = [...teams].sort((a, b) => a.id.localeCompare(b.id));
+        const teamsById: Record<string, TeamInfo> = {};
+        sorted.forEach((t, i) => {
+          teamsById[t.id] = { id: t.id, name: t.name, index: i };
+        });
+        setState({ status: 'ready', sectors, teamsById });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -62,7 +69,9 @@ export function MapPage() {
         </div>
       )}
 
-      {state.status === 'ready' && <HexMap sectors={state.sectors} />}
+      {state.status === 'ready' && (
+        <HexMap sectors={state.sectors} teamsById={state.teamsById} />
+      )}
     </div>
   );
 }
