@@ -15,6 +15,7 @@ function toUserPublic(user: User): UserPublic {
     username: user.username,
     team_id: user.team_id,
     team_role: user.team_role,
+    role: user.role,
     created_at: user.created_at,
   };
 }

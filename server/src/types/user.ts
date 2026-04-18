@@ -5,11 +5,13 @@ export interface User {
   password_hash: string;
   team_id: string | null;
   team_role: TeamRole | null;
+  role: UserRole;
   created_at: Date;
   updated_at: Date;
 }
 
 export type TeamRole = 'captain' | 'member';
+export type UserRole = 'student' | 'admin';
 
 export interface UserPublic {
   id: string;
@@ -17,6 +19,7 @@ export interface UserPublic {
   username: string;
   team_id: string | null;
   team_role: TeamRole | null;
+  role: UserRole;
   created_at: Date;
 }
 
