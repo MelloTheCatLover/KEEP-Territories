@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Crown, Loader2, ShieldCheck, Users } from 'lucide-react';
+import { AlertTriangle, Crown, LogOut, Loader2, ShieldCheck, UserCog, Users } from 'lucide-react';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { useAuth } from '../auth/AuthContext';
 import { getSettings, type GameSetting } from '../admin/settings-api';
-import { getTeamStats, upgradeStat } from './api';
+import { getTeamStats, leaveTeam, transferCaptain, upgradeStat } from './api';
 import type { StatName, TeamFullStats } from './types';
+import type { User } from '../auth/types';
 import { JoinOrCreateView } from './JoinOrCreateView';
 
 type LoadState =
@@ -38,14 +39,21 @@ function computeLevelProgress(
   return { inLevel: remaining, toNext: threshold };
 }
 
+type ModalState =
+  | { kind: 'none' }
+  | { kind: 'leave-confirm' }
+  | { kind: 'transfer'; afterLeave: boolean };
+
 export function TeamPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const teamId = user?.team_id ?? null;
   const isCaptain = user?.team_role === 'captain';
 
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [upgrading, setUpgrading] = useState<StatName | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [modal, setModal] = useState<ModalState>({ kind: 'none' });
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!teamId) {
@@ -84,6 +92,52 @@ export function TeamPage() {
     }
   }
 
+  async function handleLeave() {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await leaveTeam();
+      await refreshUser();
+      setModal({ kind: 'none' });
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Не удалось покинуть команду');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleTransfer(newCaptainId: string, afterLeave: boolean) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      const next = await transferCaptain({ newCaptainId });
+      if (afterLeave) {
+        await leaveTeam();
+        await refreshUser();
+      } else {
+        await refreshUser();
+        setState((prev) =>
+          prev.status === 'ready' ? { ...prev, data: next } : prev,
+        );
+      }
+      setModal({ kind: 'none' });
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Не удалось передать капитанство');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function requestLeave() {
+    if (state.status !== 'ready') return;
+    const hasOtherMembers = state.data.members.some((m) => m.id !== user?.id);
+    if (isCaptain && hasOtherMembers) {
+      setModal({ kind: 'transfer', afterLeave: true });
+    } else {
+      setModal({ kind: 'leave-confirm' });
+    }
+  }
+
   const progress = useMemo(() => {
     if (state.status !== 'ready') return null;
     return computeLevelProgress(state.data.experience, state.settings);
@@ -114,6 +168,8 @@ export function TeamPage() {
 
   const { data } = state;
   const canUpgrade = isCaptain && data.available_upgrade_points > 0;
+  const otherMembers = data.members.filter((m) => m.id !== user?.id);
+  const hasOtherMembers = otherMembers.length > 0;
 
   return (
     <div className="max-w-4xl mx-auto px-4 space-y-6">
@@ -157,6 +213,27 @@ export function TeamPage() {
       </Card>
 
       {actionError && <ErrorBanner message={actionError} />}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {isCaptain && hasOtherMembers && (
+          <Button
+            variant="secondary"
+            onClick={() => setModal({ kind: 'transfer', afterLeave: false })}
+            disabled={busy}
+          >
+            <span className="flex items-center gap-2">
+              <UserCog className="w-4 h-4" />
+              Передать капитанство
+            </span>
+          </Button>
+        )}
+        <Button variant="danger" onClick={requestLeave} disabled={busy}>
+          <span className="flex items-center gap-2">
+            <LogOut className="w-4 h-4" />
+            Покинуть команду
+          </span>
+        </Button>
+      </div>
 
       <section>
         <div className="flex items-center justify-between mb-3">
@@ -237,6 +314,24 @@ export function TeamPage() {
           </ul>
         </Card>
       </section>
+
+      {modal.kind === 'leave-confirm' && (
+        <LeaveConfirmModal
+          isLastCaptain={isCaptain && !hasOtherMembers}
+          onCancel={() => setModal({ kind: 'none' })}
+          onConfirm={() => void handleLeave()}
+          busy={busy}
+        />
+      )}
+      {modal.kind === 'transfer' && (
+        <TransferModal
+          members={otherMembers}
+          afterLeave={modal.afterLeave}
+          onCancel={() => setModal({ kind: 'none' })}
+          onConfirm={(id) => void handleTransfer(id, modal.afterLeave)}
+          busy={busy}
+        />
+      )}
     </div>
   );
 }
@@ -264,5 +359,137 @@ function RoleBadge({ captain }: { captain: boolean }) {
       <ShieldCheck className="w-3 h-3" />
       Участник
     </span>
+  );
+}
+
+function ModalShell({
+  children,
+  onBackdrop,
+}: {
+  children: React.ReactNode;
+  onBackdrop?: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'var(--state-overlay-backdrop)' }}
+      onClick={onBackdrop}
+    >
+      <div
+        className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-md shadow-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function LeaveConfirmModal({
+  isLastCaptain,
+  onCancel,
+  onConfirm,
+  busy,
+}: {
+  isLastCaptain: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  busy: boolean;
+}) {
+  return (
+    <ModalShell onBackdrop={busy ? undefined : onCancel}>
+      <h2 className="font-display text-heading-sm text-neutral-1000 mb-3">
+        Покинуть команду?
+      </h2>
+      {isLastCaptain && (
+        <div className="bg-warning-bg border border-warning/40 text-warning-text text-sm rounded-sm px-3 py-2 mb-4 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>Вы последний участник. Команда будет удалена.</span>
+        </div>
+      )}
+      <p className="text-sm text-neutral-800 mb-5">
+        Вы потеряете доступ к общим секторам и характеристикам команды.
+      </p>
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={onCancel} disabled={busy}>
+          Отмена
+        </Button>
+        <Button variant="danger" onClick={onConfirm} isLoading={busy}>
+          Покинуть
+        </Button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function TransferModal({
+  members,
+  afterLeave,
+  onCancel,
+  onConfirm,
+  busy,
+}: {
+  members: User[];
+  afterLeave: boolean;
+  onCancel: () => void;
+  onConfirm: (newCaptainId: string) => void;
+  busy: boolean;
+}) {
+  const [selected, setSelected] = useState<string | null>(members[0]?.id ?? null);
+
+  return (
+    <ModalShell onBackdrop={busy ? undefined : onCancel}>
+      <h2 className="font-display text-heading-sm text-neutral-1000 mb-3">
+        {afterLeave ? 'Передать капитанство перед уходом' : 'Передать капитанство'}
+      </h2>
+      {afterLeave && (
+        <div className="bg-warning-bg border border-warning/40 text-warning-text text-sm rounded-sm px-3 py-2 mb-4 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>Капитан не может покинуть команду, пока в ней есть другие участники.</span>
+        </div>
+      )}
+
+      <ul className="space-y-1 mb-5 max-h-64 overflow-auto">
+        {members.map((m) => (
+          <li key={m.id}>
+            <label
+              className={`flex items-center gap-3 px-3 py-2 rounded-sm cursor-pointer border ${
+                selected === m.id
+                  ? 'border-brand-500 bg-brand-500/10'
+                  : 'border-neutral-400 hover:border-neutral-600'
+              }`}
+            >
+              <input
+                type="radio"
+                name="new-captain"
+                value={m.id}
+                checked={selected === m.id}
+                onChange={() => setSelected(m.id)}
+                disabled={busy}
+                className="accent-brand-500"
+              />
+              <div className="min-w-0">
+                <div className="text-neutral-1000 truncate">{m.username}</div>
+                <div className="text-xs text-neutral-700 truncate">{m.email}</div>
+              </div>
+            </label>
+          </li>
+        ))}
+      </ul>
+
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={onCancel} disabled={busy}>
+          Отмена
+        </Button>
+        <Button
+          variant="primary"
+          onClick={() => selected && onConfirm(selected)}
+          disabled={!selected || busy}
+          isLoading={busy}
+        >
+          {afterLeave ? 'Передать и выйти' : 'Передать'}
+        </Button>
+      </div>
+    </ModalShell>
   );
 }
