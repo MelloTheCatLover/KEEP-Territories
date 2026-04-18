@@ -11,6 +11,7 @@ type AuthContextValue = {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, username: string, password: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -57,8 +58,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('unauthenticated');
   }
 
+  async function refreshUser() {
+    const res = await meRequest();
+    setUser(res.user);
+  }
+
   return (
-    <AuthContext.Provider value={{ status, user, login, register, logout }}>
+    <AuthContext.Provider value={{ status, user, login, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

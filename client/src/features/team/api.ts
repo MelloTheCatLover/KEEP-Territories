@@ -2,10 +2,15 @@ import { api } from '../../shared/api/client';
 import type {
   CreateTeamPayload,
   LeaveTeamResponse,
+  Team,
   TeamFullStats,
   TransferCaptainPayload,
   UpgradeStatPayload,
 } from './types';
+
+export function getTeams(): Promise<Team[]> {
+  return api.get<Team[]>('/teams');
+}
 
 export function getTeam(teamId: string): Promise<TeamFullStats> {
   return api.get<TeamFullStats>(`/teams/${teamId}`);
