@@ -8,6 +8,8 @@ import {
 const HEX_SIZE = 34;
 const VIEWBOX_PADDING = 16;
 const BADGE_RADIUS = 4;
+const FORT_DOT_RADIUS = 2.2;
+const FORT_DOT_GAP = 6;
 
 export type TeamInfo = {
   id: string;
@@ -96,6 +98,24 @@ export function HexMap({ sectors, teamsById }: HexMapProps) {
       className="w-full h-full block"
       style={{ maxHeight: '80vh' }}
     >
+      <style>{`
+        .hex-cell {
+          cursor: pointer;
+          transform-box: fill-box;
+          transform-origin: center;
+          transition:
+            transform var(--duration-base) var(--ease-out),
+            filter var(--duration-base) var(--ease-out);
+        }
+        .hex-cell:hover {
+          transform: scale(1.03);
+          filter: drop-shadow(0 0 10px rgba(157, 78, 221, 0.55));
+        }
+        .hex-cell:hover .hex-shape {
+          stroke: var(--color-brand-500);
+          stroke-width: 2;
+        }
+      `}</style>
       <g>
         {sectors.map((s) => {
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
@@ -103,10 +123,18 @@ export function HexMap({ sectors, teamsById }: HexMapProps) {
           const badgeColor = DIFFICULTY_BADGE[s.difficulty.slug];
           const badgeX = x - HEX_SIZE * 0.55;
           const badgeY = y - HEX_SIZE * 0.55;
+          const fortLevel = Math.max(
+            0,
+            Math.min(3, s.fortification_level | 0),
+          );
+          const showFort = fortLevel > 0 && s.captured_by_team_id != null;
+          const fortY = y + HEX_SIZE * 0.52;
+          const fortStartX = x - ((fortLevel - 1) * FORT_DOT_GAP) / 2;
 
           return (
-            <g key={s.id}>
+            <g key={s.id} className="hex-cell">
               <polygon
+                className="hex-shape"
                 points={hexPoints(x, y, HEX_SIZE)}
                 fill={style.fill}
                 fillOpacity={style.fillOpacity}
@@ -114,7 +142,9 @@ export function HexMap({ sectors, teamsById }: HexMapProps) {
                 strokeWidth={style.strokeWidth}
               >
                 <title>
-                  {`#${s.number} · ${s.difficulty.name}${style.titleExtra}`}
+                  {`#${s.number} · ${s.difficulty.name}${style.titleExtra}${
+                    showFort ? ` · укр. ${fortLevel}` : ''
+                  }`}
                 </title>
               </polygon>
               <circle
@@ -139,6 +169,19 @@ export function HexMap({ sectors, teamsById }: HexMapProps) {
               >
                 {style.label}
               </text>
+              {showFort &&
+                Array.from({ length: fortLevel }).map((_, i) => (
+                  <circle
+                    key={i}
+                    cx={fortStartX + i * FORT_DOT_GAP}
+                    cy={fortY}
+                    r={FORT_DOT_RADIUS}
+                    fill="var(--color-neutral-1000)"
+                    stroke="var(--color-neutral-0)"
+                    strokeWidth={0.6}
+                    pointerEvents="none"
+                  />
+                ))}
             </g>
           );
         })}
