@@ -1,22 +1,23 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Plus, UserPlus } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Loader2, MapPin, Plus, UserPlus } from 'lucide-react';
 import { Button, Card, ErrorBanner, Input, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { useAuth } from '../auth/AuthContext';
-import { teamColors, TEAM_COLOR_ORDER, type TeamColorKey } from '../../design-system/design-tokens';
+import { getSectorsMap } from '../map/api';
+import type { Sector } from '../map/types';
 import { createTeam, getTeams, joinTeam } from './api';
 import type { Team } from './types';
 
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; teams: Team[] };
+  | { status: 'ready'; teams: Team[]; sectors: Sector[] };
 
 export function JoinOrCreateView() {
   const { refreshUser } = useAuth();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [name, setName] = useState('');
-  const [colorKey, setColorKey] = useState<TeamColorKey | null>(TEAM_COLOR_ORDER[0]);
+  const [homeSectorId, setHomeSectorId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,12 +25,12 @@ export function JoinOrCreateView() {
   const load = useCallback(async () => {
     setState({ status: 'loading' });
     try {
-      const teams = await getTeams();
-      setState({ status: 'ready', teams });
+      const [teams, sectors] = await Promise.all([getTeams(), getSectorsMap()]);
+      setState({ status: 'ready', teams, sectors });
     } catch (err) {
       setState({
         status: 'error',
-        message: err instanceof ApiError ? err.message : 'Не удалось загрузить команды',
+        message: err instanceof ApiError ? err.message : 'Не удалось загрузить данные',
       });
     }
   }, []);
@@ -38,6 +39,18 @@ export function JoinOrCreateView() {
     void load();
   }, [load]);
 
+  const { homeBases, teamsById } = useMemo(() => {
+    if (state.status !== 'ready') return { homeBases: [] as Sector[], teamsById: {} as Record<string, Team> };
+    const map: Record<string, Team> = {};
+    state.teams.forEach((t) => {
+      map[t.id] = t;
+    });
+    const bases = state.sectors
+      .filter((s) => s.is_home_base)
+      .sort((a, b) => a.number - b.number);
+    return { homeBases: bases, teamsById: map };
+  }, [state]);
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
@@ -45,13 +58,14 @@ export function JoinOrCreateView() {
       setError('Название команды обязательно');
       return;
     }
+    if (!homeSectorId) {
+      setError('Выберите домашний сектор');
+      return;
+    }
     setCreating(true);
     setError(null);
     try {
-      await createTeam({
-        name: trimmed,
-        color: colorKey ? teamColors[colorKey].base : null,
-      });
+      await createTeam({ name: trimmed, home_sector_id: homeSectorId });
       await refreshUser();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Не удалось создать команду');
@@ -75,105 +89,129 @@ export function JoinOrCreateView() {
 
   const busy = creating || joiningId !== null;
 
+  if (state.status === 'loading') {
+    return (
+      <div className="max-w-3xl mx-auto px-4 flex items-center gap-3 text-neutral-700">
+        <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+        <span>Загрузка...</span>
+      </div>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <div className="max-w-3xl mx-auto px-4">
+        <ErrorBanner message={state.message} />
+      </div>
+    );
+  }
+
+  const freeBases = homeBases.filter((s) => !s.home_team_id);
+  const noMap = homeBases.length === 0;
+
   return (
     <div className="max-w-3xl mx-auto px-4 space-y-6">
       <div>
         <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Команда</h1>
         <p className="text-sm text-neutral-700">
-          Создайте новую команду или присоединитесь к существующей.
+          Выберите свободный домашний сектор и создайте команду — или вступите в существующую.
         </p>
       </div>
 
       {error && <ErrorBanner message={error} />}
 
-      <Card>
-        <form onSubmit={handleCreate} className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Plus className="w-5 h-5 text-brand-400" />
-            <h2 className="font-display text-heading-sm text-neutral-1000">Создать команду</h2>
-          </div>
+      {noMap && (
+        <Card>
+          <p className="text-sm text-neutral-700">
+            Карта ещё не сгенерирована. Дождитесь, когда администратор её создаст.
+          </p>
+        </Card>
+      )}
 
-          <div>
-            <Label htmlFor="team-name">Название</Label>
-            <Input
-              id="team-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Например, Альфа"
-              maxLength={64}
-              disabled={busy}
-            />
-          </div>
-
-          <div>
-            <Label>Цвет</Label>
-            <div className="flex flex-wrap gap-2 mt-1">
-              {TEAM_COLOR_ORDER.map((key) => {
-                const c = teamColors[key];
-                const selected = colorKey === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setColorKey(key)}
-                    disabled={busy}
-                    className={`w-8 h-8 rounded-full border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                      selected
-                        ? 'border-neutral-1000 scale-110'
-                        : 'border-transparent hover:scale-105'
-                    }`}
-                    style={{ backgroundColor: c.base }}
-                    title={key}
-                    aria-label={`Цвет ${key}`}
-                    aria-pressed={selected}
-                  />
-                );
-              })}
-              <button
-                type="button"
-                onClick={() => setColorKey(null)}
-                disabled={busy}
-                className={`h-8 px-3 rounded-full border-2 text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                  colorKey === null
-                    ? 'border-neutral-1000 text-neutral-1000'
-                    : 'border-neutral-400 text-neutral-700 hover:border-neutral-600'
-                }`}
-                aria-pressed={colorKey === null}
-              >
-                Без цвета
-              </button>
+      {!noMap && (
+        <Card>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Plus className="w-5 h-5 text-brand-400" />
+              <h2 className="font-display text-heading-sm text-neutral-1000">Создать команду</h2>
             </div>
-          </div>
 
-          <div>
-            <Button type="submit" variant="primary" disabled={busy} isLoading={creating}>
-              Создать
-            </Button>
-          </div>
-        </form>
-      </Card>
+            <div>
+              <Label htmlFor="team-name">Название</Label>
+              <Input
+                id="team-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Например, Альфа"
+                maxLength={50}
+                disabled={busy}
+              />
+            </div>
 
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <UserPlus className="w-5 h-5 text-neutral-800" />
-          <h2 className="font-display text-heading-sm text-neutral-1000">Существующие команды</h2>
-        </div>
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <MapPin className="w-4 h-4 text-neutral-800" />
+                <Label className="mb-0">Домашний сектор</Label>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {homeBases.map((s) => {
+                  const occupiedBy = s.home_team_id ? teamsById[s.home_team_id] : null;
+                  const taken = Boolean(occupiedBy);
+                  const selected = homeSectorId === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => !taken && setHomeSectorId(s.id)}
+                      disabled={taken || busy}
+                      className={`text-left px-3 py-2 rounded-sm border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                        selected
+                          ? 'border-brand-500 bg-brand-500/10 text-neutral-1000'
+                          : taken
+                          ? 'border-neutral-400 bg-neutral-200 text-neutral-700'
+                          : 'border-neutral-400 hover:border-neutral-600 text-neutral-1000'
+                      }`}
+                      aria-pressed={selected}
+                    >
+                      <div className="font-mono text-sm">
+                        #{s.number} ({s.q}, {s.r})
+                      </div>
+                      <div className="text-xs text-neutral-700 mt-0.5">
+                        {occupiedBy ? `Занят: ${occupiedBy.name}` : 'Свободен'}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {freeBases.length === 0 && (
+                <p className="text-xs text-warning-text mt-2">
+                  Все домашние сектора заняты — максимум команд достигнут.
+                </p>
+              )}
+            </div>
 
-        {state.status === 'loading' && (
-          <div className="flex items-center gap-3 text-neutral-700">
-            <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
-            <span>Загрузка...</span>
+            <div>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={busy || freeBases.length === 0 || !homeSectorId}
+                isLoading={creating}
+              >
+                Создать
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
+      {state.teams.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <UserPlus className="w-5 h-5 text-neutral-800" />
+            <h2 className="font-display text-heading-sm text-neutral-1000">
+              Существующие команды
+            </h2>
           </div>
-        )}
-        {state.status === 'error' && <ErrorBanner message={state.message} />}
-        {state.status === 'ready' && state.teams.length === 0 && (
-          <Card>
-            <p className="text-sm text-neutral-700">
-              Пока нет ни одной команды — создайте первую.
-            </p>
-          </Card>
-        )}
-        {state.status === 'ready' && state.teams.length > 0 && (
           <Card>
             <ul className="divide-y divide-neutral-300">
               {state.teams.map((t) => (
@@ -201,8 +239,8 @@ export function JoinOrCreateView() {
               ))}
             </ul>
           </Card>
-        )}
-      </section>
+        </section>
+      )}
     </div>
   );
 }
