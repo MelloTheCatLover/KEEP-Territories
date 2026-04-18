@@ -12,6 +12,7 @@ import { difficultyColors } from '../../design-system/design-tokens';
 import {
   approveSubmission,
   getPendingSubmissions,
+  rejectSubmission,
   type SubmissionActionType,
   type TaskSubmissionWithDetails,
 } from './submissions-api';
@@ -20,6 +21,13 @@ type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ready'; items: TaskSubmissionWithDetails[] };
+
+type Decision = 'approve' | 'reject';
+
+type ModalState = {
+  decision: Decision;
+  item: TaskSubmissionWithDetails;
+} | null;
 
 const ACTION_LABELS: Record<SubmissionActionType, string> = {
   capture: 'Захват',
@@ -37,8 +45,8 @@ export function AdminSubmissionsPage() {
   const isAdmin = user?.role === 'admin';
 
   const [state, setState] = useState<LoadState>({ status: 'loading' });
-  const [approvingId, setApprovingId] = useState<string | null>(null);
-  const [modalFor, setModalFor] = useState<TaskSubmissionWithDetails | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [modal, setModal] = useState<ModalState>(null);
   const [comment, setComment] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -59,30 +67,43 @@ export function AdminSubmissionsPage() {
     if (isAdmin) void refresh();
   }, [isAdmin, refresh]);
 
-  function openApproveModal(item: TaskSubmissionWithDetails) {
-    setModalFor(item);
+  function openModal(decision: Decision, item: TaskSubmissionWithDetails) {
+    setModal({ decision, item });
     setComment('');
     setActionError(null);
   }
 
   function closeModal() {
-    setModalFor(null);
+    setModal(null);
     setComment('');
   }
 
-  async function handleConfirmApprove() {
-    if (!modalFor) return;
-    setApprovingId(modalFor.id);
+  async function handleConfirm() {
+    if (!modal) return;
+    setBusyId(modal.item.id);
     setActionError(null);
     try {
-      await approveSubmission(modalFor.id, comment.trim() || null);
-      setFlash(`Заявка по сектору #${modalFor.sector.number} подтверждена`);
+      const trimmed = comment.trim() || null;
+      if (modal.decision === 'approve') {
+        await approveSubmission(modal.item.id, trimmed);
+        setFlash(`Заявка по сектору #${modal.item.sector.number} подтверждена`);
+      } else {
+        if (!trimmed) {
+          setActionError('Комментарий обязателен при отклонении');
+          setBusyId(null);
+          return;
+        }
+        await rejectSubmission(modal.item.id, trimmed);
+        setFlash(`Заявка по сектору #${modal.item.sector.number} отклонена`);
+      }
       closeModal();
       await refresh();
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'Ошибка подтверждения');
+      setActionError(
+        err instanceof ApiError ? err.message : 'Ошибка обработки заявки',
+      );
     } finally {
-      setApprovingId(null);
+      setBusyId(null);
     }
   }
 
@@ -114,7 +135,8 @@ export function AdminSubmissionsPage() {
             Админ — очередь проверки
           </h1>
           <p className="text-sm text-neutral-700">
-            Активные заявки команд. Подтверждение применяет эффект на карте.
+            Активные заявки команд. Подтверждение применяет эффект на карте,
+            отклонение возвращает сектор в исходное состояние.
           </p>
         </div>
         <Button
@@ -158,21 +180,23 @@ export function AdminSubmissionsPage() {
             <SubmissionRow
               key={item.id}
               item={item}
-              busy={approvingId === item.id}
-              onApprove={() => openApproveModal(item)}
+              busy={busyId === item.id}
+              onApprove={() => openModal('approve', item)}
+              onReject={() => openModal('reject', item)}
             />
           ))}
         </div>
       )}
 
-      {modalFor && (
-        <ApproveModal
-          item={modalFor}
+      {modal && (
+        <DecisionModal
+          decision={modal.decision}
+          item={modal.item}
           comment={comment}
           onChangeComment={setComment}
           onClose={closeModal}
-          onConfirm={() => void handleConfirmApprove()}
-          isBusy={approvingId === modalFor.id}
+          onConfirm={() => void handleConfirm()}
+          isBusy={busyId === modal.item.id}
         />
       )}
     </div>
@@ -183,9 +207,10 @@ type RowProps = {
   item: TaskSubmissionWithDetails;
   busy: boolean;
   onApprove: () => void;
+  onReject: () => void;
 };
 
-function SubmissionRow({ item, busy, onApprove }: RowProps) {
+function SubmissionRow({ item, busy, onApprove, onReject }: RowProps) {
   const diffColor = difficultyColors[item.difficulty.slug];
   const teamChipColor = item.team.color ?? 'var(--color-neutral-500)';
 
@@ -250,6 +275,9 @@ function SubmissionRow({ item, busy, onApprove }: RowProps) {
           <Button variant="primary" onClick={onApprove} isLoading={busy} disabled={busy}>
             Подтвердить
           </Button>
+          <Button variant="danger" onClick={onReject} disabled={busy}>
+            Отклонить
+          </Button>
         </div>
       </div>
     </Card>
@@ -257,6 +285,7 @@ function SubmissionRow({ item, busy, onApprove }: RowProps) {
 }
 
 type ModalProps = {
+  decision: Decision;
   item: TaskSubmissionWithDetails;
   comment: string;
   onChangeComment: (v: string) => void;
@@ -265,7 +294,8 @@ type ModalProps = {
   isBusy: boolean;
 };
 
-function ApproveModal({
+function DecisionModal({
+  decision,
   item,
   comment,
   onChangeComment,
@@ -273,40 +303,55 @@ function ApproveModal({
   onConfirm,
   isBusy,
 }: ModalProps) {
+  const isApprove = decision === 'approve';
+  const title = isApprove ? 'Подтвердить заявку' : 'Отклонить заявку';
+  const confirmLabel = isApprove ? 'Подтвердить' : 'Отклонить';
+  const commentLabel = isApprove
+    ? 'Комментарий (необязательно)'
+    : 'Причина отклонения';
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: 'var(--state-overlay-backdrop)' }}
-      onClick={onClose}
+      onClick={isBusy ? undefined : onClose}
     >
       <div
         className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-md shadow-3"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">
-          Подтвердить заявку
+          {title}
         </h2>
         <p className="text-xs text-neutral-700 mb-4">
           {ACTION_LABELS[item.action_type]} · сектор #{item.sector.number} · {item.team.name}
         </p>
 
         <label className="block text-xs text-neutral-800 mb-1">
-          Комментарий (необязательно)
+          {commentLabel}
         </label>
         <textarea
           value={comment}
           onChange={(e) => onChangeComment(e.target.value)}
           rows={3}
           className="w-full bg-neutral-50 border border-neutral-400 rounded-sm px-2 py-1 text-sm text-neutral-1000 focus:outline-none focus:border-brand-500"
-          placeholder="Например: принято по видеозаписи"
+          placeholder={
+            isApprove
+              ? 'Например: принято по видеозаписи'
+              : 'Например: ответ не совпадает с эталоном'
+          }
         />
 
         <div className="flex justify-end gap-2 mt-4">
           <Button variant="secondary" onClick={onClose} disabled={isBusy}>
             Отмена
           </Button>
-          <Button variant="primary" onClick={onConfirm} isLoading={isBusy}>
-            Подтвердить
+          <Button
+            variant={isApprove ? 'primary' : 'danger'}
+            onClick={onConfirm}
+            isLoading={isBusy}
+          >
+            {confirmLabel}
           </Button>
         </div>
       </div>

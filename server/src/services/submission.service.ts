@@ -333,6 +333,28 @@ async function applyApprovedEffect(
   }
 }
 
+async function revertPendingEffect(
+  client: PoolClient,
+  submission: TaskSubmission,
+): Promise<void> {
+  if (submission.action_type === 'capture' || submission.action_type === 'recapture') {
+    await client.query(
+      `UPDATE sectors SET
+         status = CASE WHEN captured_by_team_id IS NULL THEN 'free' ELSE 'captured' END,
+         capturing_by_team_id = NULL,
+         capture_started_at = NULL,
+         current_action_type = NULL
+       WHERE id = $1`,
+      [submission.sector_id],
+    );
+  } else {
+    await client.query(
+      'UPDATE sectors SET current_action_type = NULL WHERE id = $1',
+      [submission.sector_id],
+    );
+  }
+}
+
 export async function approve(
   id: string,
   reviewerId: string,
@@ -360,6 +382,51 @@ export async function approve(
     await client.query(
       `UPDATE task_submissions SET
          status = 'approved',
+         comment = $1,
+         reviewed_by = $2,
+         reviewed_at = NOW(),
+         updated_at = NOW()
+       WHERE id = $3`,
+      [comment, reviewerId, id],
+    );
+
+    await client.query('COMMIT');
+    return getById(id);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function reject(
+  id: string,
+  reviewerId: string,
+  comment: string | null,
+): Promise<TaskSubmissionWithDetails> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const subRes = await client.query<TaskSubmission>(
+      'SELECT * FROM task_submissions WHERE id = $1 FOR UPDATE',
+      [id],
+    );
+    if (subRes.rows.length === 0) {
+      throw new AppError(404, 'Submission not found');
+    }
+    const submission = subRes.rows[0];
+
+    if (submission.status !== 'pending') {
+      throw new AppError(409, 'Заявка уже обработана');
+    }
+
+    await revertPendingEffect(client, submission);
+
+    await client.query(
+      `UPDATE task_submissions SET
+         status = 'rejected',
          comment = $1,
          reviewed_by = $2,
          reviewed_at = NOW(),

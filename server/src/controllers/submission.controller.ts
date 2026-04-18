@@ -31,21 +31,37 @@ export async function listPending(
   }
 }
 
+function parseComment(raw: unknown): string | null {
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : null;
+}
+
 export async function approve(
   req: Request<{ id: string }>,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const rawComment = req.body?.comment;
-    const comment =
-      typeof rawComment === 'string' && rawComment.trim().length > 0
-        ? rawComment.trim()
-        : null;
     const submission = await submissionService.approve(
       req.params.id,
       req.user!.userId,
-      comment,
+      parseComment(req.body?.comment),
+    );
+    res.status(200).json(submission);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function reject(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const submission = await submissionService.reject(
+      req.params.id,
+      req.user!.userId,
+      parseComment(req.body?.comment),
     );
     res.status(200).json(submission);
   } catch (error) {

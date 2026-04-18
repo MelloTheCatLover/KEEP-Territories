@@ -62,3 +62,12 @@ export function approveSubmission(
     comment: comment ?? null,
   });
 }
+
+export function rejectSubmission(
+  id: string,
+  comment?: string | null,
+): Promise<TaskSubmissionWithDetails> {
+  return api.post<TaskSubmissionWithDetails>(`/submissions/${id}/reject`, {
+    comment: comment ?? null,
+  });
+}
