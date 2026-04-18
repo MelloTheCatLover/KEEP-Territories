@@ -3,7 +3,7 @@ import * as gameSettingsService from '../services/game-settings.service';
 import { GameSettingKey } from '../types/game-settings';
 import { AppError } from '../types/errors';
 
-const VALID_KEYS: GameSettingKey[] = ['base_exp_threshold', 'exp_step'];
+const VALID_KEYS: GameSettingKey[] = ['base_exp_threshold', 'exp_step', 'max_fortification_level'];
 
 export async function getAll(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
