@@ -6,6 +6,7 @@ import { MapPage } from './features/map/MapPage';
 import { TeamPage } from './features/team/TeamPage';
 import { AdminSubmissionsPage } from './features/admin/AdminSubmissionsPage';
 import { AdminMapPage } from './features/admin/AdminMapPage';
+import { AdminTasksPage } from './features/admin/AdminTasksPage';
 import { AdminHubPage } from './features/admin/AdminHubPage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
 import { GuestRoute } from './features/auth/GuestRoute';
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
       { path: '/profile', element: <ProfilePage /> },
       { path: '/admin', element: <AdminHubPage /> },
       { path: '/admin/map', element: <AdminMapPage /> },
+      { path: '/admin/tasks', element: <AdminTasksPage /> },
       { path: '/admin/submissions', element: <AdminSubmissionsPage /> },
     ],
   },

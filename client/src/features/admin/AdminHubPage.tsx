@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { AlertCircle, Map, ClipboardList } from 'lucide-react';
+import { AlertCircle, Map, ClipboardList, BookOpen } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Card } from '../../shared/ui';
 
@@ -41,13 +41,25 @@ export function AdminHubPage() {
           </Card>
         </Link>
 
+        <Link to="/admin/tasks" className="block">
+          <Card className="hover:border-brand-500 transition-colors">
+            <div className="flex items-start gap-3">
+              <BookOpen className="w-6 h-6 text-brand-400 mt-0.5" />
+              <div>
+                <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Задания</h2>
+                <p className="text-sm text-neutral-700">Редактирование пула заданий.</p>
+              </div>
+            </div>
+          </Card>
+        </Link>
+
         <Link to="/admin/submissions" className="block">
           <Card className="hover:border-brand-500 transition-colors">
             <div className="flex items-start gap-3">
               <ClipboardList className="w-6 h-6 text-brand-400 mt-0.5" />
               <div>
                 <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Очередь проверки</h2>
-                <p className="text-sm text-neutral-700">Модерация ответов (скоро).</p>
+                <p className="text-sm text-neutral-700">Модерация заявок команд.</p>
               </div>
             </div>
           </Card>
