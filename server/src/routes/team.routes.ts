@@ -2,7 +2,11 @@ import { Router } from 'express';
 import * as teamController from '../controllers/team.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { requireTeamRole } from '../middleware/role.middleware';
-import { validateCreateTeam, validateParamId } from '../middleware/validate.middleware';
+import {
+  validateCreateTeam,
+  validateParamId,
+  validateUpdateTeam,
+} from '../middleware/validate.middleware';
 
 const router = Router();
 
@@ -13,6 +17,7 @@ router.get('/', teamController.getAll);
 router.post('/leave', teamController.leave);
 router.post('/transfer', requireTeamRole('captain'), teamController.transferCaptain);
 router.get('/:id', validateParamId, teamController.getById);
+router.patch('/:id', validateParamId, validateUpdateTeam, teamController.update);
 router.post('/:id/join', validateParamId, teamController.join);
 
 export default router;

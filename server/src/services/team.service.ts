@@ -1,5 +1,5 @@
 import { pool } from '../config/db';
-import { Team, CreateTeamDto } from '../types/team';
+import { Team, CreateTeamDto, UpdateTeamDto } from '../types/team';
 import { TeamFullStats } from '../types/team-stats';
 import { AppError } from '../types/errors';
 import * as teamStatsService from './team-stats.service';
@@ -28,17 +28,55 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
       throw new AppError(400, 'Team with this name already exists');
     }
 
+    const sectorResult = await client.query<{
+      id: string;
+      is_home_base: boolean;
+      status: string;
+      home_team_id: string | null;
+    }>(
+      `SELECT id, is_home_base, status, home_team_id
+       FROM sectors
+       WHERE id = $1
+       FOR UPDATE`,
+      [dto.home_sector_id]
+    );
+    if (sectorResult.rows.length === 0) {
+      throw new AppError(404, 'Home sector not found');
+    }
+    const sector = sectorResult.rows[0];
+    if (!sector.is_home_base) {
+      throw new AppError(400, 'Selected sector is not a home base');
+    }
+    if (sector.home_team_id || sector.status !== 'free') {
+      throw new AppError(409, 'Home sector is already taken');
+    }
+
     const teamResult = await client.query<Team>(
       `INSERT INTO teams (name, color)
-       VALUES ($1, $2)
+       VALUES ($1, NULL)
        RETURNING *`,
-      [dto.name, dto.color ?? null]
+      [dto.name]
     );
     const team = teamResult.rows[0];
 
     await client.query(
       `UPDATE users SET team_id = $1, team_role = 'captain' WHERE id = $2`,
       [team.id, userId]
+    );
+
+    await client.query(
+      `UPDATE sectors
+       SET status = 'captured',
+           captured_by_team_id = $1,
+           home_team_id = $1
+       WHERE id = $2`,
+      [team.id, sector.id]
+    );
+
+    await client.query(
+      `INSERT INTO sector_captures (sector_id, team_id)
+       VALUES ($1, $2)`,
+      [sector.id, team.id]
     );
 
     await client.query('COMMIT');
@@ -50,6 +88,33 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
   } finally {
     client.release();
   }
+}
+
+export async function updateTeam(
+  teamId: string,
+  userId: string,
+  dto: UpdateTeamDto
+): Promise<TeamFullStats> {
+  const userResult = await pool.query<{ team_id: string | null; team_role: string | null }>(
+    'SELECT team_id, team_role FROM users WHERE id = $1',
+    [userId]
+  );
+  if (userResult.rows.length === 0) {
+    throw new AppError(404, 'User not found');
+  }
+  const { team_id, team_role } = userResult.rows[0];
+  if (team_id !== teamId) {
+    throw new AppError(403, 'You can only update your own team');
+  }
+  if (team_role !== 'captain') {
+    throw new AppError(403, 'Only the captain can update team settings');
+  }
+
+  if (dto.color !== undefined) {
+    await pool.query('UPDATE teams SET color = $1 WHERE id = $2', [dto.color, teamId]);
+  }
+
+  return teamStatsService.getFullStats(teamId);
 }
 
 export async function getById(teamId: string): Promise<TeamFullStats> {
@@ -127,6 +192,28 @@ export async function leave(userId: string): Promise<void> {
       await client.query(
         'UPDATE users SET team_id = NULL, team_role = NULL WHERE id = $1',
         [userId]
+      );
+      await client.query(
+        'DELETE FROM sector_captures WHERE team_id = $1',
+        [team_id]
+      );
+      await client.query(
+        `UPDATE sectors
+         SET status = 'free',
+             captured_by_team_id = NULL,
+             capturing_by_team_id = NULL,
+             capture_started_at = NULL,
+             home_team_id = NULL,
+             fortification_level = 0,
+             current_action_type = NULL
+         WHERE captured_by_team_id = $1
+            OR capturing_by_team_id = $1
+            OR home_team_id = $1`,
+        [team_id]
+      );
+      await client.query(
+        `DELETE FROM task_submissions WHERE team_id = $1`,
+        [team_id]
       );
       await client.query('DELETE FROM teams WHERE id = $1', [team_id]);
     } else {

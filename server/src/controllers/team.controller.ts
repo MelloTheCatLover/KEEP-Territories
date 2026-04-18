@@ -5,11 +5,25 @@ import { AppError } from '../types/errors';
 export async function create(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const team = await teamService.create(
-      { name: req.body.name.trim(), color: req.body.color ?? null },
+      { name: req.body.name.trim(), home_sector_id: req.body.home_sector_id },
       req.user!.userId
     );
 
     res.status(201).json(team);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function update(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { color } = req.body;
+    const team = await teamService.updateTeam(req.params.id, req.user!.userId, { color });
+    res.status(200).json(team);
   } catch (error) {
     next(error);
   }

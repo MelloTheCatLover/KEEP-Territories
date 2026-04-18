@@ -52,7 +52,7 @@ export function validateCreateTeam(req: Request, _res: Response, next: NextFunct
   if (!req.body || typeof req.body !== 'object') {
     return next(new AppError(400, 'Request body must be valid JSON'));
   }
-  const { name } = req.body;
+  const { name, home_sector_id } = req.body;
 
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     return next(new AppError(400, 'Team name is required'));
@@ -61,7 +61,19 @@ export function validateCreateTeam(req: Request, _res: Response, next: NextFunct
     return next(new AppError(400, `Team name must be at most ${MAX_TEAM_NAME_LENGTH} characters`));
   }
 
+  if (!home_sector_id || typeof home_sector_id !== 'string' || !UUID_REGEX.test(home_sector_id)) {
+    return next(new AppError(400, 'home_sector_id is required and must be a valid UUID'));
+  }
+
+  next();
+}
+
+export function validateUpdateTeam(req: Request, _res: Response, next: NextFunction): void {
+  if (!req.body || typeof req.body !== 'object') {
+    return next(new AppError(400, 'Request body must be valid JSON'));
+  }
   const { color } = req.body;
+
   if (color !== undefined && color !== null) {
     if (typeof color !== 'string' || !HEX_COLOR_REGEX.test(color)) {
       return next(new AppError(400, 'Color must be a valid hex color (e.g. #FF5733)'));

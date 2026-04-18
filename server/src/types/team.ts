@@ -8,5 +8,9 @@ export interface Team {
 
 export interface CreateTeamDto {
   name: string;
+  home_sector_id: string;
+}
+
+export interface UpdateTeamDto {
   color?: string | null;
 }
