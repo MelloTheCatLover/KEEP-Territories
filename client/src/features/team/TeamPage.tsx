@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Crown, Loader2, ShieldCheck, Users } from 'lucide-react';
+import { Crown, Loader2, ShieldCheck, Users } from 'lucide-react';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { useAuth } from '../auth/AuthContext';
 import { getSettings, type GameSetting } from '../admin/settings-api';
 import { getTeamStats, upgradeStat } from './api';
 import type { StatName, TeamFullStats } from './types';
+import { JoinOrCreateView } from './JoinOrCreateView';
 
 type LoadState =
   | { status: 'loading' }
@@ -89,23 +90,7 @@ export function TeamPage() {
   }, [state]);
 
   if (!teamId) {
-    return (
-      <div className="max-w-2xl mx-auto px-4">
-        <Card>
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-            <div>
-              <h1 className="font-display text-heading-sm text-neutral-1000 mb-1">
-                Вы не в команде
-              </h1>
-              <p className="text-sm text-neutral-700">
-                Создание и присоединение к команде появится скоро.
-              </p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
+    return <JoinOrCreateView />;
   }
 
   if (state.status === 'loading') {
