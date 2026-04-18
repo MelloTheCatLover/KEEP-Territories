@@ -15,18 +15,26 @@ export async function create(req: Request, res: Response, next: NextFunction): P
     if (!difficulty_id || typeof difficulty_id !== 'string') {
       throw new AppError(400, 'difficulty_id is required');
     }
-    if (!Array.isArray(options) || options.length < 2) {
-      throw new AppError(400, 'At least 2 options are required');
-    }
-    if (!options.some((o: { is_correct?: boolean }) => o.is_correct === true)) {
-      throw new AppError(400, 'At least one option must be correct');
+    if (options !== undefined) {
+      if (!Array.isArray(options)) {
+        throw new AppError(400, 'options must be an array');
+      }
+      if (options.length > 0 && options.length < 2) {
+        throw new AppError(400, 'At least 2 options are required');
+      }
+      if (
+        options.length > 0 &&
+        !options.some((o: { is_correct?: boolean }) => o.is_correct === true)
+      ) {
+        throw new AppError(400, 'At least one option must be correct');
+      }
     }
 
     const task = await taskService.create({
       title: title.trim(),
       question: question.trim(),
       difficulty_id,
-      options,
+      options: Array.isArray(options) ? options : [],
     });
 
     res.status(201).json(task);
@@ -82,10 +90,16 @@ export async function update(req: Request<{ id: string }>, res: Response, next: 
       dto.difficulty_id = difficulty_id;
     }
     if (options !== undefined) {
-      if (!Array.isArray(options) || options.length < 2) {
+      if (!Array.isArray(options)) {
+        throw new AppError(400, 'options must be an array');
+      }
+      if (options.length > 0 && options.length < 2) {
         throw new AppError(400, 'At least 2 options are required');
       }
-      if (!options.some((o: { is_correct?: boolean }) => o.is_correct === true)) {
+      if (
+        options.length > 0 &&
+        !options.some((o: { is_correct?: boolean }) => o.is_correct === true)
+      ) {
         throw new AppError(400, 'At least one option must be correct');
       }
       dto.options = options;

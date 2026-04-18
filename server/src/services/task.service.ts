@@ -4,10 +4,10 @@ import { DifficultyLevel, DifficultySlug } from '../types/difficulty';
 import { AppError } from '../types/errors';
 
 export async function create(dto: CreateTaskDto): Promise<TaskWithOptions> {
-  if (dto.options.length < 2) {
+  if (dto.options.length > 0 && dto.options.length < 2) {
     throw new AppError(400, 'Task must have at least 2 options');
   }
-  if (!dto.options.some((o) => o.is_correct)) {
+  if (dto.options.length > 0 && !dto.options.some((o) => o.is_correct)) {
     throw new AppError(400, 'Task must have at least one correct option');
   }
 
@@ -165,10 +165,10 @@ export async function update(taskId: string, dto: Partial<CreateTaskDto>): Promi
     }
 
     if (dto.options) {
-      if (dto.options.length < 2) {
+      if (dto.options.length > 0 && dto.options.length < 2) {
         throw new AppError(400, 'Task must have at least 2 options');
       }
-      if (!dto.options.some((o) => o.is_correct)) {
+      if (dto.options.length > 0 && !dto.options.some((o) => o.is_correct)) {
         throw new AppError(400, 'Task must have at least one correct option');
       }
     }
