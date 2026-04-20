@@ -174,9 +174,9 @@ export function TeamPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 space-y-6">
       <Card>
-        <div className="flex items-start gap-4">
+        <div className="flex items-stretch gap-4">
           <div
-            className="w-12 h-12 rounded-md flex-shrink-0 border border-glass"
+            className="w-1 self-stretch rounded-full flex-shrink-0"
             style={{ backgroundColor: data.color ?? 'var(--color-neutral-400)' }}
             aria-hidden
           />
@@ -259,8 +259,8 @@ export function TeamPage() {
             return (
               <Card key={name}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-display text-heading-sm text-neutral-1000">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-display text-lg text-neutral-1000 break-words">
                       {meta.label}
                     </div>
                     <p className="text-xs text-neutral-700 mt-0.5">{meta.hint}</p>
@@ -271,6 +271,7 @@ export function TeamPage() {
                     onClick={() => void handleUpgrade(name)}
                     disabled={disabled}
                     isLoading={upgrading === name}
+                    className="flex-shrink-0"
                     title={
                       !isCaptain
                         ? 'Только капитан может улучшать характеристики'
