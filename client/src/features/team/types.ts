@@ -34,9 +34,6 @@ export type TeamFullStats = {
 export type CreateTeamPayload = {
   name: string;
   home_sector_id: string;
-};
-
-export type UpdateTeamPayload = {
   color?: string | null;
 };
 

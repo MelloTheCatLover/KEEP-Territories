@@ -65,15 +65,7 @@ export function validateCreateTeam(req: Request, _res: Response, next: NextFunct
     return next(new AppError(400, 'home_sector_id is required and must be a valid UUID'));
   }
 
-  next();
-}
-
-export function validateUpdateTeam(req: Request, _res: Response, next: NextFunction): void {
-  if (!req.body || typeof req.body !== 'object') {
-    return next(new AppError(400, 'Request body must be valid JSON'));
-  }
   const { color } = req.body;
-
   if (color !== undefined && color !== null) {
     if (typeof color !== 'string' || !HEX_COLOR_REGEX.test(color)) {
       return next(new AppError(400, 'Color must be a valid hex color (e.g. #FF5733)'));

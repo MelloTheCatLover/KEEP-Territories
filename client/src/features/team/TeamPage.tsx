@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Crown, LogOut, Loader2, Palette, ShieldCheck, UserCog, Users } from 'lucide-react';
+import { AlertTriangle, Crown, LogOut, Loader2, ShieldCheck, UserCog, Users } from 'lucide-react';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { useAuth } from '../auth/AuthContext';
 import { getSettings, type GameSetting } from '../admin/settings-api';
-import { getTeamStats, leaveTeam, transferCaptain, updateTeam, upgradeStat } from './api';
+import { getTeamStats, leaveTeam, transferCaptain, upgradeStat } from './api';
 import type { StatName, TeamFullStats } from './types';
 import type { User } from '../auth/types';
-import { teamColors, TEAM_COLOR_ORDER } from '../../design-system/design-tokens';
 import { JoinOrCreateView } from './JoinOrCreateView';
 
 type LoadState =
@@ -90,22 +89,6 @@ export function TeamPage() {
       setActionError(err instanceof ApiError ? err.message : 'Ошибка апгрейда');
     } finally {
       setUpgrading(null);
-    }
-  }
-
-  async function handleColor(color: string | null) {
-    if (!teamId || !isCaptain) return;
-    setBusy(true);
-    setActionError(null);
-    try {
-      const next = await updateTeam(teamId, { color });
-      setState((prev) =>
-        prev.status === 'ready' ? { ...prev, data: next } : prev,
-      );
-    } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'Не удалось обновить цвет');
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -251,52 +234,6 @@ export function TeamPage() {
           </span>
         </Button>
       </div>
-
-      {isCaptain && (
-        <Card>
-          <div className="flex items-center gap-2 mb-3">
-            <Palette className="w-5 h-5 text-neutral-800" />
-            <h2 className="font-display text-heading-sm text-neutral-1000">Цвет команды</h2>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {TEAM_COLOR_ORDER.map((key) => {
-              const c = teamColors[key];
-              const selected =
-                (data.color ?? '').toUpperCase() === c.base.toUpperCase();
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => void handleColor(c.base)}
-                  disabled={busy || selected}
-                  className={`w-8 h-8 rounded-full border-2 transition-all disabled:cursor-not-allowed ${
-                    selected
-                      ? 'border-neutral-1000 scale-110'
-                      : 'border-transparent hover:scale-105'
-                  }`}
-                  style={{ backgroundColor: c.base }}
-                  title={key}
-                  aria-label={`Цвет ${key}`}
-                  aria-pressed={selected}
-                />
-              );
-            })}
-            <button
-              type="button"
-              onClick={() => void handleColor(null)}
-              disabled={busy || data.color === null}
-              className={`h-8 px-3 rounded-full border-2 text-xs transition-all disabled:cursor-not-allowed ${
-                data.color === null
-                  ? 'border-neutral-1000 text-neutral-1000'
-                  : 'border-neutral-400 text-neutral-700 hover:border-neutral-600'
-              }`}
-              aria-pressed={data.color === null}
-            >
-              Без цвета
-            </button>
-          </div>
-        </Card>
-      )}
 
       <section>
         <div className="flex items-center justify-between mb-3">

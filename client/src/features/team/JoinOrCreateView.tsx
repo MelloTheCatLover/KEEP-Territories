@@ -5,6 +5,11 @@ import { ApiError } from '../../shared/api/client';
 import { useAuth } from '../auth/AuthContext';
 import { getSectorsMap } from '../map/api';
 import type { Sector } from '../map/types';
+import {
+  teamColors,
+  TEAM_COLOR_ORDER,
+  type TeamColorKey,
+} from '../../design-system/design-tokens';
 import { createTeam, getTeams, joinTeam } from './api';
 import type { Team } from './types';
 
@@ -18,6 +23,7 @@ export function JoinOrCreateView() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [name, setName] = useState('');
   const [homeSectorId, setHomeSectorId] = useState<string | null>(null);
+  const [colorKey, setColorKey] = useState<TeamColorKey | null>(TEAM_COLOR_ORDER[0]);
   const [creating, setCreating] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +71,11 @@ export function JoinOrCreateView() {
     setCreating(true);
     setError(null);
     try {
-      await createTeam({ name: trimmed, home_sector_id: homeSectorId });
+      await createTeam({
+        name: trimmed,
+        home_sector_id: homeSectorId,
+        color: colorKey ? teamColors[colorKey].base : null,
+      });
       await refreshUser();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Не удалось создать команду');
@@ -188,6 +198,49 @@ export function JoinOrCreateView() {
                   Все домашние сектора заняты — максимум команд достигнут.
                 </p>
               )}
+            </div>
+
+            <div>
+              <Label>Цвет команды</Label>
+              <p className="text-xs text-neutral-700 mb-2">
+                Выберите один раз — позже изменить нельзя.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {TEAM_COLOR_ORDER.map((key) => {
+                  const c = teamColors[key];
+                  const selected = colorKey === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setColorKey(key)}
+                      disabled={busy}
+                      className={`w-8 h-8 rounded-full border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                        selected
+                          ? 'border-neutral-1000 scale-110'
+                          : 'border-transparent hover:scale-105'
+                      }`}
+                      style={{ backgroundColor: c.base }}
+                      title={key}
+                      aria-label={`Цвет ${key}`}
+                      aria-pressed={selected}
+                    />
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setColorKey(null)}
+                  disabled={busy}
+                  className={`h-8 px-3 rounded-full border-2 text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                    colorKey === null
+                      ? 'border-neutral-1000 text-neutral-1000'
+                      : 'border-neutral-400 text-neutral-700 hover:border-neutral-600'
+                  }`}
+                  aria-pressed={colorKey === null}
+                >
+                  Без цвета
+                </button>
+              </div>
             </div>
 
             <div>

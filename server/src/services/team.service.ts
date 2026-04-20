@@ -1,5 +1,5 @@
 import { pool } from '../config/db';
-import { Team, CreateTeamDto, UpdateTeamDto } from '../types/team';
+import { Team, CreateTeamDto } from '../types/team';
 import { TeamFullStats } from '../types/team-stats';
 import { AppError } from '../types/errors';
 import * as teamStatsService from './team-stats.service';
@@ -53,9 +53,9 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
 
     const teamResult = await client.query<Team>(
       `INSERT INTO teams (name, color)
-       VALUES ($1, NULL)
+       VALUES ($1, $2)
        RETURNING *`,
-      [dto.name]
+      [dto.name, dto.color ?? null]
     );
     const team = teamResult.rows[0];
 
@@ -90,32 +90,6 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
   }
 }
 
-export async function updateTeam(
-  teamId: string,
-  userId: string,
-  dto: UpdateTeamDto
-): Promise<TeamFullStats> {
-  const userResult = await pool.query<{ team_id: string | null; team_role: string | null }>(
-    'SELECT team_id, team_role FROM users WHERE id = $1',
-    [userId]
-  );
-  if (userResult.rows.length === 0) {
-    throw new AppError(404, 'User not found');
-  }
-  const { team_id, team_role } = userResult.rows[0];
-  if (team_id !== teamId) {
-    throw new AppError(403, 'You can only update your own team');
-  }
-  if (team_role !== 'captain') {
-    throw new AppError(403, 'Only the captain can update team settings');
-  }
-
-  if (dto.color !== undefined) {
-    await pool.query('UPDATE teams SET color = $1 WHERE id = $2', [dto.color, teamId]);
-  }
-
-  return teamStatsService.getFullStats(teamId);
-}
 
 export async function getById(teamId: string): Promise<TeamFullStats> {
   return teamStatsService.getFullStats(teamId);

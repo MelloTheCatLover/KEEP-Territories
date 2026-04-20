@@ -5,7 +5,6 @@ import type {
   Team,
   TeamFullStats,
   TransferCaptainPayload,
-  UpdateTeamPayload,
   UpgradeStatPayload,
 } from './types';
 
@@ -23,10 +22,6 @@ export function getTeamStats(teamId: string): Promise<TeamFullStats> {
 
 export function createTeam(payload: CreateTeamPayload): Promise<TeamFullStats> {
   return api.post<TeamFullStats>('/teams', payload);
-}
-
-export function updateTeam(teamId: string, payload: UpdateTeamPayload): Promise<TeamFullStats> {
-  return api.patch<TeamFullStats>(`/teams/${teamId}`, payload);
 }
 
 export function joinTeam(teamId: string): Promise<TeamFullStats> {
