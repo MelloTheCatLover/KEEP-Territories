@@ -176,6 +176,16 @@ export const zIndex = {
 export const getTeamColor = (index: number) =>
   teamColors[TEAM_COLOR_ORDER[index % TEAM_COLOR_ORDER.length]];
 
+/** Resolve a TeamColor entry from a hex value, matching any palette base. */
+export const findTeamColorByHex = (hex: string | null | undefined) => {
+  if (!hex) return null;
+  const normalized = hex.toUpperCase();
+  for (const key of TEAM_COLOR_ORDER) {
+    if (teamColors[key].base.toUpperCase() === normalized) return teamColors[key];
+  }
+  return null;
+};
+
 /** Get difficulty color by level. */
 export const getDifficultyColor = (level: DifficultyKey) => difficultyColors[level];
 

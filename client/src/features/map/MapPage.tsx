@@ -5,7 +5,7 @@ import { HexMap, type TeamInfo } from './HexMap';
 import { api, ApiError } from '../../shared/api/client';
 import { Loader2 } from 'lucide-react';
 
-type TeamDto = { id: string; name: string };
+type TeamDto = { id: string; name: string; color: string | null };
 
 type LoadState =
   | { status: 'loading' }
@@ -28,7 +28,7 @@ export function MapPage() {
         const sorted = [...teams].sort((a, b) => a.id.localeCompare(b.id));
         const teamsById: Record<string, TeamInfo> = {};
         sorted.forEach((t, i) => {
-          teamsById[t.id] = { id: t.id, name: t.name, index: i };
+          teamsById[t.id] = { id: t.id, name: t.name, index: i, color: t.color };
         });
         setState({ status: 'ready', sectors, teamsById });
       })

@@ -2,6 +2,7 @@ import type { Sector, DifficultySlug } from './types';
 import { axialToPixel, hexPoints, bbox } from './hex-utils';
 import {
   difficultyColors,
+  findTeamColorByHex,
   getTeamColor,
 } from '../../design-system/design-tokens';
 
@@ -15,7 +16,12 @@ export type TeamInfo = {
   id: string;
   name: string;
   index: number;
+  color: string | null;
 };
+
+function resolveTeamPalette(team: TeamInfo) {
+  return findTeamColorByHex(team.color) ?? getTeamColor(team.index);
+}
 
 const DIFFICULTY_BADGE: Record<DifficultySlug, string> = {
   easy: difficultyColors.easy,
@@ -44,7 +50,7 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
 
   if (s.is_home_base && s.home_team_id) {
     const team = teamsById[s.home_team_id];
-    const color = team ? getTeamColor(team.index) : null;
+    const color = team ? resolveTeamPalette(team) : null;
     return {
       fill: color ? color.bright : diffBadge,
       fillOpacity: 0.9,
@@ -58,7 +64,7 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
 
   if (s.status !== 'free' && s.captured_by_team_id) {
     const team = teamsById[s.captured_by_team_id];
-    const color = team ? getTeamColor(team.index) : null;
+    const color = team ? resolveTeamPalette(team) : null;
     return {
       fill: color ? color.base : diffBadge,
       fillOpacity: 0.8,
