@@ -3,6 +3,7 @@ import { LoginPage } from './features/auth/LoginPage';
 import { RegisterPage } from './features/auth/RegisterPage';
 import { ProfilePage } from './features/auth/ProfilePage';
 import { MapPage } from './features/map/MapPage';
+import { SectorPage } from './features/map/SectorPage';
 import { TeamPage } from './features/team/TeamPage';
 import { AdminSubmissionsPage } from './features/admin/AdminSubmissionsPage';
 import { AdminMapPage } from './features/admin/AdminMapPage';
@@ -40,6 +41,7 @@ export const router = createBrowserRouter([
     ),
     children: [
       { path: '/map', element: <MapPage /> },
+      { path: '/sectors/:id', element: <SectorPage /> },
       { path: '/team', element: <TeamPage /> },
       { path: '/profile', element: <ProfilePage /> },
       { path: '/admin', element: <AdminHubPage /> },

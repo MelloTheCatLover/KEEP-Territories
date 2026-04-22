@@ -1,23 +1,28 @@
 import { api } from '../../shared/api/client';
 import type { ActionType, Sector } from './types';
+import type { TaskSubmissionWithDetails } from '../admin/submissions-api';
 
 export function getSectorsMap(): Promise<Sector[]> {
   return api.get<Sector[]>('/sectors/map');
 }
 
-export type StartActionResponse = {
-  sector: Sector;
-  task: unknown;
-  submission_id: string;
-};
+export function getSectorById(id: string): Promise<Sector> {
+  return api.get<Sector>(`/sectors/${id}`);
+}
 
 export function startAction(
   sectorId: string,
   actionType: ActionType,
-): Promise<StartActionResponse> {
-  return api.post<StartActionResponse>(`/sectors/${sectorId}/action/start`, {
+): Promise<TaskSubmissionWithDetails> {
+  return api.post<TaskSubmissionWithDetails>(`/sectors/${sectorId}/action/start`, {
     action_type: actionType,
   });
+}
+
+export function getCurrentSubmission(
+  sectorId: string,
+): Promise<TaskSubmissionWithDetails | null> {
+  return api.get<TaskSubmissionWithDetails | null>(`/sectors/${sectorId}/submission/current`);
 }
 
 export type GenerateMapResponse = {
