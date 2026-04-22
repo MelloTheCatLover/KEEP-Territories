@@ -76,3 +76,49 @@ export async function getAll(_req: Request, res: Response, next: NextFunction): 
     next(error);
   }
 }
+
+export async function adminUpdate(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const patch: { name?: string; color?: string | null } = {};
+    if (req.body?.name !== undefined) patch.name = req.body.name;
+    if (req.body?.color !== undefined) patch.color = req.body.color;
+    const team = await teamService.adminUpdate(req.params.id, patch);
+    res.status(200).json(team);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function adminDelete(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    await teamService.adminDelete(req.params.id);
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function adminKick(
+  req: Request<{ id: string; userId: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const result = await teamService.adminKickMember(req.params.id, req.params.userId);
+    if (result === null) {
+      res.status(200).json({ team_deleted: true });
+      return;
+    }
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}

@@ -258,3 +258,144 @@ export async function getAll(): Promise<Team[]> {
   const result = await pool.query<Team>('SELECT * FROM teams ORDER BY created_at DESC');
   return result.rows;
 }
+
+const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
+
+export async function adminUpdate(
+  teamId: string,
+  patch: { name?: string; color?: string | null },
+): Promise<TeamFullStats> {
+  const fields: string[] = [];
+  const params: Array<string | null> = [];
+
+  if (patch.name !== undefined) {
+    const trimmed = patch.name.trim();
+    if (trimmed.length === 0 || trimmed.length > 50) {
+      throw new AppError(400, 'Team name must be 1..50 chars');
+    }
+    fields.push(`name = $${fields.length + 1}`);
+    params.push(trimmed);
+  }
+  if (patch.color !== undefined) {
+    if (patch.color !== null && !HEX_COLOR_REGEX.test(patch.color)) {
+      throw new AppError(400, 'Color must be a valid hex (e.g. #FF5733)');
+    }
+    fields.push(`color = $${fields.length + 1}`);
+    params.push(patch.color);
+  }
+  if (fields.length === 0) {
+    throw new AppError(400, 'No fields to update');
+  }
+
+  params.push(teamId);
+  const res = await pool.query<Team>(
+    `UPDATE teams SET ${fields.join(', ')}, updated_at = NOW()
+     WHERE id = $${params.length}
+     RETURNING *`,
+    params,
+  );
+  if (res.rows.length === 0) {
+    throw new AppError(404, 'Team not found');
+  }
+  return teamStatsService.getFullStats(teamId);
+}
+
+export async function adminDelete(teamId: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const exists = await client.query('SELECT id FROM teams WHERE id = $1 FOR UPDATE', [teamId]);
+    if (exists.rows.length === 0) {
+      throw new AppError(404, 'Team not found');
+    }
+    await client.query('DELETE FROM task_submissions WHERE team_id = $1', [teamId]);
+    await client.query('DELETE FROM sector_captures WHERE team_id = $1', [teamId]);
+    await client.query(
+      `UPDATE sectors
+       SET status = 'free',
+           captured_by_team_id = NULL,
+           capturing_by_team_id = NULL,
+           capture_started_at = NULL,
+           home_team_id = NULL,
+           fortification_level = 0,
+           current_action_type = NULL
+       WHERE captured_by_team_id = $1
+          OR capturing_by_team_id = $1
+          OR home_team_id = $1`,
+      [teamId],
+    );
+    await client.query(
+      'UPDATE users SET team_id = NULL, team_role = NULL WHERE team_id = $1',
+      [teamId],
+    );
+    await client.query('DELETE FROM teams WHERE id = $1', [teamId]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function adminKickMember(teamId: string, userId: string): Promise<TeamFullStats | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const user = await client.query<{ team_id: string | null; team_role: 'captain' | 'member' | null }>(
+      'SELECT team_id, team_role FROM users WHERE id = $1 FOR UPDATE',
+      [userId],
+    );
+    if (user.rows.length === 0) {
+      throw new AppError(404, 'User not found');
+    }
+    if (user.rows[0].team_id !== teamId) {
+      throw new AppError(400, 'User is not a member of this team');
+    }
+
+    const membersRes = await client.query<{ id: string }>(
+      'SELECT id FROM users WHERE team_id = $1',
+      [teamId],
+    );
+    const membersCount = membersRes.rows.length;
+
+    if (user.rows[0].team_role === 'captain' && membersCount > 1) {
+      throw new AppError(400, 'Cannot kick captain while other members remain — transfer captaincy first');
+    }
+
+    await client.query(
+      'UPDATE users SET team_id = NULL, team_role = NULL WHERE id = $1',
+      [userId],
+    );
+
+    if (membersCount === 1) {
+      await client.query('DELETE FROM task_submissions WHERE team_id = $1', [teamId]);
+      await client.query('DELETE FROM sector_captures WHERE team_id = $1', [teamId]);
+      await client.query(
+        `UPDATE sectors
+         SET status = 'free',
+             captured_by_team_id = NULL,
+             capturing_by_team_id = NULL,
+             capture_started_at = NULL,
+             home_team_id = NULL,
+             fortification_level = 0,
+             current_action_type = NULL
+         WHERE captured_by_team_id = $1
+            OR capturing_by_team_id = $1
+            OR home_team_id = $1`,
+        [teamId],
+      );
+      await client.query('DELETE FROM teams WHERE id = $1', [teamId]);
+      await client.query('COMMIT');
+      return null;
+    }
+
+    await client.query('COMMIT');
+    return teamStatsService.getFullStats(teamId);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
