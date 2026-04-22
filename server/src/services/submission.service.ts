@@ -38,14 +38,59 @@ async function getUserTeamId(client: PoolClient, userId: string): Promise<string
   return res.rows[0].team_id;
 }
 
+const NEIGHBOR_OFFSETS: ReadonlyArray<[number, number]> = [
+  [1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1],
+];
+
+async function hasAdjacentOwnedSector(
+  client: PoolClient,
+  sector: Sector,
+  teamId: string,
+): Promise<boolean> {
+  const pairs = NEIGHBOR_OFFSETS.map(([dq, dr]) => [sector.q + dq, sector.r + dr]);
+  const placeholders = pairs.map((_, i) => `($${i * 2 + 2}, $${i * 2 + 3})`).join(',');
+  const params: Array<string | number> = [teamId];
+  pairs.forEach(([q, r]) => params.push(q, r));
+  const res = await client.query(
+    `SELECT 1 FROM sectors
+     WHERE captured_by_team_id = $1 AND (q, r) IN (${placeholders})
+     LIMIT 1`,
+    params,
+  );
+  return res.rows.length > 0;
+}
+
+async function pickTaskForSector(
+  client: PoolClient,
+  sector: Sector,
+): Promise<string | null> {
+  const mapped = await client.query<{ task_id: string }>(
+    'SELECT task_id FROM sector_tasks WHERE sector_id = $1 ORDER BY RANDOM() LIMIT 1',
+    [sector.id],
+  );
+  if (mapped.rows.length > 0) return mapped.rows[0].task_id;
+  if (sector.task_id) return sector.task_id;
+  const any = await client.query<{ id: string }>(
+    'SELECT id FROM tasks WHERE difficulty_id = $1 ORDER BY RANDOM() LIMIT 1',
+    [sector.difficulty_id],
+  );
+  return any.rows.length > 0 ? any.rows[0].id : null;
+}
+
 function validateActionForSector(action: SectorActionType, sector: Sector, teamId: string): void {
   switch (action) {
     case 'capture':
+      if (sector.is_home_base) {
+        throw new AppError(400, 'Домашний сектор нельзя захватить');
+      }
       if (sector.status !== 'free') {
         throw new AppError(400, 'Сектор не свободен');
       }
       return;
     case 'recapture':
+      if (sector.is_home_base) {
+        throw new AppError(400, 'Домашний сектор нельзя перехватить');
+      }
       if (sector.status !== 'captured' || sector.captured_by_team_id === teamId) {
         throw new AppError(400, 'Нельзя перехватить этот сектор');
       }
@@ -59,6 +104,9 @@ function validateActionForSector(action: SectorActionType, sector: Sector, teamI
       }
       return;
     case 'remove_fortification':
+      if (sector.is_home_base) {
+        throw new AppError(400, 'С домашнего сектора нельзя снять укрепление');
+      }
       if (sector.captured_by_team_id === teamId) {
         throw new AppError(400, 'Нельзя снимать укрепление со своего сектора');
       }
@@ -96,6 +144,13 @@ export async function startAction(
 
     validateActionForSector(actionType, sector, teamId);
 
+    if (actionType === 'capture' || actionType === 'recapture' || actionType === 'remove_fortification') {
+      const adjacent = await hasAdjacentOwnedSector(client, sector, teamId);
+      if (!adjacent) {
+        throw new AppError(400, 'Сектор не граничит с вашими — действие невозможно');
+      }
+    }
+
     const existing = await client.query<{ id: string }>(
       `SELECT id FROM task_submissions WHERE sector_id = $1 AND status = 'pending'`,
       [sectorId],
@@ -103,6 +158,8 @@ export async function startAction(
     if (existing.rows.length > 0) {
       throw new AppError(409, 'По этому сектору уже есть заявка на рассмотрении');
     }
+
+    const taskId = await pickTaskForSector(client, sector);
 
     if (actionType === 'capture' || actionType === 'recapture') {
       await client.query(
@@ -126,7 +183,7 @@ export async function startAction(
          (sector_id, team_id, user_id, task_id, action_type)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id`,
-      [sectorId, teamId, userId, sector.task_id, actionType],
+      [sectorId, teamId, userId, taskId, actionType],
     );
 
     await client.query('COMMIT');
@@ -196,7 +253,7 @@ type DetailsRow = {
   team_name: string;
   team_color: string | null;
   sector_row_id: string;
-  sector_number: number;
+  sector_number: number | null;
   sector_q: number;
   sector_r: number;
   difficulty_id: string;
@@ -267,6 +324,32 @@ export async function getById(id: string): Promise<TaskSubmissionWithDetails> {
     throw new AppError(404, 'Submission not found');
   }
   return rowToDetails(res.rows[0]);
+}
+
+export async function getCurrentForSector(
+  sectorId: string,
+  userId: string,
+): Promise<TaskSubmissionWithDetails | null> {
+  const userRes = await pool.query<{ team_id: string | null; role: 'admin' | 'student' }>(
+    'SELECT team_id, role FROM users WHERE id = $1',
+    [userId],
+  );
+  if (userRes.rows.length === 0) {
+    throw new AppError(404, 'User not found');
+  }
+  const { team_id, role } = userRes.rows[0];
+
+  const res = await pool.query<DetailsRow>(
+    `${DETAILS_SELECT}
+     WHERE sub.sector_id = $1 AND sub.status = 'pending'
+     ORDER BY sub.created_at DESC
+     LIMIT 1`,
+    [sectorId],
+  );
+  if (res.rows.length === 0) return null;
+  const row = res.rows[0];
+  if (role !== 'admin' && row.team_id !== team_id) return null;
+  return rowToDetails(row);
 }
 
 export async function getPending(): Promise<TaskSubmissionWithDetails[]> {

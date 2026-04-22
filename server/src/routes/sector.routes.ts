@@ -21,5 +21,6 @@ router.get('/map', sectorController.getMap);
 router.get('/:id', validateParamId, sectorController.getById);
 
 router.post('/:sectorId/action/start', submissionController.startAction);
+router.get('/:sectorId/submission/current', submissionController.getCurrentForSector);
 
 export default router;

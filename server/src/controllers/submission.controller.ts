@@ -18,6 +18,22 @@ export async function startAction(
   }
 }
 
+export async function getCurrentForSector(
+  req: Request<{ sectorId: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const submission = await submissionService.getCurrentForSector(
+      req.params.sectorId,
+      req.user!.userId,
+    );
+    res.status(200).json(submission);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function listPending(
   _req: Request,
   res: Response,
