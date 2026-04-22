@@ -28,7 +28,7 @@ export type TaskSubmissionWithDetails = {
   };
   sector: {
     id: string;
-    number: number;
+    number: number | null;
     q: number;
     r: number;
   };

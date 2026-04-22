@@ -80,10 +80,12 @@ async function insertSector(client: PoolClient, dto: CreateSectorDto): Promise<S
 
 export async function create(dto: CreateSectorDto): Promise<SectorPublic> {
   const client = await pool.connect();
+  let insertedId: string;
   try {
     await client.query('BEGIN');
 
-    await insertSector(client, dto);
+    const inserted = await insertSector(client, dto);
+    insertedId = inserted.id;
 
     await client.query('COMMIT');
   } catch (error) {
@@ -94,15 +96,15 @@ export async function create(dto: CreateSectorDto): Promise<SectorPublic> {
   }
 
   const result = await pool.query<SectorRow>(
-    `${SECTOR_SELECT} WHERE s.number = $1`,
-    [dto.number]
+    `${SECTOR_SELECT} WHERE s.id = $1`,
+    [insertedId]
   );
   return rowToSectorPublic(result.rows[0]);
 }
 
 export async function getAll(): Promise<SectorPublic[]> {
   const result = await pool.query<SectorRow>(
-    `${SECTOR_SELECT} ORDER BY s.number ASC`
+    `${SECTOR_SELECT} ORDER BY dl.slug ASC, s.number ASC`
   );
   return result.rows.map(rowToSectorPublic);
 }

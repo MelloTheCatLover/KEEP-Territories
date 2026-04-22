@@ -12,6 +12,7 @@ router.use(authenticate);
 
 router.post('/generate-map', requireAdmin, mapGeneratorController.generateMap);
 router.delete('/all', requireAdmin, mapGeneratorController.deleteAll);
+router.get('/admin/status', requireAdmin, mapGeneratorController.getStatus);
 
 router.post('/', sectorController.create);
 router.post('/bulk', sectorController.createBulk);

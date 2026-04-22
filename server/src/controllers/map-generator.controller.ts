@@ -26,3 +26,16 @@ export async function deleteAll(
     next(err);
   }
 }
+
+export async function getStatus(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const teams_count = await mapGeneratorService.countTeams();
+    res.status(200).json({ teams_count });
+  } catch (err) {
+    next(err);
+  }
+}

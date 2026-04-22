@@ -9,6 +9,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { difficultyColors } from '../../design-system/design-tokens';
+import { formatSectorLabel } from '../map/types';
 import {
   approveSubmission,
   getPendingSubmissions,
@@ -86,7 +87,7 @@ export function AdminSubmissionsPage() {
       const trimmed = comment.trim() || null;
       if (modal.decision === 'approve') {
         await approveSubmission(modal.item.id, trimmed);
-        setFlash(`Заявка по сектору #${modal.item.sector.number} подтверждена`);
+        setFlash(`Заявка по сектору ${formatSectorLabel(modal.item.difficulty.slug, modal.item.sector.number)} подтверждена`);
       } else {
         if (!trimmed) {
           setActionError('Комментарий обязателен при отклонении');
@@ -94,7 +95,7 @@ export function AdminSubmissionsPage() {
           return;
         }
         await rejectSubmission(modal.item.id, trimmed);
-        setFlash(`Заявка по сектору #${modal.item.sector.number} отклонена`);
+        setFlash(`Заявка по сектору ${formatSectorLabel(modal.item.difficulty.slug, modal.item.sector.number)} отклонена`);
       }
       closeModal();
       await refresh();
@@ -234,7 +235,7 @@ function SubmissionRow({ item, busy, onApprove, onReject }: RowProps) {
               {item.team.name}
             </span>
             <span className="text-xs font-mono text-neutral-800">
-              #{item.sector.number} {formatCoord(item.sector.q, item.sector.r)}
+              {formatSectorLabel(item.difficulty.slug, item.sector.number)} {formatCoord(item.sector.q, item.sector.r)}
             </span>
             <span
               className="px-2 py-0.5 rounded-sm text-xs font-mono"
@@ -324,7 +325,7 @@ function DecisionModal({
           {title}
         </h2>
         <p className="text-xs text-neutral-700 mb-4">
-          {ACTION_LABELS[item.action_type]} · сектор #{item.sector.number} · {item.team.name}
+          {ACTION_LABELS[item.action_type]} · сектор {formatSectorLabel(item.difficulty.slug, item.sector.number)} · {item.team.name}
         </p>
 
         <label className="block text-xs text-neutral-800 mb-1">

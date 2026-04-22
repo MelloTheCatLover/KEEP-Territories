@@ -51,7 +51,7 @@ interface DiffIdMap {
 
 type SectorRow = {
   id: string;
-  number: number;
+  number: number | null;
   q: number;
   r: number;
   difficulty_id: string;
@@ -211,16 +211,36 @@ export async function generateMap(): Promise<SectorPublic[]> {
     await checkTaskCounts(client, diffMap);
 
     const coords = generateHexCoordinates(MAP_RADIUS);
+    const bySlug: Record<DifficultySlug, Array<{ q: number; r: number; isHome: boolean }>> = {
+      easy: [],
+      medium: [],
+      hard: [],
+      core: [],
+    };
+    for (const { q, r } of coords) {
+      const slug = getDifficultySlugForRing(getRing(q, r));
+      bySlug[slug].push({ q, r, isHome: isHomeBaseCoordinate(q, r) });
+    }
+
+    const rows: Array<{ number: number | null; q: number; r: number; difficultyId: string; isHome: boolean }> = [];
+    (Object.keys(bySlug) as DifficultySlug[]).forEach((slug) => {
+      const bucket = bySlug[slug];
+      const nonHome = shuffle(bucket.filter((c) => !c.isHome));
+      const homes = bucket.filter((c) => c.isHome);
+      nonHome.forEach(({ q, r, isHome }, idx) => {
+        rows.push({ number: idx + 1, q, r, difficultyId: diffMap[slug], isHome });
+      });
+      homes.forEach(({ q, r, isHome }) => {
+        rows.push({ number: null, q, r, difficultyId: diffMap[slug], isHome });
+      });
+    });
+
     const values: string[] = [];
-    const params: Array<string | number | boolean> = [];
-    coords.forEach(({ q, r }, i) => {
-      const ring = getRing(q, r);
-      const slug = getDifficultySlugForRing(ring);
-      const difficultyId = diffMap[slug];
-      const isHome = isHomeBaseCoordinate(q, r);
+    const params: Array<string | number | boolean | null> = [];
+    rows.forEach((row, i) => {
       const base = i * 5;
       values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`);
-      params.push(i + 1, q, r, difficultyId, isHome);
+      params.push(row.number, row.q, row.r, row.difficultyId, row.isHome);
     });
 
     await client.query(
@@ -247,19 +267,37 @@ export async function generateMap(): Promise<SectorPublic[]> {
             dl.experience_reward AS difficulty_experience_reward
      FROM sectors s
      JOIN difficulty_levels dl ON s.difficulty_id = dl.id
-     ORDER BY s.number ASC`
+     ORDER BY dl.slug ASC, s.number ASC`
   );
   return result.rows.map(rowToSectorPublic);
 }
 
-export async function deleteAllSectors(): Promise<{ deleted_count: number }> {
+export async function countTeams(): Promise<number> {
+  const r = await pool.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM teams');
+  return parseInt(r.rows[0].count, 10);
+}
+
+export async function deleteAllSectors(): Promise<{ deleted_count: number; deleted_teams_count: number }> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    await client.query('DELETE FROM task_submissions');
+    await client.query('DELETE FROM sector_captures');
     await client.query('DELETE FROM sector_tasks');
-    const r = await client.query('DELETE FROM sectors RETURNING id');
+
+    const sectors = await client.query('DELETE FROM sectors RETURNING id');
+
+    await client.query(
+      `UPDATE users SET team_id = NULL, team_role = NULL WHERE team_id IS NOT NULL`
+    );
+    const teams = await client.query('DELETE FROM teams RETURNING id');
+
     await client.query('COMMIT');
-    return { deleted_count: r.rowCount ?? 0 };
+    return {
+      deleted_count: sectors.rowCount ?? 0,
+      deleted_teams_count: teams.rowCount ?? 0,
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

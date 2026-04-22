@@ -29,6 +29,10 @@ export function generateMap(): Promise<GenerateMapResponse> {
   return api.post<GenerateMapResponse>('/sectors/generate-map');
 }
 
-export function deleteAllSectors(): Promise<{ deleted_count: number }> {
-  return api.delete<{ deleted_count: number }>('/sectors/all');
+export function deleteAllSectors(): Promise<{ deleted_count: number; deleted_teams_count: number }> {
+  return api.delete<{ deleted_count: number; deleted_teams_count: number }>('/sectors/all');
+}
+
+export function getAdminMapStatus(): Promise<{ teams_count: number }> {
+  return api.get<{ teams_count: number }>('/sectors/admin/status');
 }

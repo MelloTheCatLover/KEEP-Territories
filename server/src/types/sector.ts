@@ -2,7 +2,7 @@ import { DifficultyLevel } from './difficulty';
 
 export interface Sector {
   id: string;
-  number: number;
+  number: number | null;
   q: number;
   r: number;
   difficulty_id: string;

@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, Loader2, RefreshCw, Trash2, Hammer } from 'lucide-react';
+import { AlertCircle, Loader2, RefreshCw, Trash2, Hammer, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
-import { deleteAllSectors, generateMap, getSectorsMap } from '../map/api';
+import {
+  deleteAllSectors,
+  generateMap,
+  getAdminMapStatus,
+  getSectorsMap,
+} from '../map/api';
 
 type State =
   | { status: 'loading' }
-  | { status: 'ready'; count: number }
+  | { status: 'ready'; count: number; teamsCount: number }
   | { status: 'error'; message: string };
 
 export function AdminMapPage() {
@@ -18,12 +23,13 @@ export function AdminMapPage() {
   const [busy, setBusy] = useState<'generate' | 'delete' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     setState({ status: 'loading' });
     try {
-      const sectors = await getSectorsMap();
-      setState({ status: 'ready', count: sectors.length });
+      const [sectors, status] = await Promise.all([getSectorsMap(), getAdminMapStatus()]);
+      setState({ status: 'ready', count: sectors.length, teamsCount: status.teams_count });
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : 'Не удалось загрузить состояние карты';
@@ -42,7 +48,7 @@ export function AdminMapPage() {
     try {
       const result = await generateMap();
       setFlash(`Создано секторов: ${result.count}`);
-      setState({ status: 'ready', count: result.count });
+      await refresh();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Ошибка генерации');
     } finally {
@@ -51,14 +57,18 @@ export function AdminMapPage() {
   }
 
   async function handleDelete() {
-    if (!window.confirm('Удалить все секторы? Действие необратимо.')) return;
     setBusy('delete');
     setActionError(null);
     setFlash(null);
     try {
       const result = await deleteAllSectors();
-      setFlash(`Удалено секторов: ${result.deleted_count}`);
-      setState({ status: 'ready', count: 0 });
+      const parts: string[] = [`Удалено секторов: ${result.deleted_count}`];
+      if (result.deleted_teams_count > 0) {
+        parts.push(`команд: ${result.deleted_teams_count}`);
+      }
+      setFlash(parts.join(', '));
+      setConfirmOpen(false);
+      await refresh();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Ошибка удаления');
     } finally {
@@ -83,6 +93,7 @@ export function AdminMapPage() {
   }
 
   const exists = state.status === 'ready' && state.count > 0;
+  const teamsCount = state.status === 'ready' ? state.teamsCount : 0;
 
   return (
     <div className="max-w-3xl mx-auto px-4 space-y-6">
@@ -105,10 +116,15 @@ export function AdminMapPage() {
               <p className="text-sm text-danger-text">{state.message}</p>
             )}
             {state.status === 'ready' && (
-              <p className="text-sm text-neutral-900">
-                Секторов: <span className="font-mono text-neutral-1000">{state.count}</span>
-                {exists ? ' — карта создана' : ' — карта не создана'}
-              </p>
+              <>
+                <p className="text-sm text-neutral-900">
+                  Секторов: <span className="font-mono text-neutral-1000">{state.count}</span>
+                  {exists ? ' — карта создана' : ' — карта не создана'}
+                </p>
+                <p className="text-sm text-neutral-900">
+                  Команд: <span className="font-mono text-neutral-1000">{state.teamsCount}</span>
+                </p>
+              </>
             )}
           </div>
           <Button variant="secondary" onClick={() => void refresh()} disabled={state.status === 'loading'}>
@@ -143,7 +159,7 @@ export function AdminMapPage() {
           </Button>
           <Button
             variant="danger"
-            onClick={() => void handleDelete()}
+            onClick={() => setConfirmOpen(true)}
             disabled={busy !== null || !exists}
             isLoading={busy === 'delete'}
           >
@@ -157,6 +173,68 @@ export function AdminMapPage() {
           Для генерации необходимо не менее 4 easy, 5 medium и 1 core задания в базе.
         </p>
       </Card>
+
+      {confirmOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'var(--state-overlay-backdrop)' }}
+          onClick={busy ? undefined : () => setConfirmOpen(false)}
+        >
+          <div
+            className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-md shadow-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <h2 className="font-display text-heading-sm text-neutral-1000">
+                Удалить карту?
+              </h2>
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                disabled={busy !== null}
+                className="text-neutral-700 hover:text-neutral-1000 disabled:opacity-50"
+                aria-label="Закрыть"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {teamsCount > 0 && (
+              <div className="flex items-start gap-2 bg-danger-bg border border-danger text-danger-text text-sm px-3 py-2 rounded-sm mb-3">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>
+                  Вместе с картой будут удалены <b>{teamsCount}</b> {' '}
+                  {teamsCount === 1 ? 'команда' : 'команды/команд'} со всей прогрессией.
+                  Пользователи будут отключены от команд. Действие необратимо.
+                </span>
+              </div>
+            )}
+            {teamsCount === 0 && (
+              <p className="text-sm text-neutral-700 mb-3">
+                Все секторы будут удалены. Действие необратимо.
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setConfirmOpen(false)}
+                disabled={busy !== null}
+              >
+                Отмена
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => void handleDelete()}
+                isLoading={busy === 'delete'}
+                disabled={busy !== null}
+              >
+                Удалить
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

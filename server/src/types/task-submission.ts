@@ -26,7 +26,7 @@ export interface TaskSubmissionWithDetails extends TaskSubmission {
   };
   sector: {
     id: string;
-    number: number;
+    number: number | null;
     q: number;
     r: number;
   };

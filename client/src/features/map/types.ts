@@ -12,7 +12,7 @@ export type Difficulty = {
 
 export type Sector = {
   id: string;
-  number: number;
+  number: number | null;
   q: number;
   r: number;
   difficulty_id: string;
@@ -29,3 +29,14 @@ export type Sector = {
 };
 
 export type Axial = { q: number; r: number };
+
+const SECTOR_PREFIX: Record<DifficultySlug, string> = {
+  easy: 'L',
+  medium: 'С',
+  hard: 'А',
+  core: 'Я',
+};
+
+export function formatSectorLabel(slug: DifficultySlug, number: number): string {
+  return `${SECTOR_PREFIX[slug]}${number}`;
+}
