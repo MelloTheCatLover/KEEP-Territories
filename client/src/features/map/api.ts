@@ -30,8 +30,12 @@ export type GenerateMapResponse = {
   count: number;
 };
 
-export function generateMap(): Promise<GenerateMapResponse> {
-  return api.post<GenerateMapResponse>('/sectors/generate-map');
+export type RingDifficulty = 'easy' | 'medium' | 'hard';
+export type RingConfig = { difficulty: RingDifficulty };
+export type MapGeneratorConfig = { rings: RingConfig[] };
+
+export function generateMap(config?: MapGeneratorConfig): Promise<GenerateMapResponse> {
+  return api.post<GenerateMapResponse>('/sectors/generate-map', config);
 }
 
 export function deleteAllSectors(): Promise<{ deleted_count: number; deleted_teams_count: number }> {
