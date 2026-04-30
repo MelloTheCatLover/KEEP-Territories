@@ -9,6 +9,7 @@ import {
 } from '../../design-system/design-tokens';
 
 const HEX_SIZE = 34;
+const PULSE_INSET = 4;
 const VIEWBOX_PADDING = 16;
 const BADGE_RADIUS = 4;
 const FORT_DOT_RADIUS = 2.2;
@@ -55,10 +56,10 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
     const team = teamsById[s.home_team_id];
     const color = team ? resolveTeamPalette(team) : null;
     return {
-      fill: color ? color.bright : diffBadge,
-      fillOpacity: 0.9,
+      fill: color ? color.muted : 'var(--color-neutral-300)',
+      fillOpacity: 1,
       label: 'K',
-      labelFill: color ? color.textOnBase : 'var(--color-neutral-0)',
+      labelFill: 'var(--color-neutral-1000)',
       titleExtra: team ? ` · база ${team.name}` : ' · база',
     };
   }
@@ -67,8 +68,8 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
     const team = teamsById[s.captured_by_team_id];
     const color = team ? resolveTeamPalette(team) : null;
     return {
-      fill: color ? color.base : diffBadge,
-      fillOpacity: 0.85,
+      fill: color ? color.bright : diffBadge,
+      fillOpacity: 1,
       label: numberLabel,
       labelFill: color ? color.textOnBase : 'var(--color-neutral-0)',
       titleExtra: team ? ` · ${team.name}` : '',
@@ -76,10 +77,10 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
   }
 
   return {
-    fill: diffBadge,
-    fillOpacity: 0.18,
+    fill: 'var(--color-neutral-200)',
+    fillOpacity: 1,
     label: numberLabel,
-    labelFill: 'var(--color-neutral-900)',
+    labelFill: 'var(--color-neutral-800)',
     titleExtra: '',
   };
 }
@@ -116,28 +117,20 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
       <style>{`
         .hex-cell { cursor: pointer; }
         .hex-fill {
-          transform-box: fill-box;
-          transform-origin: center;
           transition:
-            transform var(--duration-base) var(--ease-out),
-            filter var(--duration-base) var(--ease-out),
             stroke var(--duration-base) var(--ease-out),
             stroke-width var(--duration-base) var(--ease-out);
         }
         .hex-cell.is-hovered .hex-fill {
-          transform: scale(1.04);
-          filter: drop-shadow(0 0 10px rgba(157, 78, 221, 0.55));
-          stroke: var(--color-brand-500);
+          stroke: var(--color-brand-400);
           stroke-width: 2;
         }
         .hex-pulse {
-          transform-box: fill-box;
-          transform-origin: center;
           animation: hex-pulse 1.8s ease-in-out infinite;
         }
         @keyframes hex-pulse {
-          0%, 100% { stroke-opacity: 0.45; transform: scale(1); }
-          50%      { stroke-opacity: 1;    transform: scale(1.02); }
+          0%, 100% { opacity: 0.35; }
+          50%      { opacity: 1; }
         }
       `}</style>
 
@@ -186,10 +179,11 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
               {highlighted && (
                 <polygon
                   className="hex-pulse"
-                  points={hexPoints(x, y, HEX_SIZE)}
+                  points={hexPoints(x, y, HEX_SIZE - PULSE_INSET)}
                   fill="none"
-                  stroke="var(--color-brand-400)"
-                  strokeWidth={3}
+                  stroke="var(--color-brand-300)"
+                  strokeWidth={2.5}
+                  strokeLinejoin="round"
                   pointerEvents="none"
                 />
               )}
@@ -198,7 +192,9 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
                 points={hexPoints(x, y, HEX_SIZE)}
                 fill={style.fill}
                 fillOpacity={style.fillOpacity}
-                stroke="none"
+                stroke="var(--color-neutral-50)"
+                strokeWidth={0.8}
+                strokeLinejoin="round"
               >
                 <title>
                   {`${style.label} · ${s.difficulty.name}${style.titleExtra}${
