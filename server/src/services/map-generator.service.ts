@@ -4,16 +4,22 @@ import { AppError } from '../types/errors';
 import { SectorPublic } from '../types/sector';
 import { DifficultyLevel, DifficultySlug } from '../types/difficulty';
 
-const MAP_RADIUS = 3;
+export type RingDifficulty = Exclude<DifficultySlug, 'core'>;
+export interface RingConfig {
+  difficulty: RingDifficulty;
+}
+export interface MapGeneratorConfig {
+  rings: RingConfig[];
+}
 
-const HOME_BASE_COORDS: ReadonlyArray<{ q: number; r: number }> = [
-  { q: 3, r: 0 },
-  { q: 3, r: -3 },
-  { q: 0, r: -3 },
-  { q: -3, r: 0 },
-  { q: -3, r: 3 },
-  { q: 0, r: 3 },
-];
+const MAX_RINGS = 6;
+const DEFAULT_CONFIG: MapGeneratorConfig = {
+  rings: [{ difficulty: 'hard' }, { difficulty: 'medium' }, { difficulty: 'easy' }],
+};
+
+export function defaultMapConfig(): MapGeneratorConfig {
+  return { rings: DEFAULT_CONFIG.rings.map((r) => ({ ...r })) };
+}
 
 export function generateHexCoordinates(radius: number): Array<{ q: number; r: number }> {
   const coords: Array<{ q: number; r: number }> = [];
@@ -31,15 +37,49 @@ export function getRing(q: number, r: number): number {
   return (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
 }
 
-export function getDifficultySlugForRing(ring: number): DifficultySlug {
-  if (ring === 0) return 'core';
-  if (ring === 1) return 'hard';
-  if (ring === 2) return 'medium';
-  return 'easy';
+export function homeBaseCoordsForRadius(radius: number): Array<{ q: number; r: number }> {
+  if (radius < 1) return [];
+  return [
+    { q: radius, r: 0 },
+    { q: radius, r: -radius },
+    { q: 0, r: -radius },
+    { q: -radius, r: 0 },
+    { q: -radius, r: radius },
+    { q: 0, r: radius },
+  ];
 }
 
-export function isHomeBaseCoordinate(q: number, r: number): boolean {
-  return HOME_BASE_COORDS.some((c) => c.q === q && c.r === r);
+export function validateMapConfig(input: unknown): MapGeneratorConfig {
+  if (input == null) return defaultMapConfig();
+  if (typeof input !== 'object') {
+    throw new AppError(400, 'Invalid map config');
+  }
+  const obj = input as { rings?: unknown };
+  if (obj.rings == null) return defaultMapConfig();
+  if (!Array.isArray(obj.rings)) {
+    throw new AppError(400, 'rings must be an array');
+  }
+  if (obj.rings.length < 1 || obj.rings.length > MAX_RINGS) {
+    throw new AppError(400, `rings must contain between 1 and ${MAX_RINGS} entries`);
+  }
+  const rings: RingConfig[] = obj.rings.map((entry, idx) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new AppError(400, `rings[${idx}] must be an object`);
+    }
+    const diff = (entry as { difficulty?: unknown }).difficulty;
+    if (diff !== 'easy' && diff !== 'medium' && diff !== 'hard') {
+      throw new AppError(400, `rings[${idx}].difficulty must be easy|medium|hard`);
+    }
+    return { difficulty: diff };
+  });
+  return { rings };
+}
+
+function ringDifficultyAt(ringIndex: number, config: MapGeneratorConfig): DifficultySlug {
+  if (ringIndex === 0) return 'core';
+  const entry = config.rings[ringIndex - 1];
+  if (!entry) throw new AppError(500, `ring ${ringIndex} not configured`);
+  return entry.difficulty;
 }
 
 interface DiffIdMap {
@@ -111,7 +151,11 @@ async function loadDifficultyMap(client: PoolClient): Promise<DiffIdMap> {
   return { easy: map.easy, medium: map.medium, hard: map.hard, core: map.core };
 }
 
-async function checkTaskCounts(client: PoolClient, diffMap: DiffIdMap): Promise<void> {
+async function checkTaskCounts(
+  client: PoolClient,
+  diffMap: DiffIdMap,
+  needed: { easyNonHome: number; mediumNonHome: number }
+): Promise<void> {
   const res = await client.query<{ difficulty_id: string; count: string }>(
     'SELECT difficulty_id, COUNT(*)::text AS count FROM tasks GROUP BY difficulty_id'
   );
@@ -122,11 +166,12 @@ async function checkTaskCounts(client: PoolClient, diffMap: DiffIdMap): Promise<
   const easy = counts[diffMap.easy] ?? 0;
   const medium = counts[diffMap.medium] ?? 0;
   const core = counts[diffMap.core] ?? 0;
-  if (easy < 4 || medium < 5 || core < 1) {
-    throw new AppError(
-      400,
-      `Not enough tasks: need at least 4 easy, 5 medium, 1 core. Current: easy=${easy}, medium=${medium}, core=${core}`
-    );
+  const errors: string[] = [];
+  if (core < 1) errors.push(`core ${core}/1`);
+  if (needed.easyNonHome > 0 && easy < 4) errors.push(`easy ${easy}/4`);
+  if (needed.mediumNonHome > 0 && medium < 5) errors.push(`medium ${medium}/5`);
+  if (errors.length > 0) {
+    throw new AppError(400, `Not enough tasks: ${errors.join(', ')}`);
   }
 }
 
@@ -192,7 +237,10 @@ async function assignTasksAfterGeneration(client: PoolClient): Promise<void> {
   }
 }
 
-export async function generateMap(): Promise<SectorPublic[]> {
+export async function generateMap(config: MapGeneratorConfig = defaultMapConfig()): Promise<SectorPublic[]> {
+  const radius = config.rings.length;
+  const homeBaseSet = new Set(homeBaseCoordsForRadius(radius).map((c) => `${c.q},${c.r}`));
+
   const existing = await pool.query<{ count: string }>(
     'SELECT COUNT(*)::text AS count FROM sectors'
   );
@@ -208,9 +256,8 @@ export async function generateMap(): Promise<SectorPublic[]> {
     await client.query('BEGIN');
 
     const diffMap = await loadDifficultyMap(client);
-    await checkTaskCounts(client, diffMap);
 
-    const coords = generateHexCoordinates(MAP_RADIUS);
+    const coords = generateHexCoordinates(radius);
     const bySlug: Record<DifficultySlug, Array<{ q: number; r: number; isHome: boolean }>> = {
       easy: [],
       medium: [],
@@ -218,9 +265,15 @@ export async function generateMap(): Promise<SectorPublic[]> {
       core: [],
     };
     for (const { q, r } of coords) {
-      const slug = getDifficultySlugForRing(getRing(q, r));
-      bySlug[slug].push({ q, r, isHome: isHomeBaseCoordinate(q, r) });
+      const slug = ringDifficultyAt(getRing(q, r), config);
+      const isHome = homeBaseSet.has(`${q},${r}`);
+      bySlug[slug].push({ q, r, isHome });
     }
+
+    await checkTaskCounts(client, diffMap, {
+      easyNonHome: bySlug.easy.filter((c) => !c.isHome).length,
+      mediumNonHome: bySlug.medium.filter((c) => !c.isHome).length,
+    });
 
     const rows: Array<{ number: number | null; q: number; r: number; difficultyId: string; isHome: boolean }> = [];
     (Object.keys(bySlug) as DifficultySlug[]).forEach((slug) => {
