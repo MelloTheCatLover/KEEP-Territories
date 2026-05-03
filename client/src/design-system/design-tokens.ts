@@ -38,14 +38,14 @@ export const colors = {
 } as const;
 
 export const teamColors = {
-  crimson: { base: '#E53935', bright: '#FF5A52', muted: '#8C2A28', textOnBase: '#F2F4F8' },
-  coral:   { base: '#F06A2C', bright: '#FF8A4C', muted: '#924019', textOnBase: '#F2F4F8' },
-  amber:   { base: '#E6B422', bright: '#FFD340', muted: '#8C6D14', textOnBase: '#0D0E11' },
-  emerald: { base: '#2BA84A', bright: '#4CD964', muted: '#1A6B30', textOnBase: '#F2F4F8' },
-  cyan:    { base: '#1BB5D4', bright: '#3FD8F5', muted: '#0E6478', textOnBase: '#0D0E11' },
-  azure:   { base: '#2952D9', bright: '#4D78FF', muted: '#17327F', textOnBase: '#F2F4F8' },
-  indigo:  { base: '#6366F1', bright: '#8689FF', muted: '#3A3D99', textOnBase: '#F2F4F8' },
-  magenta: { base: '#D6409F', bright: '#F45EBB', muted: '#842863', textOnBase: '#F2F4F8' },
+  crimson: { base: '#E53935', bright: '#FF5A52', dark: '#A92723', muted: '#8C2A28', textOnBase: '#F2F4F8' },
+  coral:   { base: '#F06A2C', bright: '#FF8A4C', dark: '#B24E1F', muted: '#924019', textOnBase: '#F2F4F8' },
+  amber:   { base: '#E6B422', bright: '#FFD340', dark: '#A98318', muted: '#8C6D14', textOnBase: '#0D0E11' },
+  emerald: { base: '#2BA84A', bright: '#4CD964', dark: '#1F7C36', muted: '#1A6B30', textOnBase: '#F2F4F8' },
+  cyan:    { base: '#1BB5D4', bright: '#3FD8F5', dark: '#13849B', muted: '#0E6478', textOnBase: '#0D0E11' },
+  azure:   { base: '#2952D9', bright: '#4D78FF', dark: '#1E3DA1', muted: '#17327F', textOnBase: '#F2F4F8' },
+  indigo:  { base: '#6366F1', bright: '#8689FF', dark: '#4A4DB3', muted: '#3A3D99', textOnBase: '#F2F4F8' },
+  magenta: { base: '#D6409F', bright: '#F45EBB', dark: '#9E2F75', muted: '#842863', textOnBase: '#F2F4F8' },
 } as const;
 
 export type TeamColorKey = keyof typeof teamColors;

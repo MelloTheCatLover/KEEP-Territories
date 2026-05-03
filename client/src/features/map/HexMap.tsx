@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { Sector, DifficultySlug } from './types';
 import { formatSectorLabel } from './types';
 import { axialToPixel, hexPoints, bbox } from './hex-utils';
@@ -12,8 +12,8 @@ const HEX_SIZE = 34;
 const PULSE_INSET = 4;
 const VIEWBOX_PADDING = 16;
 const BADGE_RADIUS = 4;
-const FORT_DOT_RADIUS = 2.2;
-const FORT_DOT_GAP = 6;
+const CAPTURE_RING_SCALE = 0.92;
+const FORT_SCALES = [0.65, 0.4, 0.2];
 
 export type TeamInfo = {
   id: string;
@@ -88,16 +88,6 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
 export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexMapProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
-  const orderedSectors = useMemo(() => {
-    if (!hoveredId) return sectors;
-    const idx = sectors.findIndex((s) => s.id === hoveredId);
-    if (idx < 0) return sectors;
-    const copy = sectors.slice();
-    const [hovered] = copy.splice(idx, 1);
-    copy.push(hovered);
-    return copy;
-  }, [sectors, hoveredId]);
-
   if (sectors.length === 0) {
     return null;
   }
@@ -116,12 +106,15 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
     >
       <style>{`
         .hex-cell { cursor: pointer; }
-        .hex-fill {
+        .hex-events {
+          fill: transparent;
+          stroke: transparent;
+          stroke-width: 0;
           transition:
             stroke var(--duration-base) var(--ease-out),
             stroke-width var(--duration-base) var(--ease-out);
         }
-        .hex-cell.is-hovered .hex-fill {
+        .hex-cell.is-hovered .hex-events {
           stroke: var(--color-brand-400);
           stroke-width: 2;
         }
@@ -134,7 +127,7 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
         }
       `}</style>
 
-      {/* Grid layer (behind) — thin outlines, no fill. Does not interfere with colors. */}
+      {/* 1) Outline grid */}
       <g className="hex-grid" pointerEvents="none">
         {sectors.map((s) => {
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
@@ -150,45 +143,19 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
         })}
       </g>
 
-      {/* Content layer — hovered rendered last so it's on top of neighbors */}
-      <g className="hex-layer">
-        {orderedSectors.map((s) => {
+      {/* 2) Sector fill + badge + label */}
+      <g className="hex-fill-layer" pointerEvents="none">
+        {sectors.map((s) => {
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
           const style = resolveStyle(s, teamsById);
           const badgeColor = DIFFICULTY_BADGE[s.difficulty.slug];
           const badgeX = x - HEX_SIZE * 0.55;
           const badgeY = y - HEX_SIZE * 0.55;
           const fortLevel = Math.max(0, Math.min(3, s.fortification_level | 0));
-          const showFort = fortLevel > 0 && s.captured_by_team_id != null;
-          const fortY = y + HEX_SIZE * 0.52;
-          const fortStartX = x - ((fortLevel - 1) * FORT_DOT_GAP) / 2;
-          const isHovered = hoveredId === s.id;
-
-          const highlighted = highlightIds?.has(s.id) ?? false;
-
+          const fortInTitle = fortLevel > 0 && s.captured_by_team_id != null;
           return (
-            <g
-              key={s.id}
-              className={`hex-cell${isHovered ? ' is-hovered' : ''}`}
-              onMouseEnter={() => setHoveredId(s.id)}
-              onMouseLeave={() =>
-                setHoveredId((curr) => (curr === s.id ? null : curr))
-              }
-              onClick={onSectorClick ? () => onSectorClick(s) : undefined}
-            >
-              {highlighted && (
-                <polygon
-                  className="hex-pulse"
-                  points={hexPoints(x, y, HEX_SIZE - PULSE_INSET)}
-                  fill="none"
-                  stroke="var(--color-brand-300)"
-                  strokeWidth={2.5}
-                  strokeLinejoin="round"
-                  pointerEvents="none"
-                />
-              )}
+            <g key={s.id}>
               <polygon
-                className="hex-fill"
                 points={hexPoints(x, y, HEX_SIZE)}
                 fill={style.fill}
                 fillOpacity={style.fillOpacity}
@@ -198,7 +165,7 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
               >
                 <title>
                   {`${style.label} · ${s.difficulty.name}${style.titleExtra}${
-                    showFort ? ` · укр. ${fortLevel}` : ''
+                    fortInTitle ? ` · укр. ${fortLevel}` : ''
                   }`}
                 </title>
               </polygon>
@@ -209,7 +176,6 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
                 fill={badgeColor}
                 stroke="var(--color-neutral-0)"
                 strokeWidth={0.8}
-                pointerEvents="none"
               />
               <text
                 x={x}
@@ -220,23 +186,105 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
                 fontWeight={s.is_home_base ? 700 : 400}
                 fill={style.labelFill}
                 fillOpacity={0.9}
-                pointerEvents="none"
               >
                 {style.label}
               </text>
-              {showFort &&
-                Array.from({ length: fortLevel }).map((_, i) => (
-                  <circle
-                    key={i}
-                    cx={fortStartX + i * FORT_DOT_GAP}
-                    cy={fortY}
-                    r={FORT_DOT_RADIUS}
-                    fill="var(--color-neutral-1000)"
-                    stroke="var(--color-neutral-0)"
-                    strokeWidth={0.6}
-                    pointerEvents="none"
-                  />
-                ))}
+            </g>
+          );
+        })}
+      </g>
+
+      {/* 3) Fortification nested hexes — only on fully captured sectors */}
+      <g className="hex-fort-layer" pointerEvents="none">
+        {sectors.map((s) => {
+          if (s.status !== 'captured') return null;
+          const fortLevel = Math.max(0, Math.min(3, s.fortification_level | 0));
+          if (fortLevel === 0) return null;
+          const ownerId = s.captured_by_team_id;
+          if (!ownerId) return null;
+          const team = teamsById[ownerId];
+          const palette = team ? resolveTeamPalette(team) : null;
+          const fillColor = palette ? palette.dark : 'var(--color-neutral-400)';
+          const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
+          return (
+            <g key={s.id}>
+              {FORT_SCALES.slice(0, fortLevel).map((scale, i) => (
+                <polygon
+                  key={i}
+                  points={hexPoints(x, y, HEX_SIZE * scale)}
+                  fill={fillColor}
+                  stroke="var(--color-neutral-1000)"
+                  strokeWidth={1}
+                  strokeLinejoin="round"
+                />
+              ))}
+            </g>
+          );
+        })}
+      </g>
+
+      {/* 4) Capture rings — sit on top of fortification hexes */}
+      <g className="hex-ring-layer" pointerEvents="none">
+        {sectors.map((s) => {
+          const teamId = s.active_submission_team_id;
+          if (!teamId) return null;
+          const team = teamsById[teamId];
+          const palette = team ? resolveTeamPalette(team) : null;
+          const stroke = palette ? palette.bright : 'var(--color-brand-300)';
+          const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
+          return (
+            <polygon
+              key={s.id}
+              points={hexPoints(x, y, HEX_SIZE * CAPTURE_RING_SCALE)}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={3.5}
+              strokeLinejoin="round"
+            />
+          );
+        })}
+      </g>
+
+      {/* 5) Reachability pulse — top-most decorative layer */}
+      <g className="hex-pulse-layer" pointerEvents="none">
+        {sectors.map((s) => {
+          if (!highlightIds?.has(s.id)) return null;
+          const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
+          return (
+            <polygon
+              key={s.id}
+              className="hex-pulse"
+              points={hexPoints(x, y, HEX_SIZE - PULSE_INSET)}
+              fill="none"
+              stroke="var(--color-brand-300)"
+              strokeWidth={2.5}
+              strokeLinejoin="round"
+            />
+          );
+        })}
+      </g>
+
+      {/* Events overlay — captures click/hover; renders hover outline */}
+      <g className="hex-events-layer">
+        {sectors.map((s) => {
+          const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
+          const isHovered = hoveredId === s.id;
+          return (
+            <g
+              key={s.id}
+              className={`hex-cell${isHovered ? ' is-hovered' : ''}`}
+              onMouseEnter={() => setHoveredId(s.id)}
+              onMouseLeave={() =>
+                setHoveredId((curr) => (curr === s.id ? null : curr))
+              }
+              onClick={onSectorClick ? () => onSectorClick(s) : undefined}
+            >
+              <polygon
+                className="hex-events"
+                points={hexPoints(x, y, HEX_SIZE)}
+                pointerEvents="all"
+                strokeLinejoin="round"
+              />
             </g>
           );
         })}

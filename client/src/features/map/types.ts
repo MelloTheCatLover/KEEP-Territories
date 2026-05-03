@@ -26,6 +26,11 @@ export type Sector = {
   home_team_id: string | null;
   current_action_type: ActionType | null;
   difficulty: Difficulty;
+  /**
+   * ID of the team that currently has a pending submission on this sector,
+   * regardless of action type. Null if no active submission.
+   */
+  active_submission_team_id: string | null;
 };
 
 export type Axial = { q: number; r: number };
