@@ -9,6 +9,7 @@ type SectorRow = Sector & {
   difficulty_slug: string;
   difficulty_influence_reward: number;
   difficulty_experience_reward: number;
+  active_submission_team_id: string | null;
 };
 
 const SECTOR_SELECT = `
@@ -16,9 +17,12 @@ const SECTOR_SELECT = `
          dl.name as difficulty_name,
          dl.slug as difficulty_slug,
          dl.influence_reward as difficulty_influence_reward,
-         dl.experience_reward as difficulty_experience_reward
+         dl.experience_reward as difficulty_experience_reward,
+         ts.team_id as active_submission_team_id
   FROM sectors s
   JOIN difficulty_levels dl ON s.difficulty_id = dl.id
+  LEFT JOIN task_submissions ts
+    ON ts.sector_id = s.id AND ts.status = 'pending'
 `;
 
 function rowToSectorPublic(row: SectorRow): SectorPublic {
@@ -46,6 +50,7 @@ function rowToSectorPublic(row: SectorRow): SectorPublic {
     home_team_id: row.home_team_id,
     current_action_type: row.current_action_type,
     difficulty,
+    active_submission_team_id: row.active_submission_team_id,
   };
 }
 

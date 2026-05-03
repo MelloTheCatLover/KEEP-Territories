@@ -23,6 +23,11 @@ export type SectorActionType = 'capture' | 'fortify' | 'remove_fortification' | 
 
 export interface SectorPublic extends Sector {
   difficulty: DifficultyLevel;
+  /**
+   * ID of the team that currently has a pending submission on this sector,
+   * regardless of action type. Null if no active submission.
+   */
+  active_submission_team_id: string | null;
 }
 
 export interface CreateSectorDto {
