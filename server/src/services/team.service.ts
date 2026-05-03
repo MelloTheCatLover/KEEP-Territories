@@ -4,6 +4,14 @@ import { TeamFullStats } from '../types/team-stats';
 import { AppError } from '../types/errors';
 import * as teamStatsService from './team-stats.service';
 
+const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
+
+function isColorUniqueViolation(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { code?: string; constraint?: string };
+  return e.code === '23505' && e.constraint === 'idx_teams_color_unique';
+}
+
 export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFullStats> {
   const client = await pool.connect();
   try {
@@ -26,6 +34,19 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
     );
     if (nameCheck.rows.length > 0) {
       throw new AppError(400, 'Team with this name already exists');
+    }
+
+    if (dto.color != null) {
+      if (!HEX_COLOR_REGEX.test(dto.color)) {
+        throw new AppError(400, 'Color must be a valid hex (e.g. #FF5733)');
+      }
+      const colorCheck = await client.query(
+        'SELECT id FROM teams WHERE color = $1',
+        [dto.color]
+      );
+      if (colorCheck.rows.length > 0) {
+        throw new AppError(409, 'This color is already taken by another team');
+      }
     }
 
     const sectorResult = await client.query<{
@@ -84,6 +105,9 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
     return teamStatsService.getFullStats(team.id);
   } catch (error) {
     await client.query('ROLLBACK');
+    if (isColorUniqueViolation(error)) {
+      throw new AppError(409, 'This color is already taken by another team');
+    }
     throw error;
   } finally {
     client.release();
@@ -259,8 +283,6 @@ export async function getAll(): Promise<Team[]> {
   return result.rows;
 }
 
-const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
-
 export async function adminUpdate(
   teamId: string,
   patch: { name?: string; color?: string | null },
@@ -280,6 +302,15 @@ export async function adminUpdate(
     if (patch.color !== null && !HEX_COLOR_REGEX.test(patch.color)) {
       throw new AppError(400, 'Color must be a valid hex (e.g. #FF5733)');
     }
+    if (patch.color !== null) {
+      const colorCheck = await pool.query(
+        'SELECT id FROM teams WHERE color = $1 AND id <> $2',
+        [patch.color, teamId],
+      );
+      if (colorCheck.rows.length > 0) {
+        throw new AppError(409, 'This color is already taken by another team');
+      }
+    }
     fields.push(`color = $${fields.length + 1}`);
     params.push(patch.color);
   }
@@ -288,12 +319,20 @@ export async function adminUpdate(
   }
 
   params.push(teamId);
-  const res = await pool.query<Team>(
-    `UPDATE teams SET ${fields.join(', ')}, updated_at = NOW()
-     WHERE id = $${params.length}
-     RETURNING *`,
-    params,
-  );
+  let res;
+  try {
+    res = await pool.query<Team>(
+      `UPDATE teams SET ${fields.join(', ')}, updated_at = NOW()
+       WHERE id = $${params.length}
+       RETURNING *`,
+      params,
+    );
+  } catch (err) {
+    if (isColorUniqueViolation(err)) {
+      throw new AppError(409, 'This color is already taken by another team');
+    }
+    throw err;
+  }
   if (res.rows.length === 0) {
     throw new AppError(404, 'Team not found');
   }
