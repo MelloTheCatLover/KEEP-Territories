@@ -273,3 +273,33 @@ html, body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ============================================================
+   HEX MAP — global styles (kept here so React re-renders don't
+   reset CSS animations by re-injecting an inline <style>).
+   ============================================================ */
+.hex-cell { cursor: pointer; }
+
+.hex-events {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 0;
+  transition:
+    stroke var(--duration-base) var(--ease-out),
+    stroke-width var(--duration-base) var(--ease-out);
+}
+
+.hex-cell.is-hovered .hex-events {
+  stroke: var(--color-brand-400);
+  stroke-width: 2;
+}
+
+.hex-pulse {
+  animation: hex-pulse 2.4s ease-in-out infinite;
+  will-change: opacity;
+}
+
+@keyframes hex-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}

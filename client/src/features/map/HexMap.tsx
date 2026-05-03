@@ -104,29 +104,6 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
       className="w-full h-full block"
       style={{ maxHeight: '80vh' }}
     >
-      <style>{`
-        .hex-cell { cursor: pointer; }
-        .hex-events {
-          fill: transparent;
-          stroke: transparent;
-          stroke-width: 0;
-          transition:
-            stroke var(--duration-base) var(--ease-out),
-            stroke-width var(--duration-base) var(--ease-out);
-        }
-        .hex-cell.is-hovered .hex-events {
-          stroke: var(--color-brand-400);
-          stroke-width: 2;
-        }
-        .hex-pulse {
-          animation: hex-pulse 1.8s ease-in-out infinite;
-        }
-        @keyframes hex-pulse {
-          0%, 100% { opacity: 0.35; }
-          50%      { opacity: 1; }
-        }
-      `}</style>
-
       {/* 1) Outline grid */}
       <g className="hex-grid" pointerEvents="none">
         {sectors.map((s) => {
