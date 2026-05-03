@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { Button, ErrorBanner, Input, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -12,13 +12,28 @@ import { createTeam } from './api';
 
 type Props = {
   sector: Sector;
+  takenColors?: ReadonlySet<string>;
   onCancel: () => void;
   onCreated: () => Promise<void> | void;
 };
 
-export function CreateTeamModal({ sector, onCancel, onCreated }: Props) {
+const EMPTY_TAKEN: ReadonlySet<string> = new Set();
+
+function normalizeHex(hex: string): string {
+  return hex.toUpperCase();
+}
+
+function isTaken(key: TeamColorKey, taken: ReadonlySet<string>): boolean {
+  return taken.has(normalizeHex(teamColors[key].base));
+}
+
+export function CreateTeamModal({ sector, takenColors = EMPTY_TAKEN, onCancel, onCreated }: Props) {
+  const initialKey = useMemo<TeamColorKey | null>(() => {
+    return TEAM_COLOR_ORDER.find((k) => !isTaken(k, takenColors)) ?? null;
+  }, [takenColors]);
+
   const [name, setName] = useState('');
-  const [colorKey, setColorKey] = useState<TeamColorKey | null>(TEAM_COLOR_ORDER[0]);
+  const [colorKey, setColorKey] = useState<TeamColorKey | null>(initialKey);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,22 +115,34 @@ export function CreateTeamModal({ sector, onCancel, onCreated }: Props) {
             {TEAM_COLOR_ORDER.map((key) => {
               const c = teamColors[key];
               const selected = colorKey === key;
+              const taken = isTaken(key, takenColors);
               return (
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setColorKey(key)}
-                  disabled={busy}
-                  className={`w-8 h-8 rounded-full border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                    selected
+                  onClick={() => !taken && setColorKey(key)}
+                  disabled={busy || taken}
+                  className={`relative w-8 h-8 rounded-full border-2 transition-all disabled:cursor-not-allowed ${
+                    taken
+                      ? 'border-transparent opacity-30'
+                      : selected
                       ? 'border-neutral-1000 scale-110'
                       : 'border-transparent hover:scale-105'
                   }`}
                   style={{ backgroundColor: c.base }}
-                  title={key}
-                  aria-label={`Цвет ${key}`}
+                  title={taken ? `${key} — занят` : key}
+                  aria-label={taken ? `Цвет ${key} занят` : `Цвет ${key}`}
                   aria-pressed={selected}
-                />
+                >
+                  {taken && (
+                    <span
+                      aria-hidden
+                      className="absolute inset-0 flex items-center justify-center text-neutral-1000 text-xs leading-none"
+                    >
+                      ✕
+                    </span>
+                  )}
+                </button>
               );
             })}
             <button

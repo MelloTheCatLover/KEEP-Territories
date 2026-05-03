@@ -104,6 +104,15 @@ export function MapPage() {
     return state.sectors.filter((s) => s.is_home_base && s.home_team_id === null).length;
   }, [state]);
 
+  const takenColors = useMemo<ReadonlySet<string>>(() => {
+    if (state.status !== 'ready') return new Set();
+    const set = new Set<string>();
+    Object.values(state.teamsById).forEach((t) => {
+      if (t.color) set.add(t.color.toUpperCase());
+    });
+    return set;
+  }, [state]);
+
   return (
     <div className="max-w-7xl mx-auto px-4">
       <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Карта</h1>
@@ -154,6 +163,7 @@ export function MapPage() {
       {createFor && (
         <CreateTeamModal
           sector={createFor}
+          takenColors={takenColors}
           onCancel={() => setCreateFor(null)}
           onCreated={async () => {
             setCreateFor(null);

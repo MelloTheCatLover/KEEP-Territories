@@ -101,9 +101,16 @@ export function AdminTeamsPage() {
         </div>
       )}
 
-      {editing && (
+      {editing && state.status === 'ready' && (
         <EditTeamModal
           team={editing}
+          takenColors={
+            new Set(
+              state.teams
+                .filter((t) => t.id !== editing.id && t.color)
+                .map((t) => (t.color as string).toUpperCase()),
+            )
+          }
           onCancel={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
@@ -230,10 +237,12 @@ function TeamRow({
 
 function EditTeamModal({
   team,
+  takenColors,
   onCancel,
   onSaved,
 }: {
   team: TeamFullStats;
+  takenColors: ReadonlySet<string>;
   onCancel: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -321,18 +330,33 @@ function EditTeamModal({
             {TEAM_COLOR_ORDER.map((key) => {
               const c = teamColors[key];
               const selected = colorKey === key;
+              const taken = takenColors.has(c.base.toUpperCase());
               return (
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setColorKey(key)}
-                  disabled={busy}
-                  className={`w-8 h-8 rounded-full border-2 transition-all disabled:opacity-40 ${
-                    selected ? 'border-neutral-1000 scale-110' : 'border-transparent hover:scale-105'
+                  onClick={() => !taken && setColorKey(key)}
+                  disabled={busy || taken}
+                  className={`relative w-8 h-8 rounded-full border-2 transition-all disabled:cursor-not-allowed ${
+                    taken
+                      ? 'border-transparent opacity-30'
+                      : selected
+                      ? 'border-neutral-1000 scale-110'
+                      : 'border-transparent hover:scale-105'
                   }`}
                   style={{ backgroundColor: c.base }}
-                  aria-label={`Цвет ${key}`}
-                />
+                  title={taken ? `${key} — занят` : key}
+                  aria-label={taken ? `Цвет ${key} занят` : `Цвет ${key}`}
+                >
+                  {taken && (
+                    <span
+                      aria-hidden
+                      className="absolute inset-0 flex items-center justify-center text-neutral-1000 text-xs leading-none"
+                    >
+                      ✕
+                    </span>
+                  )}
+                </button>
               );
             })}
             <button
