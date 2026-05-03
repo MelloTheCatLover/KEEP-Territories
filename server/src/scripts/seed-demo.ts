@@ -13,9 +13,9 @@ type DemoTeam = {
 const DEMO_PASSWORD = 'password123';
 
 const DEMO_TEAMS: DemoTeam[] = [
-  { email: 'alpha@demo.local', username: 'alpha_captain', password: DEMO_PASSWORD, teamName: 'Альфа', color: '#DC2626' },
-  { email: 'bravo@demo.local', username: 'bravo_captain', password: DEMO_PASSWORD, teamName: 'Браво', color: '#2563EB' },
-  { email: 'charlie@demo.local', username: 'charlie_captain', password: DEMO_PASSWORD, teamName: 'Чарли', color: '#16A34A' },
+  { email: 'alpha@demo.local', username: 'alpha_captain', password: DEMO_PASSWORD, teamName: 'Альфа', color: '#E53935' },
+  { email: 'bravo@demo.local', username: 'bravo_captain', password: DEMO_PASSWORD, teamName: 'Браво', color: '#2952D9' },
+  { email: 'charlie@demo.local', username: 'charlie_captain', password: DEMO_PASSWORD, teamName: 'Чарли', color: '#2BA84A' },
 ];
 
 const NEIGHBOR_OFFSETS: ReadonlyArray<[number, number]> = [

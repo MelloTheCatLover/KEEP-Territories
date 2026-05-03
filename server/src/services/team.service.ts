@@ -6,10 +6,37 @@ import * as teamStatsService from './team-stats.service';
 
 const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
 
+/** Allowed team palette — must mirror client/src/design-system/design-tokens.ts. */
+const TEAM_COLOR_PALETTE: ReadonlySet<string> = new Set([
+  '#E53935', '#F06A2C', '#E6B422', '#2BA84A',
+  '#1BB5D4', '#2952D9', '#6366F1', '#D6409F',
+]);
+
+function normalizeColor(color: string | null | undefined): string | null {
+  if (color == null) return null;
+  return color.toUpperCase();
+}
+
+function assertPaletteColor(color: string | null): void {
+  if (color == null) return;
+  if (!HEX_COLOR_REGEX.test(color)) {
+    throw new AppError(400, 'Color must be a valid hex (e.g. #FF5733)');
+  }
+  if (!TEAM_COLOR_PALETTE.has(color)) {
+    throw new AppError(400, 'Color must be one of the team palette values');
+  }
+}
+
 function isColorUniqueViolation(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const e = err as { code?: string; constraint?: string };
   return e.code === '23505' && e.constraint === 'idx_teams_color_unique';
+}
+
+function isColorPaletteViolation(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { code?: string; constraint?: string };
+  return e.code === '23514' && e.constraint === 'teams_color_palette_check';
 }
 
 export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFullStats> {
@@ -36,13 +63,12 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
       throw new AppError(400, 'Team with this name already exists');
     }
 
-    if (dto.color != null) {
-      if (!HEX_COLOR_REGEX.test(dto.color)) {
-        throw new AppError(400, 'Color must be a valid hex (e.g. #FF5733)');
-      }
+    const normalizedColor = normalizeColor(dto.color);
+    assertPaletteColor(normalizedColor);
+    if (normalizedColor != null) {
       const colorCheck = await client.query(
         'SELECT id FROM teams WHERE color = $1',
-        [dto.color]
+        [normalizedColor]
       );
       if (colorCheck.rows.length > 0) {
         throw new AppError(409, 'This color is already taken by another team');
@@ -76,7 +102,7 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
       `INSERT INTO teams (name, color)
        VALUES ($1, $2)
        RETURNING *`,
-      [dto.name, dto.color ?? null]
+      [dto.name, normalizedColor]
     );
     const team = teamResult.rows[0];
 
@@ -107,6 +133,9 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
     await client.query('ROLLBACK');
     if (isColorUniqueViolation(error)) {
       throw new AppError(409, 'This color is already taken by another team');
+    }
+    if (isColorPaletteViolation(error)) {
+      throw new AppError(400, 'Color must be one of the team palette values');
     }
     throw error;
   } finally {
@@ -299,20 +328,19 @@ export async function adminUpdate(
     params.push(trimmed);
   }
   if (patch.color !== undefined) {
-    if (patch.color !== null && !HEX_COLOR_REGEX.test(patch.color)) {
-      throw new AppError(400, 'Color must be a valid hex (e.g. #FF5733)');
-    }
-    if (patch.color !== null) {
+    const normalized = normalizeColor(patch.color);
+    assertPaletteColor(normalized);
+    if (normalized !== null) {
       const colorCheck = await pool.query(
         'SELECT id FROM teams WHERE color = $1 AND id <> $2',
-        [patch.color, teamId],
+        [normalized, teamId],
       );
       if (colorCheck.rows.length > 0) {
         throw new AppError(409, 'This color is already taken by another team');
       }
     }
     fields.push(`color = $${fields.length + 1}`);
-    params.push(patch.color);
+    params.push(normalized);
   }
   if (fields.length === 0) {
     throw new AppError(400, 'No fields to update');
@@ -330,6 +358,9 @@ export async function adminUpdate(
   } catch (err) {
     if (isColorUniqueViolation(err)) {
       throw new AppError(409, 'This color is already taken by another team');
+    }
+    if (isColorPaletteViolation(err)) {
+      throw new AppError(400, 'Color must be one of the team palette values');
     }
     throw err;
   }
