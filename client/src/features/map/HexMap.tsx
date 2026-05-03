@@ -120,7 +120,7 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
         })}
       </g>
 
-      {/* 2) Sector fill + badge + label */}
+      {/* 2) Sector fill + difficulty badge */}
       <g className="hex-fill-layer" pointerEvents="none">
         {sectors.map((s) => {
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
@@ -154,18 +154,6 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
                 stroke="var(--color-neutral-0)"
                 strokeWidth={0.8}
               />
-              <text
-                x={x}
-                y={y + 4}
-                textAnchor="middle"
-                fontSize={s.is_home_base ? 14 : 11}
-                fontFamily="var(--font-mono)"
-                fontWeight={s.is_home_base ? 700 : 400}
-                fill={style.labelFill}
-                fillOpacity={0.9}
-              >
-                {style.label}
-              </text>
             </g>
           );
         })}
@@ -196,6 +184,33 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
                 />
               ))}
             </g>
+          );
+        })}
+      </g>
+
+      {/* 3.5) Sector labels — drawn above fort hexes so the number stays visible */}
+      <g className="hex-label-layer" pointerEvents="none">
+        {sectors.map((s) => {
+          const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
+          const style = resolveStyle(s, teamsById);
+          if (!style.label) return null;
+          const fortLevel = Math.max(0, Math.min(3, s.fortification_level | 0));
+          const fortified = fortLevel > 0 && s.status === 'captured' && s.captured_by_team_id != null;
+          const labelFill = fortified ? 'var(--color-neutral-1000)' : style.labelFill;
+          return (
+            <text
+              key={s.id}
+              x={x}
+              y={y + 4}
+              textAnchor="middle"
+              fontSize={s.is_home_base ? 14 : 11}
+              fontFamily="var(--font-mono)"
+              fontWeight={s.is_home_base ? 700 : 400}
+              fill={labelFill}
+              fillOpacity={0.95}
+            >
+              {style.label}
+            </text>
           );
         })}
       </g>
