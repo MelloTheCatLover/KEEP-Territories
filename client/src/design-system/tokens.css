@@ -104,6 +104,12 @@
   --difficulty-hard:   #FB923C;
   --difficulty-core:   #E11D48;
 
+  /* Muted dark tints for sector fills (free sectors keep difficulty cue). */
+  --difficulty-easy-tint:   #1F4634;
+  --difficulty-medium-tint: #4A3F18;
+  --difficulty-hard-tint:   #4A2E18;
+  --difficulty-core-tint:   #4A1622;
+
   /* ============================================================
      GLASS
      ============================================================ */

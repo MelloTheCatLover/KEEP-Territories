@@ -4,6 +4,7 @@ import { formatSectorLabel } from './types';
 import { axialToPixel, hexPoints, bbox } from './hex-utils';
 import {
   difficultyColors,
+  difficultyTints,
   findTeamColorByHex,
   getTeamColor,
 } from '../../design-system/design-tokens';
@@ -31,6 +32,13 @@ const DIFFICULTY_BADGE: Record<DifficultySlug, string> = {
   medium: difficultyColors.medium,
   hard: difficultyColors.hard,
   core: difficultyColors.core,
+};
+
+const DIFFICULTY_TINT: Record<DifficultySlug, string> = {
+  easy: difficultyTints.easy,
+  medium: difficultyTints.medium,
+  hard: difficultyTints.hard,
+  core: difficultyTints.core,
 };
 
 type HexMapProps = {
@@ -77,10 +85,10 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
   }
 
   return {
-    fill: 'var(--color-neutral-200)',
+    fill: DIFFICULTY_TINT[s.difficulty.slug],
     fillOpacity: 1,
     label: numberLabel,
-    labelFill: 'var(--color-neutral-800)',
+    labelFill: 'var(--color-neutral-1000)',
     titleExtra: '',
   };
 }

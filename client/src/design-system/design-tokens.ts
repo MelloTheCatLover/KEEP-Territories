@@ -62,6 +62,14 @@ export const difficultyColors = {
   core:   '#E11D48',
 } as const;
 
+/** Muted fills for free sectors — keeps difficulty cue without overpowering team colors. */
+export const difficultyTints = {
+  easy:   '#1F4634',
+  medium: '#4A3F18',
+  hard:   '#4A2E18',
+  core:   '#4A1622',
+} as const;
+
 export type DifficultyKey = keyof typeof difficultyColors;
 
 export const glass = {
