@@ -284,9 +284,6 @@ html, body {
   fill: transparent;
   stroke: transparent;
   stroke-width: 0;
-  transition:
-    stroke var(--duration-base) var(--ease-out),
-    stroke-width var(--duration-base) var(--ease-out);
 }
 
 .hex-cell.is-hovered .hex-events {
@@ -294,12 +291,16 @@ html, body {
   stroke-width: 2;
 }
 
+/* Animate stroke-opacity (stroke-only polygon) — cheaper than full opacity
+   and avoids any chance of the polygon's own opacity stacking with
+   ancestor opacity transitions. */
 .hex-pulse {
-  animation: hex-pulse 2.4s ease-in-out infinite;
-  will-change: opacity;
+  stroke-opacity: 0.6;
+  animation: hex-pulse 3s ease-in-out infinite;
+  will-change: stroke-opacity;
 }
 
 @keyframes hex-pulse {
-  0%, 100% { opacity: 0.55; }
-  50%      { opacity: 1; }
+  0%, 100% { stroke-opacity: 0.6; }
+  50%      { stroke-opacity: 1; }
 }
