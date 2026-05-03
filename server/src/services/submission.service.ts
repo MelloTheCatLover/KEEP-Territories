@@ -159,6 +159,14 @@ export async function startAction(
       throw new AppError(409, 'По этому сектору уже есть заявка на рассмотрении');
     }
 
+    const teamPending = await client.query<{ id: string }>(
+      `SELECT id FROM task_submissions WHERE team_id = $1 AND status = 'pending'`,
+      [teamId],
+    );
+    if (teamPending.rows.length > 0) {
+      throw new AppError(409, 'У вашей команды уже есть активное действие — дождитесь модерации');
+    }
+
     const taskId = await pickTaskForSector(client, sector);
 
     if (actionType === 'capture' || actionType === 'recapture') {
@@ -191,6 +199,19 @@ export async function startAction(
     return getById(inserted.rows[0].id);
   } catch (error) {
     await client.query('ROLLBACK');
+    if (
+      error &&
+      typeof error === 'object' &&
+      (error as { code?: string }).code === '23505'
+    ) {
+      const constraint = (error as { constraint?: string }).constraint;
+      if (constraint === 'idx_task_submissions_one_pending_per_team') {
+        throw new AppError(409, 'У вашей команды уже есть активное действие — дождитесь модерации');
+      }
+      if (constraint === 'idx_task_submissions_one_pending_per_sector') {
+        throw new AppError(409, 'По этому сектору уже есть заявка на рассмотрении');
+      }
+    }
     throw error;
   } finally {
     client.release();
