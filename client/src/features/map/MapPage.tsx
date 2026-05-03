@@ -8,6 +8,9 @@ import { SectorActionModal } from './SectorActionModal';
 import { api, ApiError } from '../../shared/api/client';
 import { useAuth } from '../auth/AuthContext';
 import { CreateTeamModal } from '../team/CreateTeamModal';
+import { getTeamStats } from '../team/api';
+import type { TeamFullStats } from '../team/types';
+import { TeamMapPanel } from './TeamMapPanel';
 
 type TeamDto = { id: string; name: string; color: string | null };
 
@@ -23,6 +26,7 @@ export function MapPage() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [createFor, setCreateFor] = useState<Sector | null>(null);
   const [actionFor, setActionFor] = useState<Sector | null>(null);
+  const [teamSummary, setTeamSummary] = useState<TeamFullStats | null>(null);
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -54,6 +58,24 @@ export function MapPage() {
 
   const canCreateTeam = user?.team_id === null;
   const teamId = user?.team_id ?? null;
+
+  useEffect(() => {
+    if (!teamId) {
+      setTeamSummary(null);
+      return;
+    }
+    let cancelled = false;
+    void getTeamStats(teamId)
+      .then((data) => {
+        if (!cancelled) setTeamSummary(data);
+      })
+      .catch(() => {
+        if (!cancelled) setTeamSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [teamId, state]);
 
   const reachableIds = useMemo(() => {
     if (!teamId || state.status !== 'ready') return undefined;
@@ -141,6 +163,8 @@ export function MapPage() {
           Карта не сгенерирована. Обратитесь к администратору.
         </div>
       )}
+
+      {teamSummary && <TeamMapPanel team={teamSummary} />}
 
       {state.status === 'ready' && (
         <HexMap
