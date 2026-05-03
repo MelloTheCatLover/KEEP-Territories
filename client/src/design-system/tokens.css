@@ -291,16 +291,9 @@ html, body {
   stroke-width: 2;
 }
 
-/* Animate stroke-opacity (stroke-only polygon) — cheaper than full opacity
-   and avoids any chance of the polygon's own opacity stacking with
-   ancestor opacity transitions. */
+/* Static highlight ring — no animation. SVG repaints triggered by React
+   re-renders made the previous opacity animation look like flicker on
+   adjacent and home-base cells. */
 .hex-pulse {
-  stroke-opacity: 0.6;
-  animation: hex-pulse 3s ease-in-out infinite;
-  will-change: stroke-opacity;
-}
-
-@keyframes hex-pulse {
-  0%, 100% { stroke-opacity: 0.6; }
-  50%      { stroke-opacity: 1; }
+  stroke-opacity: 0.75;
 }
