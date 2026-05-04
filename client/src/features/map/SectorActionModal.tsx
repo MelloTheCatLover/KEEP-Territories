@@ -4,7 +4,8 @@ import { Button, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import type { ActionType, Sector } from './types';
 import { formatSectorLabel } from './types';
-import { startAction } from './api';
+import { startAction, type StartActionResponse } from './api';
+import { TaskWheel } from './TaskWheel';
 
 type Props = {
   sector: Sector;
@@ -127,6 +128,7 @@ function computeAvailable(
 export function SectorActionModal({ sector, allSectors, userTeamId, onCancel, onStarted }: Props) {
   const [busy, setBusy] = useState<ActionType | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [wheel, setWheel] = useState<StartActionResponse | null>(null);
 
   const { actions, reason } = useMemo(
     () => computeAvailable(sector, allSectors, userTeamId),
@@ -143,19 +145,30 @@ export function SectorActionModal({ sector, allSectors, userTeamId, onCancel, on
     setBusy(type);
     setError(null);
     try {
-      const submission = await startAction(sector.id, type);
-      onStarted(submission.id);
+      const result = await startAction(sector.id, type);
+      const winnerId = result.submission.task_id;
+      const showWheel =
+        winnerId !== null &&
+        result.task_pool.length >= 2 &&
+        result.task_pool.some((t) => t.id === winnerId);
+      if (showWheel) {
+        setWheel(result);
+      } else {
+        onStarted(result.submission.id);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Не удалось начать действие');
       setBusy(null);
     }
   }
 
+  const inWheel = wheel !== null;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: 'var(--state-overlay-backdrop)' }}
-      onClick={busy ? undefined : onCancel}
+      onClick={busy || inWheel ? undefined : onCancel}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -171,26 +184,36 @@ export function SectorActionModal({ sector, allSectors, userTeamId, onCancel, on
               {sector.fortification_level > 0 && ` · укр. ${sector.fortification_level}`}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={busy !== null}
-            className="text-neutral-700 hover:text-neutral-1000 disabled:opacity-50"
-            aria-label="Закрыть"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {!inWheel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={busy !== null}
+              className="text-neutral-700 hover:text-neutral-1000 disabled:opacity-50"
+              aria-label="Закрыть"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {error && <ErrorBanner message={error} />}
 
-        {actions.length === 0 && reason && (
+        {wheel && wheel.submission.task_id && (
+          <TaskWheel
+            pool={wheel.task_pool}
+            winnerId={wheel.submission.task_id}
+            onDone={() => onStarted(wheel.submission.id)}
+          />
+        )}
+
+        {!inWheel && actions.length === 0 && reason && (
           <div className="text-sm text-neutral-700 bg-neutral-200 border border-neutral-400 rounded-sm px-3 py-2">
             {reason}
           </div>
         )}
 
-        {actions.length > 0 && (
+        {!inWheel && actions.length > 0 && (
           <div className="space-y-2">
             {actions.map((a) => {
               const Icon = a.icon;
@@ -218,11 +241,13 @@ export function SectorActionModal({ sector, allSectors, userTeamId, onCancel, on
           </div>
         )}
 
-        <div className="flex items-center justify-end pt-2">
-          <Button variant="secondary" onClick={onCancel} disabled={busy !== null}>
-            Закрыть
-          </Button>
-        </div>
+        {!inWheel && (
+          <div className="flex items-center justify-end pt-2">
+            <Button variant="secondary" onClick={onCancel} disabled={busy !== null}>
+              Закрыть
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

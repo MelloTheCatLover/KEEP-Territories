@@ -2,6 +2,12 @@ import { api } from '../../shared/api/client';
 import type { ActionType, Sector } from './types';
 import type { TaskSubmissionWithDetails } from '../admin/submissions-api';
 
+export type TaskBrief = { id: string; title: string; question: string };
+export type StartActionResponse = {
+  submission: TaskSubmissionWithDetails;
+  task_pool: TaskBrief[];
+};
+
 export function getSectorsMap(): Promise<Sector[]> {
   return api.get<Sector[]>('/sectors/map');
 }
@@ -13,8 +19,8 @@ export function getSectorById(id: string): Promise<Sector> {
 export function startAction(
   sectorId: string,
   actionType: ActionType,
-): Promise<TaskSubmissionWithDetails> {
-  return api.post<TaskSubmissionWithDetails>(`/sectors/${sectorId}/action/start`, {
+): Promise<StartActionResponse> {
+  return api.post<StartActionResponse>(`/sectors/${sectorId}/action/start`, {
     action_type: actionType,
   });
 }
