@@ -5,17 +5,23 @@ import { getSectorsMap } from './api';
 import type { Sector } from './types';
 import { HexMap, type TeamInfo } from './HexMap';
 import { SectorActionModal } from './SectorActionModal';
-import { api, ApiError } from '../../shared/api/client';
+import { TeamMiniCard } from './TeamSidePanel';
+import { ApiError } from '../../shared/api/client';
+import { getTeams, getTeam } from '../team/api';
+import type { TeamFullStats } from '../team/types';
 import { useAuth } from '../auth/AuthContext';
 import { CreateTeamModal } from '../team/CreateTeamModal';
-
-type TeamDto = { id: string; name: string; color: string | null };
 
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'empty' }
-  | { status: 'ready'; sectors: Sector[]; teamsById: Record<string, TeamInfo> };
+  | {
+      status: 'ready';
+      sectors: Sector[];
+      teamsById: Record<string, TeamInfo>;
+      fullTeams: TeamFullStats[];
+    };
 
 export function MapPage() {
   const { user, refreshUser } = useAuth();
@@ -27,10 +33,7 @@ export function MapPage() {
   const load = useCallback(async () => {
     setState({ status: 'loading' });
     try {
-      const [sectors, teams] = await Promise.all([
-        getSectorsMap(),
-        api.get<TeamDto[]>('/teams'),
-      ]);
+      const [sectors, teams] = await Promise.all([getSectorsMap(), getTeams()]);
       if (sectors.length === 0) {
         setState({ status: 'empty' });
         return;
@@ -40,7 +43,8 @@ export function MapPage() {
       sorted.forEach((t, i) => {
         teamsById[t.id] = { id: t.id, name: t.name, index: i, color: t.color };
       });
-      setState({ status: 'ready', sectors, teamsById });
+      const fullTeams = await Promise.all(sorted.map((t) => getTeam(t.id)));
+      setState({ status: 'ready', sectors, teamsById, fullTeams });
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : 'Не удалось загрузить карту';
@@ -113,8 +117,38 @@ export function MapPage() {
     return set;
   }, [state]);
 
+  const pendingByTeam = useMemo(() => {
+    if (state.status !== 'ready') return new Map<string, number>();
+    const map = new Map<string, number>();
+    for (const s of state.sectors) {
+      if (s.active_submission_team_id) {
+        map.set(
+          s.active_submission_team_id,
+          (map.get(s.active_submission_team_id) ?? 0) + 1,
+        );
+      }
+    }
+    return map;
+  }, [state]);
+
+  const teamSlots = useMemo(() => {
+    type Entry = { team: TeamFullStats; index: number };
+    const empty = { top: [] as Entry[], right: [] as Entry[], bottom: [] as Entry[], left: [] as Entry[] };
+    if (state.status !== 'ready') return empty;
+    const sorted = state.fullTeams
+      .map<Entry>((team) => ({
+        team,
+        index: state.teamsById[team.id]?.index ?? 0,
+      }))
+      .sort((a, b) => b.team.influence - a.team.influence);
+    const sides: Array<keyof typeof empty> = ['top', 'right', 'bottom', 'left'];
+    const slots = { ...empty };
+    sorted.forEach((entry, i) => slots[sides[i % 4]].push(entry));
+    return slots;
+  }, [state]);
+
   return (
-    <div className="max-w-7xl mx-auto px-4">
+    <div className="max-w-[1400px] mx-auto px-4">
       <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Карта</h1>
       <p className="text-sm text-neutral-700 mb-4">
         Гексагональное поле
@@ -152,12 +186,62 @@ export function MapPage() {
       )}
 
       {state.status === 'ready' && (
-        <HexMap
-          sectors={state.sectors}
-          teamsById={state.teamsById}
-          onSectorClick={canCreateTeam || teamId ? handleClick : undefined}
-          highlightIds={highlightIds}
-        />
+        <div className="grid grid-cols-[minmax(180px,220px)_minmax(0,1fr)_minmax(180px,220px)] grid-rows-[auto_minmax(0,1fr)_auto] gap-3">
+          <div className="col-start-2 row-start-1 flex flex-wrap justify-center gap-2">
+            {teamSlots.top.map(({ team, index }) => (
+              <TeamMiniCard
+                key={team.id}
+                team={team}
+                index={index}
+                isOwn={team.id === teamId}
+                pendingCount={pendingByTeam.get(team.id) ?? 0}
+                className="w-48"
+              />
+            ))}
+          </div>
+          <aside className="col-start-1 row-start-2 space-y-2">
+            {teamSlots.left.map(({ team, index }) => (
+              <TeamMiniCard
+                key={team.id}
+                team={team}
+                index={index}
+                isOwn={team.id === teamId}
+                pendingCount={pendingByTeam.get(team.id) ?? 0}
+              />
+            ))}
+          </aside>
+          <div className="col-start-2 row-start-2 min-w-0">
+            <HexMap
+              sectors={state.sectors}
+              teamsById={state.teamsById}
+              onSectorClick={canCreateTeam || teamId ? handleClick : undefined}
+              highlightIds={highlightIds}
+            />
+          </div>
+          <aside className="col-start-3 row-start-2 space-y-2">
+            {teamSlots.right.map(({ team, index }) => (
+              <TeamMiniCard
+                key={team.id}
+                team={team}
+                index={index}
+                isOwn={team.id === teamId}
+                pendingCount={pendingByTeam.get(team.id) ?? 0}
+              />
+            ))}
+          </aside>
+          <div className="col-start-2 row-start-3 flex flex-wrap justify-center gap-2">
+            {teamSlots.bottom.map(({ team, index }) => (
+              <TeamMiniCard
+                key={team.id}
+                team={team}
+                index={index}
+                isOwn={team.id === teamId}
+                pendingCount={pendingByTeam.get(team.id) ?? 0}
+                className="w-48"
+              />
+            ))}
+          </div>
+        </div>
       )}
 
       {createFor && (
