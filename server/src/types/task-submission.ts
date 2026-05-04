@@ -46,6 +46,17 @@ export interface StartActionDto {
   action_type: SectorActionType;
 }
 
+export interface TaskBrief {
+  id: string;
+  title: string;
+  question: string;
+}
+
+export interface StartActionResponse {
+  submission: TaskSubmissionWithDetails;
+  task_pool: TaskBrief[];
+}
+
 export interface ApproveSubmissionDto {
   comment?: string | null;
 }

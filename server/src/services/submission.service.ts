@@ -5,6 +5,8 @@ import {
   TaskSubmission,
   TaskSubmissionWithDetails,
   SubmissionStatus,
+  TaskBrief,
+  StartActionResponse,
 } from '../types/task-submission';
 import { Sector, SectorActionType } from '../types/sector';
 
@@ -60,21 +62,37 @@ async function hasAdjacentOwnedSector(
   return res.rows.length > 0;
 }
 
-async function pickTaskForSector(
+async function buildTaskPool(
   client: PoolClient,
   sector: Sector,
-): Promise<string | null> {
-  const mapped = await client.query<{ task_id: string }>(
-    'SELECT task_id FROM sector_tasks WHERE sector_id = $1 ORDER BY RANDOM() LIMIT 1',
+): Promise<TaskBrief[]> {
+  const mapped = await client.query<TaskBrief>(
+    `SELECT t.id, t.title, t.question
+       FROM sector_tasks st
+       JOIN tasks t ON t.id = st.task_id
+      WHERE st.sector_id = $1`,
     [sector.id],
   );
-  if (mapped.rows.length > 0) return mapped.rows[0].task_id;
-  if (sector.task_id) return sector.task_id;
-  const any = await client.query<{ id: string }>(
-    'SELECT id FROM tasks WHERE difficulty_id = $1 ORDER BY RANDOM() LIMIT 1',
+  if (mapped.rows.length > 0) return mapped.rows;
+
+  if (sector.task_id) {
+    const direct = await client.query<TaskBrief>(
+      'SELECT id, title, question FROM tasks WHERE id = $1',
+      [sector.task_id],
+    );
+    if (direct.rows.length > 0) return direct.rows;
+  }
+
+  const fallback = await client.query<TaskBrief>(
+    'SELECT id, title, question FROM tasks WHERE difficulty_id = $1',
     [sector.difficulty_id],
   );
-  return any.rows.length > 0 ? any.rows[0].id : null;
+  return fallback.rows;
+}
+
+function pickRandom<T>(pool: T[]): T | null {
+  if (pool.length === 0) return null;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function validateActionForSector(action: SectorActionType, sector: Sector, teamId: string): void {
@@ -124,7 +142,7 @@ export async function startAction(
   sectorId: string,
   userId: string,
   rawActionType: unknown,
-): Promise<TaskSubmissionWithDetails> {
+): Promise<StartActionResponse> {
   const actionType = assertActionType(rawActionType);
 
   const client = await pool.connect();
@@ -167,7 +185,9 @@ export async function startAction(
       throw new AppError(409, 'У вашей команды уже есть активное действие — дождитесь модерации');
     }
 
-    const taskId = await pickTaskForSector(client, sector);
+    const taskPool = await buildTaskPool(client, sector);
+    const picked = pickRandom(taskPool);
+    const taskId = picked ? picked.id : null;
 
     if (actionType === 'capture' || actionType === 'recapture') {
       await client.query(
@@ -196,7 +216,8 @@ export async function startAction(
 
     await client.query('COMMIT');
 
-    return getById(inserted.rows[0].id);
+    const submission = await getById(inserted.rows[0].id);
+    return { submission, task_pool: taskPool };
   } catch (error) {
     await client.query('ROLLBACK');
     if (

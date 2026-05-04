@@ -7,12 +7,12 @@ export async function startAction(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const submission = await submissionService.startAction(
+    const result = await submissionService.startAction(
       req.params.sectorId,
       req.user!.userId,
       req.body?.action_type,
     );
-    res.status(201).json(submission);
+    res.status(201).json(result);
   } catch (error) {
     next(error);
   }
