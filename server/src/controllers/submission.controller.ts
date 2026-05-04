@@ -84,3 +84,20 @@ export async function reject(
     next(error);
   }
 }
+
+export async function runCode(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const result = await submissionService.runCode(
+      req.params.id,
+      req.user!.userId,
+      req.body?.code,
+    );
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}

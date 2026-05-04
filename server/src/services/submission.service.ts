@@ -6,9 +6,13 @@ import {
   TaskSubmissionWithDetails,
   SubmissionStatus,
   TaskBrief,
+  TestRunResult,
   StartActionResponse,
+  RunCodeResponse,
 } from '../types/task-submission';
 import { Sector, SectorActionType } from '../types/sector';
+import { CodeLanguage, TaskTestCase } from '../types/task';
+import { runTestCases } from './sandbox.service';
 
 const MAX_FORTIFICATION = 3;
 
@@ -251,6 +255,10 @@ const DETAILS_SELECT = `
     sub.comment,
     sub.reviewed_by,
     sub.reviewed_at,
+    sub.code,
+    sub.last_run_at,
+    sub.last_run_results,
+    sub.auto_approved,
     sub.created_at,
     sub.updated_at,
     t.id AS team_row_id,
@@ -268,6 +276,9 @@ const DETAILS_SELECT = `
     tk.id AS task_row_id,
     tk.title AS task_title,
     tk.question AS task_question,
+    tk.code_language AS task_code_language,
+    tk.code_template AS task_code_template,
+    (SELECT COUNT(*) FROM task_test_cases ttc WHERE ttc.task_id = tk.id) AS task_test_count,
     u.id AS user_row_id,
     u.username AS user_username
   FROM task_submissions sub
@@ -289,6 +300,10 @@ type DetailsRow = {
   comment: string | null;
   reviewed_by: string | null;
   reviewed_at: Date | null;
+  code: string | null;
+  last_run_at: Date | null;
+  last_run_results: TestRunResult[] | null;
+  auto_approved: boolean;
   created_at: Date;
   updated_at: Date;
   team_row_id: string;
@@ -306,6 +321,9 @@ type DetailsRow = {
   task_row_id: string | null;
   task_title: string | null;
   task_question: string | null;
+  task_code_language: CodeLanguage | null;
+  task_code_template: string | null;
+  task_test_count: string;
   user_row_id: string;
   user_username: string;
 };
@@ -322,6 +340,10 @@ function rowToDetails(row: DetailsRow): TaskSubmissionWithDetails {
     comment: row.comment,
     reviewed_by: row.reviewed_by,
     reviewed_at: row.reviewed_at,
+    code: row.code,
+    last_run_at: row.last_run_at,
+    last_run_results: row.last_run_results,
+    auto_approved: row.auto_approved,
     created_at: row.created_at,
     updated_at: row.updated_at,
     team: {
@@ -348,6 +370,9 @@ function rowToDetails(row: DetailsRow): TaskSubmissionWithDetails {
             id: row.task_row_id,
             title: row.task_title,
             question: row.task_question,
+            code_language: row.task_code_language,
+            code_template: row.task_code_template,
+            has_test_cases: Number(row.task_test_count) > 0,
           }
         : null,
     user: {
@@ -568,4 +593,106 @@ export async function reject(
   } finally {
     client.release();
   }
+}
+
+export async function runCode(
+  submissionId: string,
+  userId: string,
+  rawCode: unknown,
+): Promise<RunCodeResponse> {
+  if (typeof rawCode !== 'string') {
+    throw new AppError(400, 'Поле code обязательно');
+  }
+  const code = rawCode;
+  if (code.trim().length === 0) {
+    throw new AppError(400, 'Код пуст');
+  }
+
+  const userRes = await pool.query<{ team_id: string | null }>(
+    'SELECT team_id FROM users WHERE id = $1',
+    [userId],
+  );
+  if (userRes.rows.length === 0) throw new AppError(404, 'User not found');
+  const userTeamId = userRes.rows[0].team_id;
+
+  const subRes = await pool.query<TaskSubmission & { task_code_language: CodeLanguage | null }>(
+    `SELECT sub.*, tk.code_language AS task_code_language
+       FROM task_submissions sub
+       LEFT JOIN tasks tk ON tk.id = sub.task_id
+      WHERE sub.id = $1`,
+    [submissionId],
+  );
+  if (subRes.rows.length === 0) throw new AppError(404, 'Submission not found');
+  const submission = subRes.rows[0];
+
+  if (submission.team_id !== userTeamId) {
+    throw new AppError(403, 'Это задание не вашей команды');
+  }
+  if (submission.status !== 'pending') {
+    throw new AppError(409, 'Заявка уже закрыта');
+  }
+  if (!submission.task_id) {
+    throw new AppError(400, 'У заявки нет задания');
+  }
+  const language = submission.task_code_language;
+  if (!language) {
+    throw new AppError(400, 'Это задание не поддерживает автопроверку');
+  }
+
+  const testsRes = await pool.query<TaskTestCase>(
+    'SELECT * FROM task_test_cases WHERE task_id = $1 ORDER BY ord',
+    [submission.task_id],
+  );
+  if (testsRes.rows.length === 0) {
+    throw new AppError(400, 'Для задания не заданы тесты');
+  }
+
+  const results = await runTestCases(language, code, testsRes.rows);
+  const allPassed = results.every((r) => r.passed);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const lockedRes = await client.query<TaskSubmission>(
+      'SELECT * FROM task_submissions WHERE id = $1 FOR UPDATE',
+      [submissionId],
+    );
+    if (lockedRes.rows.length === 0) throw new AppError(404, 'Submission not found');
+    const locked = lockedRes.rows[0];
+    if (locked.status !== 'pending') throw new AppError(409, 'Заявка уже закрыта');
+
+    await client.query(
+      `UPDATE task_submissions SET
+         code = $1,
+         last_run_at = NOW(),
+         last_run_results = $2::jsonb,
+         updated_at = NOW()
+       WHERE id = $3`,
+      [code, JSON.stringify(results), submissionId],
+    );
+
+    if (allPassed) {
+      await applyApprovedEffect(client, locked);
+      await client.query(
+        `UPDATE task_submissions SET
+           status = 'approved',
+           reviewed_at = NOW(),
+           auto_approved = TRUE,
+           updated_at = NOW()
+         WHERE id = $1`,
+        [submissionId],
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const updated = await getById(submissionId);
+  return { submission: updated, passed: allPassed, results };
 }

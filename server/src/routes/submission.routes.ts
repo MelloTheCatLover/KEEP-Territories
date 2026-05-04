@@ -11,5 +11,6 @@ router.use(authenticate);
 router.get('/pending', requireAdmin, submissionController.listPending);
 router.post('/:id/approve', requireAdmin, validateParamId, submissionController.approve);
 router.post('/:id/reject', requireAdmin, validateParamId, submissionController.reject);
+router.post('/:id/run', validateParamId, submissionController.runCode);
 
 export default router;
