@@ -15,14 +15,14 @@ type LoadState =
   | { status: 'ready'; data: TeamFullStats; settings: GameSetting[] };
 
 const STAT_META: Record<StatName, { label: string; hint: string }> = {
-  leadership: { label: 'Лидерство', hint: 'Влияет на команду' },
   strength: { label: 'Сила', hint: 'Влияет на захват' },
-  endurance: { label: 'Выносливость', hint: 'Влияет на удержание' },
   intelligence: { label: 'Интеллект', hint: 'Влияет на задания' },
+  endurance: { label: 'Выносливость', hint: 'Влияет на удержание' },
+  leadership: { label: 'Лидерство', hint: 'Влияет на команду' },
   luck: { label: 'Удача', hint: 'Случайные бонусы' },
 };
 
-const STAT_ORDER: StatName[] = ['leadership', 'strength', 'endurance', 'intelligence', 'luck'];
+const STAT_ORDER: StatName[] = ['strength', 'intelligence', 'endurance', 'leadership', 'luck'];
 
 function computeLevelProgress(
   experience: number,
@@ -184,33 +184,11 @@ export function TeamPage() {
             <h1 className="font-display text-heading-md text-neutral-1000 truncate">
               {data.name}
             </h1>
-            <div className="flex flex-wrap gap-3 mt-3">
-              <MetricBadge letter="В" title="Влияние" value={data.influence} />
-              <MetricBadge letter="О" title="Опыт" value={data.experience} />
-            </div>
-            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-neutral-700">
-              <span>
-                Уровень{' '}
-                <span className="font-mono text-neutral-1000">{data.level}</span>
-              </span>
-              <span>
-                Секторов{' '}
-                <span className="font-mono text-neutral-1000">
-                  {data.captured_sectors_count}
-                </span>
-              </span>
-              <span>
-                Очки апгрейда{' '}
-                <span
-                  className={`font-mono ${
-                    data.available_upgrade_points > 0
-                      ? 'text-success-text'
-                      : 'text-neutral-1000'
-                  }`}
-                >
-                  {data.available_upgrade_points}
-                </span>
-              </span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+              <StatBlock label="Влияние" value={data.influence} />
+              <StatBlock label="Опыт" value={data.experience} />
+              <StatBlock label="Уровень" value={data.level} />
+              <StatBlock label="Сектора" value={data.captured_sectors_count} />
             </div>
             {progress && (
               <div className="mt-4">
@@ -258,46 +236,56 @@ export function TeamPage() {
       </div>
 
       <section>
-        <h2 className="font-display text-heading-sm text-neutral-1000 mb-3">
-          Характеристики
-        </h2>
-        <div className="border-2 border-brand-500 rounded-sm bg-glass-medium backdrop-blur-glass px-6 py-4">
-          <ul className="space-y-2">
-            {STAT_ORDER.map((name) => {
-              const meta = STAT_META[name];
-              const value = data.stats[name];
-              const disabled = !canUpgrade || upgrading !== null;
-              return (
-                <li
-                  key={name}
-                  className="flex items-center gap-4"
-                >
-                  <span className="flex-1 font-display uppercase tracking-wider text-neutral-1000 text-base">
-                    {meta.label}
-                  </span>
-                  <span className="font-mono text-xl text-neutral-1000 tabular-nums w-10 text-right">
-                    {value}
-                  </span>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display text-heading-sm text-neutral-1000">Характеристики</h2>
+          <div className="text-sm text-neutral-700">
+            Очки апгрейда:{' '}
+            <span
+              className={
+                data.available_upgrade_points > 0
+                  ? 'font-mono text-success-text'
+                  : 'font-mono text-neutral-700'
+              }
+            >
+              {data.available_upgrade_points}
+            </span>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {STAT_ORDER.map((name) => {
+            const meta = STAT_META[name];
+            const value = data.stats[name];
+            const disabled = !canUpgrade || upgrading !== null;
+            return (
+              <Card key={name}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-display text-lg text-neutral-1000 break-words">
+                      {meta.label}
+                    </div>
+                    <p className="text-xs text-neutral-700 mt-0.5">{meta.hint}</p>
+                    <div className="font-mono text-2xl text-neutral-1000 mt-2">{value}</div>
+                  </div>
                   <Button
                     variant="primary"
                     onClick={() => void handleUpgrade(name)}
                     disabled={disabled}
                     isLoading={upgrading === name}
-                    className="flex-shrink-0 px-2.5 py-1 text-sm"
+                    className="flex-shrink-0"
                     title={
                       !isCaptain
                         ? 'Только капитан может улучшать характеристики'
                         : data.available_upgrade_points === 0
                         ? 'Нет доступных очков апгрейда'
-                        : meta.hint
+                        : undefined
                     }
                   >
                     +1
                   </Button>
-                </li>
-              );
-            })}
-          </ul>
+                </div>
+              </Card>
+            );
+          })}
         </div>
       </section>
 
@@ -349,24 +337,11 @@ export function TeamPage() {
   );
 }
 
-function MetricBadge({
-  letter,
-  title,
-  value,
-}: {
-  letter: string;
-  title: string;
-  value: number;
-}) {
+function StatBlock({ label, value }: { label: string; value: number }) {
   return (
-    <div
-      className="inline-flex items-center gap-3 border-2 border-brand-500 rounded-sm px-4 py-2 bg-brand-900/20"
-      title={title}
-    >
-      <span className="font-display text-xl text-brand-100 leading-none">{letter}</span>
-      <span className="font-mono text-xl text-neutral-1000 tabular-nums leading-none">
-        {value}
-      </span>
+    <div>
+      <div className="text-xs text-neutral-700 uppercase tracking-wide">{label}</div>
+      <div className="font-mono text-xl text-neutral-1000">{value}</div>
     </div>
   );
 }
