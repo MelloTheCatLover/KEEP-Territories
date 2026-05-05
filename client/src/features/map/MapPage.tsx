@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, MapPin } from 'lucide-react';
 import { getSectorsMap } from './api';
 import type { Sector } from './types';
-import { HexMap, type TeamInfo } from './HexMap';
+import { HexMap, type TeamInfo, MAP_HEX_SIZE, MAP_VIEWBOX_PADDING } from './HexMap';
+import { bbox } from './hex-utils';
 import { SectorActionModal } from './SectorActionModal';
-import { TeamMiniCard } from './TeamSidePanel';
+import { TeamSummaryCard } from './TeamSidePanel';
 import { ApiError } from '../../shared/api/client';
 import { getTeams, getTeam } from '../team/api';
 import type { TeamFullStats } from '../team/types';
@@ -131,24 +132,47 @@ export function MapPage() {
     return map;
   }, [state]);
 
-  const teamSlots = useMemo(() => {
-    type Entry = { team: TeamFullStats; index: number };
-    const empty = { top: [] as Entry[], right: [] as Entry[], bottom: [] as Entry[], left: [] as Entry[] };
-    if (state.status !== 'ready') return empty;
-    const sorted = state.fullTeams
-      .map<Entry>((team) => ({
-        team,
-        index: state.teamsById[team.id]?.index ?? 0,
-      }))
-      .sort((a, b) => b.team.influence - a.team.influence);
-    const sides: Array<keyof typeof empty> = ['top', 'right', 'bottom', 'left'];
-    const slots = { ...empty };
-    sorted.forEach((entry, i) => slots[sides[i % 4]].push(entry));
-    return slots;
+  type SlotKey = 'tl' | 'tr' | 'l' | 'r' | 'bl' | 'br';
+
+  const mapLayout = useMemo(() => {
+    if (state.status !== 'ready' || state.sectors.length === 0) {
+      return null;
+    }
+    const { minX, minY, maxX, maxY } = bbox(state.sectors, MAP_HEX_SIZE);
+    const vbW = maxX - minX + MAP_VIEWBOX_PADDING * 2;
+    const vbH = maxY - minY + MAP_VIEWBOX_PADDING * 2;
+
+    const slots: Partial<Record<SlotKey, { team: TeamFullStats; index: number }>> = {};
+    const homeBaseByTeam = new Map<string, { q: number; r: number }>();
+    state.sectors.forEach((s) => {
+      if (s.is_home_base && s.home_team_id) {
+        homeBaseByTeam.set(s.home_team_id, { q: s.q, r: s.r });
+      }
+    });
+    state.fullTeams.forEach((team) => {
+      const hb = homeBaseByTeam.get(team.id);
+      if (!hb) return;
+      const hx = Math.sqrt(3) * hb.q + (Math.sqrt(3) / 2) * hb.r;
+      const hy = 1.5 * hb.r;
+      let key: SlotKey;
+      if (Math.abs(hy) < 0.001) {
+        key = hx < 0 ? 'l' : 'r';
+      } else if (hy < 0) {
+        key = hx < 0 ? 'tl' : 'tr';
+      } else {
+        key = hx < 0 ? 'bl' : 'br';
+      }
+      const index = state.teamsById[team.id]?.index ?? 0;
+      if (!slots[key]) slots[key] = { team, index };
+    });
+    return { vbW, vbH, slots };
   }, [state]);
 
+  const LEFT_SLOTS: SlotKey[] = ['tl', 'l', 'bl'];
+  const RIGHT_SLOTS: SlotKey[] = ['tr', 'r', 'br'];
+
   return (
-    <div className="max-w-[1400px] mx-auto px-4">
+    <div className="max-w-[1500px] mx-auto px-4">
       <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Карта</h1>
       <p className="text-sm text-neutral-700 mb-4">
         Гексагональное поле
@@ -185,61 +209,61 @@ export function MapPage() {
         </div>
       )}
 
-      {state.status === 'ready' && (
-        <div className="grid grid-cols-[minmax(180px,220px)_minmax(0,1fr)_minmax(180px,220px)] grid-rows-[auto_minmax(0,1fr)_auto] gap-3">
-          <div className="col-start-2 row-start-1 flex flex-wrap justify-center gap-2">
-            {teamSlots.top.map(({ team, index }) => (
-              <TeamMiniCard
-                key={team.id}
-                team={team}
-                index={index}
-                isOwn={team.id === teamId}
-                pendingCount={pendingByTeam.get(team.id) ?? 0}
-                className="w-48"
-              />
-            ))}
+      {state.status === 'ready' && mapLayout && (
+        <div
+          className="grid gap-4 items-stretch"
+          style={{
+            gridTemplateColumns:
+              'minmax(260px, 300px) minmax(0, 1fr) minmax(260px, 300px)',
+          }}
+        >
+          <div className="flex flex-col gap-3 justify-center">
+            {LEFT_SLOTS.map((key) => {
+              const entry = mapLayout.slots[key];
+              if (!entry) return null;
+              return (
+                <TeamSummaryCard
+                  key={key}
+                  team={entry.team}
+                  index={entry.index}
+                  isOwn={entry.team.id === teamId}
+                  pendingCount={pendingByTeam.get(entry.team.id) ?? 0}
+                />
+              );
+            })}
           </div>
-          <aside className="col-start-1 row-start-2 space-y-2">
-            {teamSlots.left.map(({ team, index }) => (
-              <TeamMiniCard
-                key={team.id}
-                team={team}
-                index={index}
-                isOwn={team.id === teamId}
-                pendingCount={pendingByTeam.get(team.id) ?? 0}
+
+          <div
+            className="relative w-full self-center"
+            style={{
+              aspectRatio: `${mapLayout.vbW} / ${mapLayout.vbH}`,
+              maxHeight: '82vh',
+            }}
+          >
+            <div className="absolute inset-0">
+              <HexMap
+                sectors={state.sectors}
+                teamsById={state.teamsById}
+                onSectorClick={canCreateTeam || teamId ? handleClick : undefined}
+                highlightIds={highlightIds}
               />
-            ))}
-          </aside>
-          <div className="col-start-2 row-start-2 min-w-0">
-            <HexMap
-              sectors={state.sectors}
-              teamsById={state.teamsById}
-              onSectorClick={canCreateTeam || teamId ? handleClick : undefined}
-              highlightIds={highlightIds}
-            />
+            </div>
           </div>
-          <aside className="col-start-3 row-start-2 space-y-2">
-            {teamSlots.right.map(({ team, index }) => (
-              <TeamMiniCard
-                key={team.id}
-                team={team}
-                index={index}
-                isOwn={team.id === teamId}
-                pendingCount={pendingByTeam.get(team.id) ?? 0}
-              />
-            ))}
-          </aside>
-          <div className="col-start-2 row-start-3 flex flex-wrap justify-center gap-2">
-            {teamSlots.bottom.map(({ team, index }) => (
-              <TeamMiniCard
-                key={team.id}
-                team={team}
-                index={index}
-                isOwn={team.id === teamId}
-                pendingCount={pendingByTeam.get(team.id) ?? 0}
-                className="w-48"
-              />
-            ))}
+
+          <div className="flex flex-col gap-3 justify-center">
+            {RIGHT_SLOTS.map((key) => {
+              const entry = mapLayout.slots[key];
+              if (!entry) return null;
+              return (
+                <TeamSummaryCard
+                  key={key}
+                  team={entry.team}
+                  index={entry.index}
+                  isOwn={entry.team.id === teamId}
+                  pendingCount={pendingByTeam.get(entry.team.id) ?? 0}
+                />
+              );
+            })}
           </div>
         </div>
       )}

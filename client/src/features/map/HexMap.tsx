@@ -11,6 +11,9 @@ import {
 const HEX_SIZE = 34;
 const PULSE_INSET = 4;
 const VIEWBOX_PADDING = 16;
+
+export const MAP_HEX_SIZE = HEX_SIZE;
+export const MAP_VIEWBOX_PADDING = VIEWBOX_PADDING;
 const BADGE_RADIUS = 4;
 const CAPTURE_RING_SCALE = 0.92;
 const FORT_SCALES = [0.65, 0.4, 0.2];
@@ -101,8 +104,8 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
     <svg
       viewBox={viewBox}
       xmlns="http://www.w3.org/2000/svg"
+      preserveAspectRatio="xMidYMid meet"
       className="w-full h-full block"
-      style={{ maxHeight: '80vh' }}
     >
       {/* 1) Outline grid */}
       <g className="hex-grid" pointerEvents="none">
