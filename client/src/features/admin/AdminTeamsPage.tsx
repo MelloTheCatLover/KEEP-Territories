@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Loader2, Pencil, Trash2, UserMinus, X, RefreshCw } from 'lucide-react';
+import { AlertCircle, Loader2, Pencil, Sliders, Trash2, UserMinus, X, RefreshCw } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner, Input, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { getTeams, getTeam } from '../team/api';
-import { adminDeleteTeam, adminKickMember, adminUpdateTeam } from './teams-api';
-import type { Team, TeamFullStats } from '../team/types';
+import {
+  adminDeleteTeam,
+  adminKickMember,
+  adminSetTeamResources,
+  adminSetTeamStats,
+  adminUpdateTeam,
+} from './teams-api';
+import type { StatName, Team, TeamFullStats } from '../team/types';
 import {
   teamColors,
   TEAM_COLOR_ORDER,
@@ -25,6 +31,7 @@ export function AdminTeamsPage() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [editing, setEditing] = useState<TeamFullStats | null>(null);
   const [deleting, setDeleting] = useState<TeamFullStats | null>(null);
+  const [tuning, setTuning] = useState<TeamFullStats | null>(null);
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -94,6 +101,7 @@ export function AdminTeamsPage() {
               key={t.id}
               team={t}
               onEdit={() => setEditing(t)}
+              onTune={() => setTuning(t)}
               onDelete={() => setDeleting(t)}
               onKicked={() => void load()}
             />
@@ -129,6 +137,17 @@ export function AdminTeamsPage() {
           }}
         />
       )}
+
+      {tuning && (
+        <TuneTeamModal
+          team={tuning}
+          onCancel={() => setTuning(null)}
+          onSaved={async () => {
+            setTuning(null);
+            await load();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -136,11 +155,13 @@ export function AdminTeamsPage() {
 function TeamRow({
   team,
   onEdit,
+  onTune,
   onDelete,
   onKicked,
 }: {
   team: TeamFullStats;
   onEdit: () => void;
+  onTune: () => void;
   onDelete: () => void;
   onKicked: () => void;
 }) {
@@ -172,8 +193,12 @@ function TeamRow({
           <div className="min-w-0">
             <h2 className="font-display text-heading-sm text-neutral-1000 truncate">{team.name}</h2>
             <p className="text-xs text-neutral-700">
-              уровень {team.level} · опыт {team.experience} · влияние {team.influence} · секторов{' '}
-              {team.captured_sectors_count}
+              ур. {team.level} · опыт {team.experience} · влияние {team.influence} ·
+              секторов {team.captured_sectors_count} · очков {team.available_upgrade_points}
+            </p>
+            <p className="text-2xs uppercase tracking-wider text-neutral-700 mt-1">
+              СИЛ {team.stats.strength} · ИНТ {team.stats.intelligence} · ВЫН{' '}
+              {team.stats.endurance} · ЛИД {team.stats.leadership} · УД {team.stats.luck}
             </p>
           </div>
         </div>
@@ -182,6 +207,12 @@ function TeamRow({
             <span className="flex items-center gap-2">
               <Pencil className="w-4 h-4" />
               Править
+            </span>
+          </Button>
+          <Button variant="secondary" onClick={onTune}>
+            <span className="flex items-center gap-2">
+              <Sliders className="w-4 h-4" />
+              Ресурсы
             </span>
           </Button>
           <Button variant="danger" onClick={onDelete}>
@@ -453,6 +484,213 @@ function DeleteTeamModal({
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+const STAT_FIELDS: Array<{ key: StatName; label: string }> = [
+  { key: 'strength', label: 'Сила' },
+  { key: 'intelligence', label: 'Интеллект' },
+  { key: 'endurance', label: 'Выносливость' },
+  { key: 'leadership', label: 'Лидерство' },
+  { key: 'luck', label: 'Удача' },
+];
+
+function TuneTeamModal({
+  team,
+  onCancel,
+  onSaved,
+}: {
+  team: TeamFullStats;
+  onCancel: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [influence, setInfluence] = useState(String(team.influence));
+  const [experience, setExperience] = useState(String(team.experience));
+  const [points, setPoints] = useState(String(team.available_upgrade_points));
+  const [stats, setStats] = useState<Record<StatName, string>>({
+    strength: String(team.stats.strength),
+    intelligence: String(team.stats.intelligence),
+    endurance: String(team.stats.endurance),
+    leadership: String(team.stats.leadership),
+    luck: String(team.stats.luck),
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function parseInt(value: string, label: string): number {
+    const n = Number(value);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+      throw new Error(`${label}: целое число ≥ 0`);
+    }
+    return n;
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    let parsed: {
+      influence: number;
+      experience: number;
+      points: number;
+      stats: Record<StatName, number>;
+    };
+    try {
+      parsed = {
+        influence: parseInt(influence, 'Влияние'),
+        experience: parseInt(experience, 'Опыт'),
+        points: parseInt(points, 'Очки апгрейда'),
+        stats: {
+          strength: parseInt(stats.strength, 'Сила'),
+          intelligence: parseInt(stats.intelligence, 'Интеллект'),
+          endurance: parseInt(stats.endurance, 'Выносливость'),
+          leadership: parseInt(stats.leadership, 'Лидерство'),
+          luck: parseInt(stats.luck, 'Удача'),
+        },
+      };
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Некорректные значения');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const resourcesPatch: {
+        influence?: number;
+        experience?: number;
+        upgrade_points?: number;
+      } = {};
+      if (parsed.influence !== team.influence) resourcesPatch.influence = parsed.influence;
+      if (parsed.experience !== team.experience)
+        resourcesPatch.experience = parsed.experience;
+      if (parsed.points !== team.available_upgrade_points)
+        resourcesPatch.upgrade_points = parsed.points;
+
+      const statsPatch: Partial<Record<StatName, number>> = {};
+      for (const { key } of STAT_FIELDS) {
+        if (parsed.stats[key] !== team.stats[key]) statsPatch[key] = parsed.stats[key];
+      }
+
+      if (Object.keys(resourcesPatch).length > 0) {
+        await adminSetTeamResources(team.id, resourcesPatch);
+      }
+      if (Object.keys(statsPatch).length > 0) {
+        await adminSetTeamStats(team.id, statsPatch);
+      }
+      await onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось сохранить');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'var(--state-overlay-backdrop)' }}
+      onClick={busy ? undefined : onCancel}
+    >
+      <form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-lg shadow-3 space-y-4"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-heading-sm text-neutral-1000">
+              Ресурсы команды
+            </h2>
+            <p className="text-xs text-neutral-700 mt-0.5 truncate">{team.name}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="text-neutral-700 hover:text-neutral-1000 disabled:opacity-50"
+            aria-label="Закрыть"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {error && <ErrorBanner message={error} />}
+
+        <div>
+          <h3 className="text-2xs uppercase tracking-wider text-neutral-700 mb-2">
+            Ресурсы
+          </h3>
+          <div className="grid grid-cols-3 gap-3">
+            <NumField label="Влияние" value={influence} onChange={setInfluence} disabled={busy} />
+            <NumField label="Опыт" value={experience} onChange={setExperience} disabled={busy} />
+            <NumField
+              label="Очки апгрейда"
+              value={points}
+              onChange={setPoints}
+              disabled={busy}
+            />
+          </div>
+          <p className="text-2xs text-neutral-700 mt-2 leading-relaxed">
+            Базовые расчёты остаются прежними; разница записывается в `team_adjustments`.
+            Изменение опыта пересчитывает уровень.
+          </p>
+        </div>
+
+        <div>
+          <h3 className="text-2xs uppercase tracking-wider text-neutral-700 mb-2">
+            Характеристики
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {STAT_FIELDS.map((f) => (
+              <NumField
+                key={f.key}
+                label={f.label}
+                value={stats[f.key]}
+                onChange={(v) => setStats((prev) => ({ ...prev, [f.key]: v }))}
+                disabled={busy}
+              />
+            ))}
+          </div>
+          <p className="text-2xs text-neutral-700 mt-2 leading-relaxed">
+            Каждая стата = число строк в `team_stat_upgrades`. Сервер делает DELETE+INSERT
+            по затронутым статам.
+          </p>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>
+            Отмена
+          </Button>
+          <Button type="submit" variant="primary" isLoading={busy} disabled={busy}>
+            Сохранить
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function NumField({
+  label,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <Input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+      />
     </div>
   );
 }
