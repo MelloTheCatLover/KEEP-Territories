@@ -12,6 +12,7 @@ import submissionRoutes from './routes/submission.routes';
 import teamStatsRoutes from './routes/team-stats.routes';
 import gameSettingsRoutes from './routes/game-settings.routes';
 import difficultyRoutes from './routes/difficulty.routes';
+import trophyRoutes from './routes/trophy.routes';
 import { errorHandler } from './middleware/error.middleware';
 import { AppError } from './types/errors';
 
@@ -35,6 +36,7 @@ app.use('/api/submissions', submissionRoutes);
 app.use('/api/teams/:teamId/stats', teamStatsRoutes);
 app.use('/api/settings', gameSettingsRoutes);
 app.use('/api/difficulties', difficultyRoutes);
+app.use('/api/trophies', trophyRoutes);
 
 app.use((_req, _res, next) => {
   next(new AppError(404, 'Route not found'));
