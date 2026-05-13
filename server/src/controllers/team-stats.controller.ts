@@ -57,3 +57,48 @@ export async function upgradeStat(
     next(error);
   }
 }
+
+function parseNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.trunc(n);
+}
+
+export async function adminSetResources(
+  req: Request<{ teamId: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const payload: teamStatsService.AdminResourcesPayload = {};
+    const inf = parseNumber(req.body?.influence);
+    const exp = parseNumber(req.body?.experience);
+    const up = parseNumber(req.body?.upgrade_points);
+    if (inf !== undefined) payload.influence = inf;
+    if (exp !== undefined) payload.experience = exp;
+    if (up !== undefined) payload.upgrade_points = up;
+    const stats = await teamStatsService.adminSetResources(req.params.teamId, payload);
+    res.status(200).json(stats);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function adminSetStats(
+  req: Request<{ teamId: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const payload: teamStatsService.AdminStatsPayload = {};
+    for (const stat of VALID_STATS) {
+      const v = parseNumber(req.body?.[stat]);
+      if (v !== undefined) payload[stat] = v;
+    }
+    const stats = await teamStatsService.adminSetStats(req.params.teamId, payload);
+    res.status(200).json(stats);
+  } catch (error) {
+    next(error);
+  }
+}
