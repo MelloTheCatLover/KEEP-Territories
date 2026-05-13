@@ -11,6 +11,8 @@ import { AdminTasksPage } from './features/admin/AdminTasksPage';
 import { AdminSettingsPage } from './features/admin/AdminSettingsPage';
 import { AdminTeamsPage } from './features/admin/AdminTeamsPage';
 import { AdminHubPage } from './features/admin/AdminHubPage';
+import { AdminTrophiesPage } from './features/admin/AdminTrophiesPage';
+import { AdminSectorTasksPage } from './features/admin/AdminSectorTasksPage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
 import { GuestRoute } from './features/auth/GuestRoute';
 import { AppLayout } from './shared/ui/AppLayout';
@@ -50,6 +52,8 @@ export const router = createBrowserRouter([
       { path: '/admin/settings', element: <AdminSettingsPage /> },
       { path: '/admin/teams', element: <AdminTeamsPage /> },
       { path: '/admin/submissions', element: <AdminSubmissionsPage /> },
+      { path: '/admin/trophies', element: <AdminTrophiesPage /> },
+      { path: '/admin/sector-tasks', element: <AdminSectorTasksPage /> },
     ],
   },
   { path: '*', element: <NotFound /> },
