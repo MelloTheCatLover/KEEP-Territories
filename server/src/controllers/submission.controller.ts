@@ -85,16 +85,15 @@ export async function reject(
   }
 }
 
-export async function runCode(
+export async function dropPending(
   req: Request<{ id: string }>,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const result = await submissionService.runCode(
+    const result = await submissionService.dropPending(
       req.params.id,
       req.user!.userId,
-      req.body?.code,
     );
     res.status(200).json(result);
   } catch (error) {

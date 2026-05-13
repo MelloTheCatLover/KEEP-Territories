@@ -1,17 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Clock, Loader2, Play, XCircle } from 'lucide-react';
+import { ArrowLeft, Clock, Loader2, Trash2 } from 'lucide-react';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { getCurrentSubmission, getSectorById } from './api';
 import type { Sector } from './types';
 import { formatSectorLabel } from './types';
-import {
-  runSubmissionCode,
-  type TaskSubmissionWithDetails,
-  type TestRunResult,
-} from '../admin/submissions-api';
-import { CodeEditor } from './CodeEditor';
+import type { TaskSubmissionWithDetails } from '../admin/submissions-api';
+import { DropSectorConfirmModal } from './DropSectorConfirmModal';
 
 type State =
   | { status: 'loading' }
@@ -116,22 +112,36 @@ export function SectorPage() {
         </Card>
       )}
 
-      {submission && <SubmissionPanel submission={submission} onUpdated={(s) => setState({ status: 'ready', sector, submission: s })} />}
+      {submission && (
+        <SubmissionPanel
+          sector={sector}
+          submission={submission}
+          onDropped={() => navigate('/map')}
+        />
+      )}
     </div>
   );
 }
 
 function SubmissionPanel({
+  sector,
   submission,
-  onUpdated,
+  onDropped,
 }: {
+  sector: Sector;
   submission: TaskSubmissionWithDetails;
-  onUpdated: (next: TaskSubmissionWithDetails) => void;
+  onDropped: () => void;
 }) {
-  const isCodeTask =
-    !!submission.task &&
-    submission.task.code_language !== null &&
-    submission.task.has_test_cases;
+  const [dropOpen, setDropOpen] = useState(false);
+
+  const sectorLabel = sector.is_home_base
+    ? 'K'
+    : sector.number != null
+      ? formatSectorLabel(sector.difficulty.slug, sector.number)
+      : '—';
+
+  const dropInfluence = Math.floor(sector.difficulty.influence_reward / 2);
+  const dropExperience = Math.floor(sector.difficulty.experience_reward / 2);
 
   return (
     <Card>
@@ -143,9 +153,6 @@ function SubmissionPanel({
             {ACTION_LABELS[submission.action_type] ?? submission.action_type}
           </b>{' '}
           · статус <span className="text-neutral-1000">{submission.status}</span>
-          {submission.auto_approved && submission.status === 'approved' && (
-            <span className="ml-2 text-success-text">(автопроверка)</span>
-          )}
         </span>
       </div>
 
@@ -164,21 +171,34 @@ function SubmissionPanel({
         </p>
       )}
 
-      {isCodeTask && submission.status === 'pending' && (
-        <div className="mt-4">
-          <CodeRunner submission={submission} onUpdated={onUpdated} />
-        </div>
-      )}
-
-      {!isCodeTask && submission.status === 'pending' && (
+      {submission.status === 'pending' && (
         <div className="mt-4 bg-info-bg border border-info/40 text-info-text text-sm px-3 py-2 rounded-sm">
           Решите задание вместе с командой и покажите ответ администратору для проверки.
         </div>
       )}
 
+      {submission.status === 'pending' && (
+        <div className="mt-4 pt-4 border-t border-neutral-300 flex items-center justify-between gap-3">
+          <p className="text-xs text-neutral-700 leading-relaxed">
+            Не получается выполнить? Сбросьте сектор — заявка закроется,
+            команда получит штраф −{dropInfluence} влияния и −{dropExperience} опыта.
+          </p>
+          <Button
+            variant="danger"
+            onClick={() => setDropOpen(true)}
+            className="flex-shrink-0 text-sm"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <Trash2 className="w-4 h-4" />
+              Сбросить сектор
+            </span>
+          </Button>
+        </div>
+      )}
+
       {submission.status === 'approved' && (
         <div className="mt-4 bg-success-bg border border-success/40 text-success-text text-sm px-3 py-2 rounded-sm">
-          Заявка одобрена{submission.auto_approved ? ' автоматически' : ''}. Эффект применён.
+          Заявка одобрена. Эффект применён.
         </div>
       )}
 
@@ -187,146 +207,21 @@ function SubmissionPanel({
           Заявка отклонена{submission.comment ? `: ${submission.comment}` : '.'}
         </div>
       )}
+
+      {dropOpen && (
+        <DropSectorConfirmModal
+          submissionId={submission.id}
+          sectorLabel={sectorLabel}
+          influencePenalty={dropInfluence}
+          experiencePenalty={dropExperience}
+          onCancel={() => setDropOpen(false)}
+          onDropped={() => {
+            setDropOpen(false);
+            onDropped();
+          }}
+        />
+      )}
     </Card>
-  );
-}
-
-function CodeRunner({
-  submission,
-  onUpdated,
-}: {
-  submission: TaskSubmissionWithDetails;
-  onUpdated: (next: TaskSubmissionWithDetails) => void;
-}) {
-  const task = submission.task!;
-  const language = task.code_language!;
-
-  const [code, setCode] = useState<string>(
-    submission.code ?? task.code_template ?? '',
-  );
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [results, setResults] = useState<TestRunResult[] | null>(
-    submission.last_run_results ?? null,
-  );
-  const [allPassed, setAllPassed] = useState<boolean | null>(
-    submission.last_run_results
-      ? submission.last_run_results.every((r) => r.passed)
-      : null,
-  );
-
-  async function handleRun() {
-    setRunning(true);
-    setError(null);
-    try {
-      const res = await runSubmissionCode(submission.id, code);
-      setResults(res.results);
-      setAllPassed(res.passed);
-      onUpdated(res.submission);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Не удалось запустить проверку');
-    } finally {
-      setRunning(false);
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      <CodeEditor
-        value={code}
-        onChange={setCode}
-        language={language}
-        disabled={running}
-      />
-
-      {error && <ErrorBanner message={error} />}
-
-      <div className="flex items-center gap-3">
-        <Button
-          variant="primary"
-          onClick={() => void handleRun()}
-          disabled={running || code.trim().length === 0}
-          isLoading={running}
-        >
-          <span className="flex items-center gap-2">
-            <Play className="w-4 h-4" />
-            Запустить тесты
-          </span>
-        </Button>
-        {allPassed === true && (
-          <span className="text-sm text-success-text inline-flex items-center gap-1">
-            <CheckCircle2 className="w-4 h-4" />
-            Все тесты пройдены, заявка одобрена
-          </span>
-        )}
-        {allPassed === false && (
-          <span className="text-sm text-warning-text">
-            Не все тесты пройдены — попробуйте ещё раз
-          </span>
-        )}
-      </div>
-
-      {results && results.length > 0 && (
-        <ul className="space-y-1.5">
-          {results.map((r) => (
-            <li
-              key={r.ord}
-              className={`border rounded-sm px-3 py-2 text-xs ${
-                r.passed
-                  ? 'border-success/40 bg-success-bg/40'
-                  : 'border-danger/40 bg-danger-bg/40'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                {r.passed ? (
-                  <CheckCircle2 className="w-4 h-4 text-success-text" />
-                ) : (
-                  <XCircle className="w-4 h-4 text-danger-text" />
-                )}
-                <span className="font-mono">Тест #{r.ord + 1}</span>
-                {r.timed_out && (
-                  <span className="text-warning-text font-mono">timeout</span>
-                )}
-                {r.error && !r.timed_out && (
-                  <span className="text-danger-text font-mono">{r.error}</span>
-                )}
-              </div>
-              {!r.passed && (
-                <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-3 gap-2 text-2xs font-mono">
-                  <CodeBlock label="Вход" value={r.input} />
-                  <CodeBlock label="Ожидалось" value={r.expected} />
-                  <CodeBlock label="Получено" value={r.actual} stderr={r.stderr} />
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function CodeBlock({
-  label,
-  value,
-  stderr,
-}: {
-  label: string;
-  value: string;
-  stderr?: string;
-}) {
-  return (
-    <div>
-      <div className="uppercase tracking-wide text-neutral-700 mb-0.5">{label}</div>
-      <pre className="bg-neutral-50 border border-neutral-400 rounded-sm px-2 py-1 whitespace-pre-wrap break-words max-h-32 overflow-auto text-neutral-1000">
-        {value || '∅'}
-      </pre>
-      {stderr && stderr.trim().length > 0 && (
-        <pre className="mt-1 bg-danger-bg/30 border border-danger/30 rounded-sm px-2 py-1 whitespace-pre-wrap break-words max-h-32 overflow-auto text-danger-text">
-          {stderr}
-        </pre>
-      )}
-    </div>
   );
 }
 
