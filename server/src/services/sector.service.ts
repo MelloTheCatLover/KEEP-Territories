@@ -148,3 +148,85 @@ export async function createBulk(sectors: CreateSectorDto[]): Promise<SectorPubl
 
   return getAll();
 }
+
+export interface SectorTaskRow {
+  task_id: string;
+  title: string;
+  question: string;
+  difficulty_slug: DifficultySlug;
+}
+
+export async function getSectorTasks(sectorId: string): Promise<SectorTaskRow[]> {
+  const sectorRes = await pool.query('SELECT id FROM sectors WHERE id = $1', [sectorId]);
+  if (sectorRes.rows.length === 0) {
+    throw new AppError(404, 'Sector not found');
+  }
+  const res = await pool.query<SectorTaskRow>(
+    `SELECT t.id AS task_id,
+            t.title,
+            t.question,
+            dl.slug AS difficulty_slug
+       FROM sector_tasks st
+       JOIN tasks t ON t.id = st.task_id
+       JOIN difficulty_levels dl ON dl.id = t.difficulty_id
+      WHERE st.sector_id = $1
+      ORDER BY t.title ASC`,
+    [sectorId],
+  );
+  return res.rows;
+}
+
+export async function attachTask(
+  sectorId: string,
+  taskId: string,
+): Promise<SectorTaskRow[]> {
+  // Fetch sector + task difficulties first to give a clear error
+  const checkRes = await pool.query<{
+    sector_diff: string | null;
+    task_diff: string | null;
+  }>(
+    `SELECT (SELECT difficulty_id FROM sectors WHERE id = $1) AS sector_diff,
+            (SELECT difficulty_id FROM tasks WHERE id = $2) AS task_diff`,
+    [sectorId, taskId],
+  );
+  const { sector_diff, task_diff } = checkRes.rows[0];
+  if (sector_diff === null) throw new AppError(404, 'Sector not found');
+  if (task_diff === null) throw new AppError(404, 'Task not found');
+  if (sector_diff !== task_diff) {
+    throw new AppError(400, 'Сложность задания не совпадает со сложностью сектора');
+  }
+
+  await pool.query(
+    `INSERT INTO sector_tasks (sector_id, task_id)
+       VALUES ($1, $2)
+       ON CONFLICT (sector_id, task_id) DO NOTHING`,
+    [sectorId, taskId],
+  );
+  return getSectorTasks(sectorId);
+}
+
+export async function detachTask(
+  sectorId: string,
+  taskId: string,
+): Promise<SectorTaskRow[]> {
+  const res = await pool.query(
+    'DELETE FROM sector_tasks WHERE sector_id = $1 AND task_id = $2',
+    [sectorId, taskId],
+  );
+  if (res.rowCount === 0) {
+    throw new AppError(404, 'Привязка не найдена');
+  }
+  return getSectorTasks(sectorId);
+}
+
+export interface BindingRow {
+  sector_id: string;
+  task_id: string;
+}
+
+export async function getAllBindings(): Promise<BindingRow[]> {
+  const res = await pool.query<BindingRow>(
+    'SELECT sector_id, task_id FROM sector_tasks ORDER BY sector_id, task_id',
+  );
+  return res.rows;
+}

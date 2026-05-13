@@ -92,3 +92,59 @@ export async function getMap(_req: Request, res: Response, next: NextFunction): 
     next(error);
   }
 }
+
+export async function listSectorTasks(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const tasks = await sectorService.getSectorTasks(req.params.id);
+    res.status(200).json({ tasks });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function attachSectorTask(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const taskId = req.body?.task_id;
+    if (typeof taskId !== 'string' || taskId.length === 0) {
+      throw new AppError(400, 'task_id обязателен');
+    }
+    const tasks = await sectorService.attachTask(req.params.id, taskId);
+    res.status(200).json({ tasks });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function detachSectorTask(
+  req: Request<{ id: string; taskId: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const tasks = await sectorService.detachTask(req.params.id, req.params.taskId);
+    res.status(200).json({ tasks });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getBindings(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const bindings = await sectorService.getAllBindings();
+    res.status(200).json({ bindings });
+  } catch (error) {
+    next(error);
+  }
+}

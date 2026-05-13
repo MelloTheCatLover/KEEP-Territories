@@ -13,6 +13,7 @@ router.use(authenticate);
 router.post('/generate-map', requireAdmin, mapGeneratorController.generateMap);
 router.delete('/all', requireAdmin, mapGeneratorController.deleteAll);
 router.get('/admin/status', requireAdmin, mapGeneratorController.getStatus);
+router.get('/admin/task-bindings', requireAdmin, sectorController.getBindings);
 
 router.post('/', sectorController.create);
 router.post('/bulk', sectorController.createBulk);
@@ -22,5 +23,9 @@ router.get('/:id', validateParamId, sectorController.getById);
 
 router.post('/:sectorId/action/start', submissionController.startAction);
 router.get('/:sectorId/submission/current', submissionController.getCurrentForSector);
+
+router.get('/:id/tasks', requireAdmin, validateParamId, sectorController.listSectorTasks);
+router.post('/:id/tasks', requireAdmin, validateParamId, sectorController.attachSectorTask);
+router.delete('/:id/tasks/:taskId', requireAdmin, validateParamId, sectorController.detachSectorTask);
 
 export default router;
