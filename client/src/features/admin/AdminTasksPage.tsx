@@ -19,7 +19,6 @@ import {
   getTask,
   getTasks,
   updateTask,
-  type CodeLanguage,
   type Difficulty,
   type TaskFull,
   type TaskSummary,
@@ -305,8 +304,6 @@ function TasksTable({ tasks, onEdit, onDelete }: TableProps) {
   );
 }
 
-type TestCaseDraft = { ord: number; input: string; expected_output: string };
-
 type UpsertModalProps = {
   title: string;
   difficulties: Difficulty[];
@@ -326,44 +323,15 @@ function UpsertModal({
     title: initial?.title ?? '',
     question: initial?.question ?? '',
     difficulty_id: initial?.difficulty_id ?? difficulties[0]?.id ?? '',
-    code_language: (initial?.code_language ?? null) as CodeLanguage | null,
-    code_template: initial?.code_template ?? '',
   });
-  const [tests, setTests] = useState<TestCaseDraft[]>(() =>
-    (initial?.test_cases ?? []).map((t) => ({
-      ord: t.ord,
-      input: t.input,
-      expected_output: t.expected_output,
-    })),
-  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const selectedDifficulty = difficulties.find((d) => d.id === form.difficulty_id);
-  const isEasy = selectedDifficulty?.slug === 'easy';
 
   function validate(): string | null {
     if (!form.title.trim()) return 'Укажите название';
     if (!form.question.trim()) return 'Укажите вопрос';
     if (!form.difficulty_id) return 'Выберите сложность';
-    if (isEasy && form.code_language && tests.length === 0) {
-      return 'Добавьте хотя бы один тест или уберите язык';
-    }
-    if (isEasy && !form.code_language && tests.length > 0) {
-      return 'Выберите язык для тестов';
-    }
     return null;
-  }
-
-  function addTest() {
-    const nextOrd = tests.length === 0 ? 0 : Math.max(...tests.map((t) => t.ord)) + 1;
-    setTests([...tests, { ord: nextOrd, input: '', expected_output: '' }]);
-  }
-  function removeTest(idx: number) {
-    setTests(tests.filter((_, i) => i !== idx));
-  }
-  function updateTest(idx: number, patch: Partial<TestCaseDraft>) {
-    setTests(tests.map((t, i) => (i === idx ? { ...t, ...patch } : t)));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -381,19 +349,6 @@ function UpsertModal({
         question: form.question.trim(),
         difficulty_id: form.difficulty_id,
       };
-      if (isEasy) {
-        payload.code_language = form.code_language;
-        payload.code_template = form.code_template.length > 0 ? form.code_template : null;
-        payload.test_cases = tests.map((t, i) => ({
-          ord: i,
-          input: t.input,
-          expected_output: t.expected_output,
-        }));
-      } else {
-        payload.code_language = null;
-        payload.code_template = null;
-        payload.test_cases = [];
-      }
       await onSubmit(payload);
     } finally {
       setBusy(false);
@@ -445,101 +400,6 @@ function UpsertModal({
             ))}
           </select>
         </div>
-
-        {isEasy && (
-          <fieldset className="border border-brand-700 rounded-sm p-3 space-y-3">
-            <legend className="px-1 text-xs uppercase tracking-wide text-brand-100">
-              Автопроверка кода (необязательно)
-            </legend>
-
-            <div>
-              <Label htmlFor="task-language">Язык</Label>
-              <select
-                id="task-language"
-                value={form.code_language ?? ''}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    code_language: (e.target.value || null) as CodeLanguage | null,
-                  })
-                }
-                className="w-full bg-neutral-200 border border-neutral-400 rounded-sm px-3 py-2 text-base text-neutral-900 focus:border-brand-500 focus:outline-none"
-              >
-                <option value="">— без автопроверки —</option>
-                <option value="python">Python</option>
-                <option value="pascal">Pascal</option>
-              </select>
-            </div>
-
-            {form.code_language !== null && (
-              <>
-                <div>
-                  <Label htmlFor="task-template">Шаблон кода (опционально)</Label>
-                  <textarea
-                    id="task-template"
-                    value={form.code_template}
-                    onChange={(e) => setForm({ ...form, code_template: e.target.value })}
-                    rows={6}
-                    spellCheck={false}
-                    className="w-full bg-neutral-50 border border-neutral-400 rounded-sm px-3 py-2 font-mono text-sm text-neutral-1000 focus:border-brand-500 focus:outline-none"
-                    placeholder="Пример: # Прочитайте n с stdin\nn = int(input())"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Тесты (stdin → ожидаемый stdout)</Label>
-                    <button
-                      type="button"
-                      onClick={addTest}
-                      className="text-xs text-brand-300 hover:text-brand-100 inline-flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Добавить
-                    </button>
-                  </div>
-                  {tests.length === 0 && (
-                    <p className="text-xs text-neutral-700">Тестов нет.</p>
-                  )}
-                  {tests.map((t, i) => (
-                    <div
-                      key={i}
-                      className="border border-neutral-400 rounded-sm p-2 space-y-1.5"
-                    >
-                      <div className="flex items-center justify-between text-xs text-neutral-700">
-                        <span className="font-mono">Тест #{i + 1}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeTest(i)}
-                          className="text-danger-text hover:underline inline-flex items-center gap-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Убрать
-                        </button>
-                      </div>
-                      <textarea
-                        value={t.input}
-                        onChange={(e) => updateTest(i, { input: e.target.value })}
-                        rows={2}
-                        spellCheck={false}
-                        placeholder="stdin"
-                        className="w-full bg-neutral-50 border border-neutral-400 rounded-sm px-2 py-1 font-mono text-xs text-neutral-1000 focus:border-brand-500 focus:outline-none"
-                      />
-                      <textarea
-                        value={t.expected_output}
-                        onChange={(e) => updateTest(i, { expected_output: e.target.value })}
-                        rows={2}
-                        spellCheck={false}
-                        placeholder="ожидаемый stdout"
-                        className="w-full bg-neutral-50 border border-neutral-400 rounded-sm px-2 py-1 font-mono text-xs text-neutral-1000 focus:border-brand-500 focus:outline-none"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </fieldset>
-        )}
 
         <div className="flex justify-end gap-2 pt-2">
           <Button

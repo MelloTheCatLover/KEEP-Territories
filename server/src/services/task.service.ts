@@ -1,72 +1,12 @@
-import { PoolClient } from 'pg';
 import { pool } from '../config/db';
 import {
   Task,
   TaskOption,
   TaskWithOptions,
-  TaskTestCase,
   CreateTaskDto,
-  CodeLanguage,
 } from '../types/task';
 import { DifficultyLevel, DifficultySlug } from '../types/difficulty';
 import { AppError } from '../types/errors';
-
-const VALID_LANGUAGES: CodeLanguage[] = ['python', 'pascal'];
-
-function normalizeLanguage(value: unknown): CodeLanguage | null {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value !== 'string' || !VALID_LANGUAGES.includes(value as CodeLanguage)) {
-    throw new AppError(400, 'Invalid code_language (expected python or pascal)');
-  }
-  return value as CodeLanguage;
-}
-
-function validateTestCases(
-  cases: CreateTaskDto['test_cases'] | undefined,
-  language: CodeLanguage | null,
-): NonNullable<CreateTaskDto['test_cases']> {
-  if (!cases || cases.length === 0) return [];
-  if (language === null) {
-    throw new AppError(400, 'test_cases require code_language to be set');
-  }
-  for (const tc of cases) {
-    if (typeof tc.input !== 'string' || typeof tc.expected_output !== 'string') {
-      throw new AppError(400, 'Test case input and expected_output must be strings');
-    }
-    if (!Number.isInteger(tc.ord) || tc.ord < 0) {
-      throw new AppError(400, 'Test case ord must be non-negative integer');
-    }
-  }
-  const seen = new Set<number>();
-  for (const tc of cases) {
-    if (seen.has(tc.ord)) throw new AppError(400, 'Test case ord must be unique');
-    seen.add(tc.ord);
-  }
-  return cases;
-}
-
-async function loadTestCases(client: PoolClient, taskId: string): Promise<TaskTestCase[]> {
-  const res = await client.query<TaskTestCase>(
-    'SELECT * FROM task_test_cases WHERE task_id = $1 ORDER BY ord',
-    [taskId],
-  );
-  return res.rows;
-}
-
-async function replaceTestCases(
-  client: PoolClient,
-  taskId: string,
-  cases: NonNullable<CreateTaskDto['test_cases']>,
-): Promise<void> {
-  await client.query('DELETE FROM task_test_cases WHERE task_id = $1', [taskId]);
-  for (const tc of cases) {
-    await client.query(
-      `INSERT INTO task_test_cases (task_id, ord, input, expected_output)
-       VALUES ($1, $2, $3, $4)`,
-      [taskId, tc.ord, tc.input, tc.expected_output],
-    );
-  }
-}
 
 export async function create(dto: CreateTaskDto): Promise<TaskWithOptions> {
   if (dto.options.length > 0 && dto.options.length < 2) {
@@ -75,10 +15,6 @@ export async function create(dto: CreateTaskDto): Promise<TaskWithOptions> {
   if (dto.options.length > 0 && !dto.options.some((o) => o.is_correct)) {
     throw new AppError(400, 'Task must have at least one correct option');
   }
-
-  const language = normalizeLanguage(dto.code_language);
-  const codeTemplate = dto.code_template ?? null;
-  const testCases = validateTestCases(dto.test_cases, language);
 
   const client = await pool.connect();
   try {
@@ -94,10 +30,10 @@ export async function create(dto: CreateTaskDto): Promise<TaskWithOptions> {
     const difficulty = diffCheck.rows[0];
 
     const taskResult = await client.query<Task>(
-      `INSERT INTO tasks (title, question, difficulty_id, code_language, code_template)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO tasks (title, question, difficulty_id)
+       VALUES ($1, $2, $3)
        RETURNING *`,
-      [dto.title, dto.question, dto.difficulty_id, language, codeTemplate]
+      [dto.title, dto.question, dto.difficulty_id]
     );
     const task = taskResult.rows[0];
 
@@ -112,14 +48,9 @@ export async function create(dto: CreateTaskDto): Promise<TaskWithOptions> {
       options.push(optResult.rows[0]);
     }
 
-    if (testCases.length > 0) {
-      await replaceTestCases(client, task.id, testCases);
-    }
-
-    const test_cases = await loadTestCases(client, task.id);
     await client.query('COMMIT');
 
-    return { ...task, options, difficulty, test_cases };
+    return { ...task, options, difficulty };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -158,23 +89,15 @@ export async function getById(taskId: string): Promise<TaskWithOptions> {
     [taskId]
   );
 
-  const testsResult = await pool.query<TaskTestCase>(
-    'SELECT * FROM task_test_cases WHERE task_id = $1 ORDER BY ord',
-    [taskId]
-  );
-
   return {
     id: row.id,
     title: row.title,
     question: row.question,
     difficulty_id: row.difficulty_id,
-    code_language: row.code_language,
-    code_template: row.code_template,
     created_at: row.created_at,
     updated_at: row.updated_at,
     options: optionsResult.rows,
     difficulty,
-    test_cases: testsResult.rows,
   };
 }
 
@@ -197,20 +120,18 @@ export async function getRandomByDifficulty(difficultyId: string): Promise<TaskW
   return getById(taskResult.rows[0].id);
 }
 
-export async function getAll(): Promise<(Task & { difficulty: DifficultyLevel; test_cases_count: number })[]> {
+export async function getAll(): Promise<(Task & { difficulty: DifficultyLevel })[]> {
   const result = await pool.query<Task & {
     difficulty_name: string;
     difficulty_slug: string;
     difficulty_influence_reward: number;
     difficulty_experience_reward: number;
-    test_cases_count: string;
   }>(
     `SELECT t.*,
             dl.name as difficulty_name,
             dl.slug as difficulty_slug,
             dl.influence_reward as difficulty_influence_reward,
-            dl.experience_reward as difficulty_experience_reward,
-            (SELECT COUNT(*) FROM task_test_cases WHERE task_id = t.id) as test_cases_count
+            dl.experience_reward as difficulty_experience_reward
      FROM tasks t
      JOIN difficulty_levels dl ON t.difficulty_id = dl.id
      ORDER BY t.created_at DESC`
@@ -221,11 +142,8 @@ export async function getAll(): Promise<(Task & { difficulty: DifficultyLevel; t
     title: row.title,
     question: row.question,
     difficulty_id: row.difficulty_id,
-    code_language: row.code_language,
-    code_template: row.code_template,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    test_cases_count: Number(row.test_cases_count),
     difficulty: {
       id: row.difficulty_id,
       name: row.difficulty_name,
@@ -265,15 +183,6 @@ export async function update(taskId: string, dto: Partial<CreateTaskDto>): Promi
       }
     }
 
-    const language =
-      dto.code_language === undefined
-        ? existing.rows[0].code_language
-        : normalizeLanguage(dto.code_language);
-
-    if (dto.test_cases !== undefined) {
-      validateTestCases(dto.test_cases, language);
-    }
-
     const updates: string[] = [];
     const values: unknown[] = [];
     let paramIndex = 1;
@@ -289,14 +198,6 @@ export async function update(taskId: string, dto: Partial<CreateTaskDto>): Promi
     if (dto.difficulty_id !== undefined) {
       updates.push(`difficulty_id = $${paramIndex++}`);
       values.push(dto.difficulty_id);
-    }
-    if (dto.code_language !== undefined) {
-      updates.push(`code_language = $${paramIndex++}`);
-      values.push(language);
-    }
-    if (dto.code_template !== undefined) {
-      updates.push(`code_template = $${paramIndex++}`);
-      values.push(dto.code_template);
     }
 
     if (updates.length > 0) {
@@ -317,10 +218,6 @@ export async function update(taskId: string, dto: Partial<CreateTaskDto>): Promi
           [taskId, opt.text, opt.is_correct, opt.sort_order]
         );
       }
-    }
-
-    if (dto.test_cases !== undefined) {
-      await replaceTestCases(client, taskId, dto.test_cases);
     }
 
     await client.query('COMMIT');

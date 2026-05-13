@@ -1,32 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import * as taskService from '../services/task.service';
 import { AppError } from '../types/errors';
-import { CreateTaskDto, CreateTaskTestCaseDto } from '../types/task';
-
-function parseTestCases(raw: unknown): CreateTaskTestCaseDto[] | undefined {
-  if (raw === undefined) return undefined;
-  if (!Array.isArray(raw)) {
-    throw new AppError(400, 'test_cases must be an array');
-  }
-  return raw.map((tc, idx) => {
-    if (!tc || typeof tc !== 'object') {
-      throw new AppError(400, `test_cases[${idx}] must be an object`);
-    }
-    const obj = tc as Record<string, unknown>;
-    const ord = typeof obj.ord === 'number' ? obj.ord : idx;
-    const input = typeof obj.input === 'string' ? obj.input : '';
-    const expected = obj.expected_output;
-    if (typeof expected !== 'string') {
-      throw new AppError(400, `test_cases[${idx}].expected_output must be a string`);
-    }
-    return { ord, input, expected_output: expected };
-  });
-}
+import { CreateTaskDto } from '../types/task';
 
 export async function create(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { title, question, difficulty_id, options, code_language, code_template, test_cases } =
-      req.body;
+    const { title, question, difficulty_id, options } = req.body;
 
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
       throw new AppError(400, 'Title is required');
@@ -58,10 +37,6 @@ export async function create(req: Request, res: Response, next: NextFunction): P
       difficulty_id,
       options: Array.isArray(options) ? options : [],
     };
-    if (code_language !== undefined) dto.code_language = code_language;
-    if (code_template !== undefined) dto.code_template = code_template;
-    const parsedTests = parseTestCases(test_cases);
-    if (parsedTests !== undefined) dto.test_cases = parsedTests;
 
     const task = await taskService.create(dto);
 
@@ -99,8 +74,7 @@ export async function getAll(req: Request, res: Response, next: NextFunction): P
 
 export async function update(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { title, question, difficulty_id, options, code_language, code_template, test_cases } =
-      req.body;
+    const { title, question, difficulty_id, options } = req.body;
     const dto: Partial<CreateTaskDto> = {};
 
     if (title !== undefined) {
@@ -133,10 +107,6 @@ export async function update(req: Request<{ id: string }>, res: Response, next: 
       }
       dto.options = options;
     }
-    if (code_language !== undefined) dto.code_language = code_language;
-    if (code_template !== undefined) dto.code_template = code_template;
-    const parsedTests = parseTestCases(test_cases);
-    if (parsedTests !== undefined) dto.test_cases = parsedTests;
 
     const task = await taskService.update(req.params.id, dto);
     res.status(200).json(task);
