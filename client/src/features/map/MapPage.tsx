@@ -12,6 +12,7 @@ import { getTeams, getTeam } from '../team/api';
 import type { TeamFullStats } from '../team/types';
 import { useAuth } from '../auth/AuthContext';
 import { CreateTeamModal } from '../team/CreateTeamModal';
+import { TrophySection } from '../trophies/TrophySection';
 
 type LoadState =
   | { status: 'loading' }
@@ -60,6 +61,14 @@ export function MapPage() {
   const canCreateTeam = user?.team_id === null;
   const teamId = user?.team_id ?? null;
 
+  const userActiveSectorId = useMemo(() => {
+    if (!teamId || state.status !== 'ready') return null;
+    const found = state.sectors.find(
+      (s) => s.active_submission_team_id === teamId,
+    );
+    return found?.id ?? null;
+  }, [state, teamId]);
+
   const reachableIds = useMemo(() => {
     if (!teamId || state.status !== 'ready') return undefined;
     const owned = new Set<string>();
@@ -87,8 +96,11 @@ export function MapPage() {
       });
       return set;
     }
+    if (userActiveSectorId) {
+      return new Set<string>([userActiveSectorId]);
+    }
     return reachableIds;
-  }, [canCreateTeam, state, reachableIds]);
+  }, [canCreateTeam, state, reachableIds, userActiveSectorId]);
 
   const handleClick = useCallback(
     (s: Sector) => {
@@ -268,6 +280,8 @@ export function MapPage() {
         </div>
       )}
 
+      {state.status === 'ready' && <TrophySection />}
+
       {createFor && (
         <CreateTeamModal
           sector={createFor}
@@ -286,10 +300,15 @@ export function MapPage() {
           sector={actionFor}
           allSectors={state.sectors}
           userTeamId={teamId}
+          userActiveSectorId={userActiveSectorId}
           onCancel={() => setActionFor(null)}
           onStarted={(submissionId) => {
             setActionFor(null);
             navigate(`/sectors/${actionFor.id}?submission=${submissionId}`);
+          }}
+          onNavigateToActive={(sectorId) => {
+            setActionFor(null);
+            navigate(`/sectors/${sectorId}`);
           }}
         />
       )}
