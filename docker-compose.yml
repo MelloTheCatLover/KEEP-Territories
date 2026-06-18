@@ -1,0 +1,102 @@
+name: keep-territories
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # No ports exposed — DB reachable only inside the compose network.
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      TZ: ${TZ:-Europe/Berlin}
+    # No ports exposed — API reachable only via web (Caddy).
+
+  web:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      DOMAIN: ${DOMAIN}
+      TZ: ${TZ:-Europe/Berlin}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+  db-backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: ${DB_NAME}
+      PGUSER: ${DB_USER}
+      PGPASSWORD: ${DB_PASSWORD}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        echo "db-backup: ready (retention=${BACKUP_RETENTION_DAYS:-14}d)"
+        while true; do
+          # Sleep until next 03:00 local time
+          now_epoch=$$(date +%s)
+          next_epoch=$$(date -d 'tomorrow 03:00' +%s 2>/dev/null || date -d '+1 day 03:00' +%s)
+          sleep_for=$$((next_epoch - now_epoch))
+          if [ $$sleep_for -lt 60 ]; then sleep_for=60; fi
+          sleep $$sleep_for
+          ts=$$(date +%Y%m%d-%H%M)
+          out="/backups/db-$$ts.sql.gz"
+          echo "db-backup: dumping → $$out"
+          pg_dump --no-owner --no-privileges | gzip -9 > "$$out" \
+            && echo "db-backup: done $$out" \
+            || echo "db-backup: FAILED $$out"
+          find /backups -type f -name 'db-*.sql.gz' -mtime +$${BACKUP_RETENTION_DAYS:-14} -delete
+        done
+
+volumes:
+  pg_data:
+  caddy_data:
+  caddy_config:

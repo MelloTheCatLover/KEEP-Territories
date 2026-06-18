@@ -12,6 +12,7 @@
 - [Стек](#стек)
 - [Архитектура](#архитектура)
 - [Локальный запуск](#локальный-запуск)
+- [Деплой в прод (Docker)](#деплой-в-прод-docker)
 - [Структура репозитория](#структура-репозитория)
 - [Геймплей](#геймплей)
 - [Админ-флоу](#админ-флоу)
@@ -133,6 +134,88 @@ cd server && npm run seed:demo
 
 ---
 
+## Деплой в прод (Docker)
+
+Прод-стек: один Docker-compose, четыре сервиса. Caddy раздаёт SPA и проксирует `/api/*` в Node. Postgres закрыт внутри сети, бэкап-контейнер делает ежедневный `pg_dump`.
+
+```
+Internet ─► Caddy (:80/:443, авто-LE)
+              ├── /api/*  → server:5000  → db:5432
+              └── /*      → SPA static (/srv)
+                                    db-backup → ./backups/db-*.sql.gz
+```
+
+### Что нужно один раз
+
+1. **VPS** с публичным IP, Ubuntu 24.04, root-доступ по SSH.
+2. **Домен** с A-записями `@` и `www` на IP VPS (порт 80/443 наружу).
+3. На VPS: Docker + compose plugin + git.
+
+```bash
+ssh root@<ip>
+apt update && apt install -y docker.io docker-compose-plugin git ufw
+systemctl enable --now docker
+ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
+```
+
+### Первый деплой
+
+```bash
+git clone <repo-url> /opt/keep-territories
+cd /opt/keep-territories
+cp .env.prod.example .env
+# отредактируйте .env:
+#   DOMAIN=ваш-домен,www.ваш-домен
+#   DB_PASSWORD=$(openssl rand -hex 24)
+#   JWT_SECRET=$(openssl rand -hex 64)
+docker compose --env-file .env up -d --build
+```
+
+Сервер сам прогонит миграции при старте. Caddy получит Let's Encrypt-сертификат при первом обращении.
+
+Проверка: `curl -I https://ваш-домен/api/health` → `200 OK`.
+
+### Повторный деплой (новая фича)
+
+Локально пушим в git, на VPS:
+
+```bash
+cd /opt/keep-territories
+git pull
+docker compose --env-file .env up -d --build server web
+```
+
+`db` не пересобирается — данные в volume `pg_data` сохраняются. Миграции (`NNN_*.sql`) применятся автоматически при старте `server` (раннер идемпотентный — повторно не применяет).
+
+### Назначение администратора в проде
+
+```bash
+docker compose exec db psql -U vkr -d vkr -c \
+  "UPDATE users SET role='admin' WHERE email='you@example.com';"
+```
+
+### Бэкапы
+
+- Контейнер `db-backup` каждый день в 03:00 локального TZ кладёт `./backups/db-YYYYMMDD-HHMM.sql.gz`.
+- Ротация: файлы старше `BACKUP_RETENTION_DAYS` (по умолч. 14) удаляются автоматически.
+- Ручной дамп: `./scripts/backup-db.sh`.
+- Восстановление: `./scripts/restore-db.sh backups/db-YYYYMMDD-HHMM.sql.gz` (останавливает API, дропает БД, накатывает дамп, поднимает API).
+
+Рекомендуется дополнительно синкать `./backups/` на внешнее хранилище (S3 / rsync.net / другой сервер) системным cron-ом — Docker-volume на самом VPS не выживет потерю диска.
+
+### Локальная разработка после деплоя
+
+Дев-флоу не меняется — Docker нужен только в проде:
+
+```bash
+cd server && npm run dev    # API на :5000
+cd client && npm run dev    # SPA на :5173 (Vite читает client/.env.development)
+```
+
+Клиент в проде использует относительный `/api`, в деве — `VITE_API_BASE_URL` из `.env.development`.
+
+---
+
 ## Структура репозитория
 
 ```
@@ -176,7 +259,7 @@ cd server && npm run seed:demo
 
 ## Админ-флоу
 
-Хаб `/admin` ведёт в 6 подстраниц:
+Хаб `/admin` ведёт в 7 подстраниц:
 
 - **Карта** — генерация (1–6 колец, сложность на каждом) и полный сброс.
 - **Задания** — редактирование пула, привязка к сложности.

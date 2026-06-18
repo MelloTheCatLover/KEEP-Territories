@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.*
+*.log
+.git
+.gitignore
+README.md
+cleanup.sh
+test_api.sh
+nodemon.json

@@ -1,0 +1,25 @@
+# Caddy serves built SPA from /srv and reverse-proxies /api/* to the server.
+# DOMAIN is taken from compose env. For local/no-domain use DOMAIN=":80".
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# API → Node backend (internal Docker network)
+	handle /api/* {
+		reverse_proxy server:5000
+	}
+
+	# Everything else → static SPA with client-side routing fallback
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Security headers — Caddy adds HSTS automatically when serving via LE
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}
