@@ -1,4 +1,6 @@
 import './types/express';
+import path from 'path';
+import fs from 'fs';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -42,6 +44,17 @@ app.use('/api/teams/:teamId/stats', teamStatsRoutes);
 app.use('/api/settings', gameSettingsRoutes);
 app.use('/api/difficulties', difficultyRoutes);
 app.use('/api/trophies', trophyRoutes);
+
+// Single-process deploy (shared hosting): serve built SPA from ./public.
+// Harmless if ./public doesn't exist (Docker/Caddy deploy serves static elsewhere).
+const publicDir = path.join(__dirname, '..', 'public');
+if (fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(publicDir, 'index.html'));
+  });
+}
 
 app.use((_req, _res, next) => {
   next(new AppError(404, 'Route not found'));
