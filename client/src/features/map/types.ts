@@ -42,6 +42,6 @@ const SECTOR_PREFIX: Record<DifficultySlug, string> = {
   core: 'Я',
 };
 
-export function formatSectorLabel(slug: DifficultySlug, number: number): string {
-  return `${SECTOR_PREFIX[slug]}${number}`;
+export function formatSectorLabel(slug: DifficultySlug, number: number | null): string {
+  return `${SECTOR_PREFIX[slug]}${number ?? ''}`;
 }
