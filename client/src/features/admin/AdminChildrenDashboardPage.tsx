@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Loader2, Search } from 'lucide-react';
+import { AlertCircle, Loader2, Search, Trash2 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Card, ErrorBanner, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
-import { getDashboard, type ChildDashboardRow } from './children-lists-api';
+import { getDashboard, deleteChild, type ChildDashboardRow } from './children-lists-api';
 
 export function AdminChildrenDashboardPage() {
   const { user } = useAuth();
@@ -12,6 +12,24 @@ export function AdminChildrenDashboardPage() {
   const [rows, setRows] = useState<ChildDashboardRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDelete(row: ChildDashboardRow) {
+    const warn = row.has_account
+      ? `Удалить ${row.full_name}? Аккаунт ${row.login ?? ''} и все его данные будут удалены безвозвратно.`
+      : `Удалить ${row.full_name} из базы? Действие необратимо.`;
+    if (!confirm(warn)) return;
+    setDeletingId(row.id);
+    setError(null);
+    try {
+      await deleteChild(row.id);
+      setRows((prev) => (prev ? prev.filter((r) => r.id !== row.id) : prev));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Ошибка удаления');
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -85,7 +103,8 @@ export function AdminChildrenDashboardPage() {
                   <th className="py-2 pr-3 font-medium">ФИО</th>
                   <th className="py-2 pr-3 font-medium">Аккаунт</th>
                   <th className="py-2 pr-3 font-medium">Списки</th>
-                  <th className="py-2 font-medium">Смены</th>
+                  <th className="py-2 pr-3 font-medium">Смены</th>
+                  <th className="py-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
@@ -97,14 +116,27 @@ export function AdminChildrenDashboardPage() {
                     <td className="py-2 pr-3 text-neutral-700">
                       {r.lists.length > 0 ? r.lists.join(', ') : '—'}
                     </td>
-                    <td className="py-2 text-neutral-700">
+                    <td className="py-2 pr-3 text-neutral-700">
                       {r.seasons.length > 0 ? r.seasons.join(', ') : '—'}
+                    </td>
+                    <td className="py-2 text-right">
+                      <button
+                        type="button"
+                        className="text-error hover:opacity-80 p-1 disabled:opacity-40"
+                        onClick={() => void handleDelete(r)}
+                        disabled={deletingId === r.id}
+                        title="Удалить ребёнка из базы"
+                      >
+                        {deletingId === r.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Trash2 className="w-4 h-4" />}
+                      </button>
                     </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-3 text-neutral-700">Ничего не найдено.</td>
+                    <td colSpan={6} className="py-3 text-neutral-700">Ничего не найдено.</td>
                   </tr>
                 )}
               </tbody>

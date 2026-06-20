@@ -95,6 +95,19 @@ export async function issueAccount(
   }
 }
 
+export async function deleteChild(
+  req: Request<{ childId: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    await childrenListService.deleteChild(req.params.childId);
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function dashboard(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     res.json(await childrenListService.dashboard());

@@ -210,6 +210,36 @@ export async function removeMember(listId: string, childId: string): Promise<voi
   }
 }
 
+/**
+ * Delete a child from the registry entirely: removes their list memberships
+ * (cascade) and their account if any. Irreversible.
+ */
+export async function deleteChild(childId: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const res = await client.query<{ user_id: string | null }>(
+      'SELECT user_id FROM children WHERE id = $1 FOR UPDATE',
+      [childId],
+    );
+    if (res.rows.length === 0) {
+      throw new AppError(404, 'Ребёнок не найден');
+    }
+    const userId = res.rows[0].user_id;
+    // children → list_members cascade; deleting the account cascades submissions.
+    await client.query('DELETE FROM children WHERE id = $1', [childId]);
+    if (userId) {
+      await client.query('DELETE FROM users WHERE id = $1', [userId]);
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 // ── Accounts ───────────────────────────────────────────────────────────────
 
 /**

@@ -77,3 +77,7 @@ export function issueAccount(listId: string, childId: string): Promise<IssuedAcc
 export function getDashboard(): Promise<ChildDashboardRow[]> {
   return api.get<ChildDashboardRow[]>('/children-lists/dashboard');
 }
+
+export function deleteChild(childId: string): Promise<void> {
+  return api.delete<void>(`/children-lists/children/${childId}`);
+}

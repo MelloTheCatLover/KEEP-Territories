@@ -19,6 +19,17 @@ function validateChildParams(
   next();
 }
 
+function validateChildIdParam(
+  req: Request<{ childId: string }>,
+  _res: Response,
+  next: NextFunction,
+): void {
+  if (!UUID_REGEX.test(req.params.childId)) {
+    return next(new AppError(400, 'Invalid ID format'));
+  }
+  next();
+}
+
 const router = Router();
 
 router.use(authenticate, requireAdmin);
@@ -26,6 +37,7 @@ router.use(authenticate, requireAdmin);
 router.get('/', childrenListController.list);
 router.post('/', childrenListController.create);
 router.get('/dashboard', childrenListController.dashboard);
+router.delete('/children/:childId', validateChildIdParam, childrenListController.deleteChild);
 router.delete('/:id', validateParamId, childrenListController.remove);
 router.get('/:id/members', validateParamId, childrenListController.getMembers);
 router.post('/:id/members', validateParamId, childrenListController.addChild);
