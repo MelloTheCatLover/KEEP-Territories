@@ -32,17 +32,44 @@ export interface ChildrenList {
   entry_count: number;
 }
 
-export interface RosterEntry {
-  id: string;
-  list_id: string;
-  full_name: string;
+/** A child as a member of a specific list. */
+export interface ListMember {
+  child_id: string;
+  /** Short human ID, distinguishes same-named children. */
   code: string;
+  full_name: string;
   user_id: string | null;
-  /** Username of the account that claimed this entry, null if unclaimed. */
-  username: string | null;
-  /** Login (email) of the linked account, null if unclaimed. */
+  /** Account login (email), null if no account yet. */
   login: string | null;
-  /** Plaintext password for admin-issued accounts, null otherwise. */
+  /** Decrypted issued password, null if none. */
   issued_password: string | null;
-  created_at: string;
+  /** Names of all seasons this child takes part in (across their lists). */
+  seasons: string[];
+}
+
+/** Result of adding one child to a list (matched = reused existing child). */
+export interface AddChildResult {
+  child_id: string;
+  code: string;
+  full_name: string;
+  matched: boolean;
+  login: string | null;
+  seasons: string[];
+}
+
+export interface IssuedAccount {
+  login: string;
+  password: string;
+  child_id: string;
+}
+
+/** One row of the global children dashboard. */
+export interface ChildDashboardRow {
+  id: string;
+  code: string;
+  full_name: string;
+  login: string | null;
+  has_account: boolean;
+  lists: string[];
+  seasons: string[];
 }

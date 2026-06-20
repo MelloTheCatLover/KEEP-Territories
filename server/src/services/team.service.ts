@@ -52,9 +52,10 @@ async function assertEnrolled(
 ): Promise<void> {
   const enrolled = await client.query(
     `SELECT 1
-       FROM roster_entries re
-       JOIN season_lists sl ON sl.list_id = re.list_id
-      WHERE re.user_id = $1 AND sl.season_id = $2
+       FROM children c
+       JOIN list_members lm ON lm.child_id = c.id
+       JOIN season_lists sl ON sl.list_id = lm.list_id
+      WHERE c.user_id = $1 AND sl.season_id = $2
       LIMIT 1`,
     [userId, seasonId],
   );

@@ -31,39 +31,52 @@ export async function remove(req: Request<{ id: string }>, res: Response, next: 
   }
 }
 
-export async function getEntries(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
+export async function getMembers(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
   try {
-    res.json(await childrenListService.getEntries(req.params.id));
+    res.json(await childrenListService.getMembers(req.params.id));
   } catch (error) {
     next(error);
   }
 }
 
-export async function addEntry(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
+export async function addChild(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { full_name, code } = req.body ?? {};
+    const { full_name } = req.body ?? {};
     if (typeof full_name !== 'string') {
-      res.status(400).json({ error: 'Имя ребёнка обязательно' });
+      res.status(400).json({ error: 'ФИО обязательно' });
       return;
     }
-    const entry = await childrenListService.addEntry(
-      req.params.id,
-      full_name,
-      typeof code === 'string' ? code : undefined,
-    );
-    res.status(201).json(entry);
+    res.status(201).json(await childrenListService.addChild(req.params.id, full_name));
   } catch (error) {
     next(error);
   }
 }
 
-export async function removeEntry(
-  req: Request<{ id: string; entryId: string }>,
+export async function bulkAdd(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const body = req.body ?? {};
+    let names: string[];
+    if (Array.isArray(body.names)) {
+      names = body.names.filter((n: unknown): n is string => typeof n === 'string');
+    } else if (typeof body.text === 'string') {
+      names = body.text.split('\n');
+    } else {
+      res.status(400).json({ error: 'Передайте text (строки) или names (массив)' });
+      return;
+    }
+    res.status(201).json(await childrenListService.bulkAdd(req.params.id, names));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function removeMember(
+  req: Request<{ id: string; childId: string }>,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    await childrenListService.removeEntry(req.params.entryId);
+    await childrenListService.removeMember(req.params.id, req.params.childId);
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -71,13 +84,20 @@ export async function removeEntry(
 }
 
 export async function issueAccount(
-  req: Request<{ id: string; entryId: string }>,
+  req: Request<{ id: string; childId: string }>,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const result = await childrenListService.issueAccount(req.params.entryId);
-    res.status(201).json(result);
+    res.status(201).json(await childrenListService.issueAccount(req.params.childId));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function dashboard(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.json(await childrenListService.dashboard());
   } catch (error) {
     next(error);
   }
