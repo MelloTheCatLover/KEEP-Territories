@@ -1,15 +1,11 @@
-# Caddy serves built SPA from /srv and reverse-proxies /api/* to the server.
+# Caddy serves the built SPA from /srv. The SPA talks directly to the API
+# host (api.keep-territories.ru) via VITE_API_BASE_URL, so no /api proxy here.
 # DOMAIN is taken from compose env. For local/no-domain use DOMAIN=":80".
 
 {$DOMAIN} {
 	encode zstd gzip
 
-	# API → Node backend (internal Docker network)
-	handle /api/* {
-		reverse_proxy server:5000
-	}
-
-	# Everything else → static SPA with client-side routing fallback
+	# Static SPA with client-side routing fallback
 	handle {
 		root * /srv
 		try_files {path} /index.html
