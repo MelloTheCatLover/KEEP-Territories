@@ -76,7 +76,7 @@ export function LoginPage() {
         </form>
 
         <p className="text-sm text-neutral-700 text-center mt-5">
-          Логин и пароль выдаёт вожатый.
+          Логин и пароль получаете на первом событии КТП.
         </p>
       </Card>
     </main>
