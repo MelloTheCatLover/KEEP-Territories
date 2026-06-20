@@ -1,3 +1,4 @@
+import { PoolClient } from 'pg';
 import { pool } from '../config/db';
 import { Team, CreateTeamDto } from '../types/team';
 import { TeamFullStats } from '../types/team-stats';
@@ -40,6 +41,28 @@ function isColorPaletteViolation(err: unknown): boolean {
   return e.code === '23514' && e.constraint === 'teams_color_palette_check';
 }
 
+/**
+ * Only children whose roster entry is in a list linked to the active season may
+ * play (create or join a team). Everyone else can observe the map but not act.
+ */
+async function assertEnrolled(
+  client: PoolClient,
+  userId: string,
+  seasonId: string,
+): Promise<void> {
+  const enrolled = await client.query(
+    `SELECT 1
+       FROM roster_entries re
+       JOIN season_lists sl ON sl.list_id = re.list_id
+      WHERE re.user_id = $1 AND sl.season_id = $2
+      LIMIT 1`,
+    [userId, seasonId],
+  );
+  if (enrolled.rows.length === 0) {
+    throw new AppError(403, 'Вас нет в списках этого сезона — можно только наблюдать');
+  }
+}
+
 export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFullStats> {
   const client = await pool.connect();
   try {
@@ -57,6 +80,8 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
     if (userCheck.rows[0].team_id) {
       throw new AppError(400, 'You are already in a team');
     }
+
+    await assertEnrolled(client, userId, seasonId);
 
     const nameCheck = await client.query(
       'SELECT id FROM teams WHERE name = $1 AND season_id = $2',
@@ -184,19 +209,7 @@ export async function join(teamId: string, userId: string): Promise<TeamFullStat
       throw new AppError(400, 'Эта команда не из активного сезона');
     }
 
-    // Only children enrolled in a list linked to the active season may join a
-    // team. Everyone else can observe the map but not play.
-    const enrolled = await client.query(
-      `SELECT 1
-         FROM roster_entries re
-         JOIN season_lists sl ON sl.list_id = re.list_id
-        WHERE re.user_id = $1 AND sl.season_id = $2
-        LIMIT 1`,
-      [userId, seasonId]
-    );
-    if (enrolled.rows.length === 0) {
-      throw new AppError(403, 'Вас нет в списках этого сезона — можно только наблюдать');
-    }
+    await assertEnrolled(client, userId, seasonId);
 
     await client.query(
       `UPDATE users SET team_id = $1, team_role = 'member' WHERE id = $2`,
