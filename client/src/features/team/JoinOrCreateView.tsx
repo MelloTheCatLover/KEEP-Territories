@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, MapPin, UserPlus } from 'lucide-react';
+import { Eye, Loader2, MapPin, UserPlus } from 'lucide-react';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { useAuth } from '../auth/AuthContext';
@@ -20,6 +20,7 @@ export function JoinOrCreateView() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [observerNotice, setObserverNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -41,11 +42,16 @@ export function JoinOrCreateView() {
   async function handleJoin(teamId: string) {
     setJoiningId(teamId);
     setError(null);
+    setObserverNotice(null);
     try {
       await joinTeam(teamId);
       await refreshUser();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Не удалось вступить в команду');
+      if (err instanceof ApiError && err.status === 403) {
+        setObserverNotice(err.message);
+      } else {
+        setError(err instanceof ApiError ? err.message : 'Не удалось вступить в команду');
+      }
     } finally {
       setJoiningId(null);
     }
@@ -82,6 +88,18 @@ export function JoinOrCreateView() {
       </div>
 
       {error && <ErrorBanner message={error} />}
+
+      {observerNotice && (
+        <Card>
+          <div className="flex items-start gap-3">
+            <Eye className="w-5 h-5 text-brand-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Режим наблюдателя</h2>
+              <p className="text-sm text-neutral-700">{observerNotice}</p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {noMap ? (
         <Card>
