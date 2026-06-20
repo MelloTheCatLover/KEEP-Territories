@@ -28,6 +28,12 @@ export function validateRegister(req: Request, _res: Response, next: NextFunctio
   if (!password || typeof password !== 'string' || password.length < 8) {
     return next(new AppError(400, 'Password must be at least 8 characters'));
   }
+  const { code } = req.body;
+  if (code !== undefined && code !== null) {
+    if (typeof code !== 'string' || code.trim().length > 32) {
+      return next(new AppError(400, 'Invalid roster code'));
+    }
+  }
 
   next();
 }

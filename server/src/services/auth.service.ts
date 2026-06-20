@@ -32,35 +32,62 @@ function generateToken(user: User): string {
 }
 
 export async function register(dto: CreateUserDto): Promise<AuthResponse> {
-  const existingEmail = await pool.query(
-    'SELECT id FROM users WHERE email = $1',
-    [dto.email]
-  );
-  if (existingEmail.rows.length > 0) {
-    throw new AppError(409, 'Email already in use');
-  }
-
-  const existingUsername = await pool.query(
-    'SELECT id FROM users WHERE username = $1',
-    [dto.username]
-  );
-  if (existingUsername.rows.length > 0) {
-    throw new AppError(409, 'Username already taken');
-  }
-
   const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
+  const code = dto.code?.trim();
 
-  const result = await pool.query<User>(
-    `INSERT INTO users (email, username, password_hash)
-     VALUES ($1, $2, $3)
-     RETURNING *`,
-    [dto.email, dto.username, passwordHash]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  const user = result.rows[0];
-  const token = generateToken(user);
+    const existingEmail = await client.query(
+      'SELECT id FROM users WHERE email = $1',
+      [dto.email]
+    );
+    if (existingEmail.rows.length > 0) {
+      throw new AppError(409, 'Email already in use');
+    }
 
-  return { user: toUserPublic(user), token };
+    const existingUsername = await client.query(
+      'SELECT id FROM users WHERE username = $1',
+      [dto.username]
+    );
+    if (existingUsername.rows.length > 0) {
+      throw new AppError(409, 'Username already taken');
+    }
+
+    const result = await client.query<User>(
+      `INSERT INTO users (email, username, password_hash)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [dto.email, dto.username, passwordHash]
+    );
+    const user = result.rows[0];
+
+    // Optional roster code: claim the matching unclaimed child entry. A wrong or
+    // taken code rolls back the whole registration so accounts stay consistent.
+    if (code) {
+      const claim = await client.query(
+        `UPDATE roster_entries
+            SET user_id = $1
+          WHERE code = $2 AND user_id IS NULL
+        RETURNING id`,
+        [user.id, code]
+      );
+      if (claim.rows.length === 0) {
+        throw new AppError(400, 'Неверный код участника или он уже использован');
+      }
+    }
+
+    await client.query('COMMIT');
+
+    const token = generateToken(user);
+    return { user: toUserPublic(user), token };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function login(dto: LoginDto): Promise<AuthResponse> {

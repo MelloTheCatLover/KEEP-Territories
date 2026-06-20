@@ -3,12 +3,13 @@ import * as authService from '../services/auth.service';
 
 export async function register(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { email, username, password } = req.body;
+    const { email, username, password, code } = req.body;
 
     const result = await authService.register({
       email: email.trim(),
       username: username.trim(),
       password,
+      code: typeof code === 'string' ? code : undefined,
     });
 
     res.status(201).json(result);

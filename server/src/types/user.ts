@@ -27,6 +27,8 @@ export interface CreateUserDto {
   email: string;
   username: string;
   password: string;
+  /** Optional roster code: links the new account to a child in a list. */
+  code?: string;
 }
 
 export interface LoginDto {
