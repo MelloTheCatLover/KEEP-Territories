@@ -346,11 +346,11 @@ export async function transferCaptain(currentUserId: string, newCaptainId: strin
   }
 }
 
-export async function getAll(): Promise<Team[]> {
-  const seasonId = await getActiveSeasonId();
+export async function getAll(seasonId?: string): Promise<Team[]> {
+  const sid = seasonId ?? (await getActiveSeasonId());
   const result = await pool.query<Team>(
     'SELECT * FROM teams WHERE season_id = $1 ORDER BY created_at DESC',
-    [seasonId]
+    [sid]
   );
   return result.rows;
 }

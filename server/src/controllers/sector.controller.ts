@@ -84,9 +84,17 @@ export async function getById(req: Request<{ id: string }>, res: Response, next:
   }
 }
 
-export async function getMap(_req: Request, res: Response, next: NextFunction): Promise<void> {
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function getMap(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const sectors = await sectorService.getMap();
+    const raw = req.query.season_id;
+    let seasonId: string | undefined;
+    if (typeof raw === 'string' && raw.length > 0) {
+      if (!UUID_REGEX.test(raw)) throw new AppError(400, 'Invalid season_id');
+      seasonId = raw;
+    }
+    const sectors = await sectorService.getMap(seasonId);
     res.status(200).json(sectors);
   } catch (error) {
     next(error);

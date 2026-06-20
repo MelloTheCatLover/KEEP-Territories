@@ -6,14 +6,17 @@ import { validateParamId } from '../middleware/validate.middleware';
 
 const router = Router();
 
-router.use(authenticate, requireAdmin);
+router.use(authenticate);
 
+// Any authenticated user can browse all seasons (overview screen). Mutations
+// stay admin-only.
 router.get('/', seasonController.list);
-router.post('/', seasonController.create);
-router.get('/:id', validateParamId, seasonController.getById);
-router.patch('/:id', validateParamId, seasonController.update);
-router.put('/:id/lists', validateParamId, seasonController.setLists);
-router.post('/:id/activate', validateParamId, seasonController.activate);
-router.delete('/:id', validateParamId, seasonController.remove);
+
+router.post('/', requireAdmin, seasonController.create);
+router.get('/:id', requireAdmin, validateParamId, seasonController.getById);
+router.patch('/:id', requireAdmin, validateParamId, seasonController.update);
+router.put('/:id/lists', requireAdmin, validateParamId, seasonController.setLists);
+router.post('/:id/activate', requireAdmin, validateParamId, seasonController.activate);
+router.delete('/:id', requireAdmin, validateParamId, seasonController.remove);
 
 export default router;

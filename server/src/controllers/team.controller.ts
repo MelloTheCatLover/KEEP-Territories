@@ -68,9 +68,17 @@ export async function transferCaptain(req: Request, res: Response, next: NextFun
   }
 }
 
-export async function getAll(_req: Request, res: Response, next: NextFunction): Promise<void> {
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function getAll(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const teams = await teamService.getAll();
+    const raw = req.query.season_id;
+    let seasonId: string | undefined;
+    if (typeof raw === 'string' && raw.length > 0) {
+      if (!UUID_REGEX.test(raw)) throw new AppError(400, 'Invalid season_id');
+      seasonId = raw;
+    }
+    const teams = await teamService.getAll(seasonId);
     res.status(200).json(teams);
   } catch (error) {
     next(error);
