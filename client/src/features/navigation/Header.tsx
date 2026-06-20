@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 const navLinks = [
   { to: '/map', label: 'Карта' },
   { to: '/team', label: 'Команда' },
+  { to: '/seasons', label: 'Смены' },
   { to: '/admin', label: 'Админ', adminOnly: true },
 ];
 
