@@ -14,7 +14,8 @@ export function LoginPage() {
 
   function validate() {
     const errors: { email?: string; password?: string } = {};
-    if (!email.includes('@')) errors.email = 'Неверный email';
+    // Accept either an email or an issued login handle (e.g. "petrov-petr").
+    if (email.trim().length === 0) errors.email = 'Введите email или логин';
     if (password.length < 8) errors.password = 'Минимум 8 символов';
     return errors;
   }
@@ -48,11 +49,11 @@ export function LoginPage() {
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <FormField
-            label="Email"
+            label="Email или логин"
             htmlFor="email"
             error={fieldErrors.email}
-            type="email"
-            autoComplete="email"
+            type="text"
+            autoComplete="username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={isSubmitting}
