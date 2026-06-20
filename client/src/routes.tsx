@@ -13,6 +13,8 @@ import { AdminTeamsPage } from './features/admin/AdminTeamsPage';
 import { AdminHubPage } from './features/admin/AdminHubPage';
 import { AdminTrophiesPage } from './features/admin/AdminTrophiesPage';
 import { AdminSectorTasksPage } from './features/admin/AdminSectorTasksPage';
+import { AdminSeasonsPage } from './features/admin/AdminSeasonsPage';
+import { AdminChildrenListsPage } from './features/admin/AdminChildrenListsPage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
 import { GuestRoute } from './features/auth/GuestRoute';
 import { AppLayout } from './shared/ui/AppLayout';
@@ -54,6 +56,8 @@ export const router = createBrowserRouter([
       { path: '/admin/submissions', element: <AdminSubmissionsPage /> },
       { path: '/admin/trophies', element: <AdminTrophiesPage /> },
       { path: '/admin/sector-tasks', element: <AdminSectorTasksPage /> },
+      { path: '/admin/seasons', element: <AdminSeasonsPage /> },
+      { path: '/admin/children-lists', element: <AdminChildrenListsPage /> },
     ],
   },
   { path: '*', element: <NotFound /> },
