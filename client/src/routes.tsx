@@ -1,6 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from './features/auth/LoginPage';
-import { RegisterPage } from './features/auth/RegisterPage';
 import { ProfilePage } from './features/auth/ProfilePage';
 import { MapPage } from './features/map/MapPage';
 import { SectorPage } from './features/map/SectorPage';
@@ -28,14 +27,6 @@ export const router = createBrowserRouter([
     element: (
       <GuestRoute>
         <LoginPage />
-      </GuestRoute>
-    ),
-  },
-  {
-    path: '/register',
-    element: (
-      <GuestRoute>
-        <RegisterPage />
       </GuestRoute>
     ),
   },

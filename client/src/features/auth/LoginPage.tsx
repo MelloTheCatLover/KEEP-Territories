@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { ApiError } from '../../shared/api/client';
 import { Card, FormField, ErrorBanner, Button } from '../../shared/ui';
@@ -77,8 +76,7 @@ export function LoginPage() {
         </form>
 
         <p className="text-sm text-neutral-700 text-center mt-5">
-          Нет аккаунта?{' '}
-          <Link to="/register" className="text-brand-400 hover:text-brand-300">Зарегистрируйтесь</Link>
+          Логин и пароль выдаёт вожатый.
         </p>
       </Card>
     </main>
