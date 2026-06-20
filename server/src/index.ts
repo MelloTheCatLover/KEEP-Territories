@@ -15,6 +15,8 @@ import teamStatsRoutes from './routes/team-stats.routes';
 import gameSettingsRoutes from './routes/game-settings.routes';
 import difficultyRoutes from './routes/difficulty.routes';
 import trophyRoutes from './routes/trophy.routes';
+import seasonRoutes from './routes/season.routes';
+import childrenListRoutes from './routes/children-list.routes';
 import { errorHandler } from './middleware/error.middleware';
 import { AppError } from './types/errors';
 
@@ -44,6 +46,8 @@ app.use('/api/teams/:teamId/stats', teamStatsRoutes);
 app.use('/api/settings', gameSettingsRoutes);
 app.use('/api/difficulties', difficultyRoutes);
 app.use('/api/trophies', trophyRoutes);
+app.use('/api/seasons', seasonRoutes);
+app.use('/api/children-lists', childrenListRoutes);
 
 // Single-process deploy (shared hosting): serve built SPA from ./public.
 // Harmless if ./public doesn't exist (Docker/Caddy deploy serves static elsewhere).
