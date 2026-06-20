@@ -1,5 +1,6 @@
 import { pool } from '../config/db';
 import { AppError } from '../types/errors';
+import { getActiveSeasonId } from './season.service';
 import {
   OverallEntry,
   TrophiesResponse,
@@ -172,6 +173,7 @@ const METRICS_QUERY = `
     ), 0)::int AS recaptures,
     0::int AS special_events
   FROM teams t
+  WHERE t.season_id = $1
   ORDER BY t.created_at ASC
 `;
 
@@ -308,7 +310,8 @@ export async function getTrophies(userId: string): Promise<TrophiesResponse> {
   const { team_id: viewerTeamId, role } = userRes.rows[0];
   const showAllValues = role === 'admin';
 
-  const teamsRes = await pool.query<TeamMetric>(METRICS_QUERY);
+  const seasonId = await getActiveSeasonId();
+  const teamsRes = await pool.query<TeamMetric>(METRICS_QUERY, [seasonId]);
   const teams = teamsRes.rows;
   if (teams.length === 0) {
     return { trophies: [], overall: [] };

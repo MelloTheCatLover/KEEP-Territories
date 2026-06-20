@@ -3,6 +3,7 @@ import { Sector, SectorPublic, CreateSectorDto, SectorStatus } from '../types/se
 import { DifficultyLevel, DifficultySlug } from '../types/difficulty';
 import { AppError } from '../types/errors';
 import { PoolClient } from 'pg';
+import { getActiveSeasonId } from './season.service';
 
 type SectorRow = Sector & {
   difficulty_name: string;
@@ -54,7 +55,11 @@ function rowToSectorPublic(row: SectorRow): SectorPublic {
   };
 }
 
-async function insertSector(client: PoolClient, dto: CreateSectorDto): Promise<Sector> {
+async function insertSector(
+  client: PoolClient,
+  dto: CreateSectorDto,
+  seasonId: string,
+): Promise<Sector> {
   const diffCheck = await client.query(
     'SELECT id FROM difficulty_levels WHERE id = $1',
     [dto.difficulty_id]
@@ -74,10 +79,10 @@ async function insertSector(client: PoolClient, dto: CreateSectorDto): Promise<S
   }
 
   const result = await client.query<Sector>(
-    `INSERT INTO sectors (number, q, r, difficulty_id, task_id, status)
-     VALUES ($1, $2, $3, $4, $5, 'free')
+    `INSERT INTO sectors (number, q, r, difficulty_id, task_id, status, season_id)
+     VALUES ($1, $2, $3, $4, $5, 'free', $6)
      RETURNING *`,
-    [dto.number, dto.q, dto.r, dto.difficulty_id, dto.task_id || null]
+    [dto.number, dto.q, dto.r, dto.difficulty_id, dto.task_id || null, seasonId]
   );
 
   return result.rows[0];
@@ -89,7 +94,8 @@ export async function create(dto: CreateSectorDto): Promise<SectorPublic> {
   try {
     await client.query('BEGIN');
 
-    const inserted = await insertSector(client, dto);
+    const seasonId = await getActiveSeasonId(client);
+    const inserted = await insertSector(client, dto, seasonId);
     insertedId = inserted.id;
 
     await client.query('COMMIT');
@@ -107,9 +113,11 @@ export async function create(dto: CreateSectorDto): Promise<SectorPublic> {
   return rowToSectorPublic(result.rows[0]);
 }
 
-export async function getAll(): Promise<SectorPublic[]> {
+export async function getAll(seasonId?: string): Promise<SectorPublic[]> {
+  const sid = seasonId ?? (await getActiveSeasonId());
   const result = await pool.query<SectorRow>(
-    `${SECTOR_SELECT} ORDER BY dl.slug ASC, s.number ASC`
+    `${SECTOR_SELECT} WHERE s.season_id = $1 ORDER BY dl.slug ASC, s.number ASC`,
+    [sid]
   );
   return result.rows.map(rowToSectorPublic);
 }
@@ -125,8 +133,8 @@ export async function getById(sectorId: string): Promise<SectorPublic> {
   return rowToSectorPublic(result.rows[0]);
 }
 
-export async function getMap(): Promise<SectorPublic[]> {
-  return getAll();
+export async function getMap(seasonId?: string): Promise<SectorPublic[]> {
+  return getAll(seasonId);
 }
 
 export async function createBulk(sectors: CreateSectorDto[]): Promise<SectorPublic[]> {
@@ -134,8 +142,9 @@ export async function createBulk(sectors: CreateSectorDto[]): Promise<SectorPubl
   try {
     await client.query('BEGIN');
 
+    const seasonId = await getActiveSeasonId(client);
     for (const dto of sectors) {
-      await insertSector(client, dto);
+      await insertSector(client, dto, seasonId);
     }
 
     await client.query('COMMIT');

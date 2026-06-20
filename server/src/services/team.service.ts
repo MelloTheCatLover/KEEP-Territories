@@ -3,6 +3,7 @@ import { Team, CreateTeamDto } from '../types/team';
 import { TeamFullStats } from '../types/team-stats';
 import { AppError } from '../types/errors';
 import * as teamStatsService from './team-stats.service';
+import { getActiveSeasonId } from './season.service';
 
 const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
 
@@ -44,6 +45,8 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
   try {
     await client.query('BEGIN');
 
+    const seasonId = await getActiveSeasonId(client);
+
     const userCheck = await client.query(
       'SELECT team_id FROM users WHERE id = $1',
       [userId]
@@ -56,8 +59,8 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
     }
 
     const nameCheck = await client.query(
-      'SELECT id FROM teams WHERE name = $1',
-      [dto.name]
+      'SELECT id FROM teams WHERE name = $1 AND season_id = $2',
+      [dto.name, seasonId]
     );
     if (nameCheck.rows.length > 0) {
       throw new AppError(400, 'Team with this name already exists');
@@ -67,8 +70,8 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
     assertPaletteColor(normalizedColor);
     if (normalizedColor != null) {
       const colorCheck = await client.query(
-        'SELECT id FROM teams WHERE color = $1',
-        [normalizedColor]
+        'SELECT id FROM teams WHERE color = $1 AND season_id = $2',
+        [normalizedColor, seasonId]
       );
       if (colorCheck.rows.length > 0) {
         throw new AppError(409, 'This color is already taken by another team');
@@ -80,8 +83,9 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
       is_home_base: boolean;
       status: string;
       home_team_id: string | null;
+      season_id: string;
     }>(
-      `SELECT id, is_home_base, status, home_team_id
+      `SELECT id, is_home_base, status, home_team_id, season_id
        FROM sectors
        WHERE id = $1
        FOR UPDATE`,
@@ -91,6 +95,9 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
       throw new AppError(404, 'Home sector not found');
     }
     const sector = sectorResult.rows[0];
+    if (sector.season_id !== seasonId) {
+      throw new AppError(400, 'Home sector belongs to another season');
+    }
     if (!sector.is_home_base) {
       throw new AppError(400, 'Selected sector is not a home base');
     }
@@ -99,10 +106,10 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
     }
 
     const teamResult = await client.query<Team>(
-      `INSERT INTO teams (name, color)
-       VALUES ($1, $2)
+      `INSERT INTO teams (name, color, season_id)
+       VALUES ($1, $2, $3)
        RETURNING *`,
-      [dto.name, normalizedColor]
+      [dto.name, normalizedColor, seasonId]
     );
     const team = teamResult.rows[0];
 
@@ -153,6 +160,8 @@ export async function join(teamId: string, userId: string): Promise<TeamFullStat
   try {
     await client.query('BEGIN');
 
+    const seasonId = await getActiveSeasonId(client);
+
     const userCheck = await client.query(
       'SELECT team_id FROM users WHERE id = $1',
       [userId]
@@ -164,12 +173,29 @@ export async function join(teamId: string, userId: string): Promise<TeamFullStat
       throw new AppError(400, 'You are already in a team');
     }
 
-    const teamCheck = await client.query(
-      'SELECT id FROM teams WHERE id = $1',
+    const teamCheck = await client.query<{ season_id: string }>(
+      'SELECT season_id FROM teams WHERE id = $1',
       [teamId]
     );
     if (teamCheck.rows.length === 0) {
       throw new AppError(404, 'Team not found');
+    }
+    if (teamCheck.rows[0].season_id !== seasonId) {
+      throw new AppError(400, 'Эта команда не из активного сезона');
+    }
+
+    // Only children enrolled in a list linked to the active season may join a
+    // team. Everyone else can observe the map but not play.
+    const enrolled = await client.query(
+      `SELECT 1
+         FROM roster_entries re
+         JOIN season_lists sl ON sl.list_id = re.list_id
+        WHERE re.user_id = $1 AND sl.season_id = $2
+        LIMIT 1`,
+      [userId, seasonId]
+    );
+    if (enrolled.rows.length === 0) {
+      throw new AppError(403, 'Вас нет в списках этого сезона — можно только наблюдать');
     }
 
     await client.query(
@@ -308,7 +334,11 @@ export async function transferCaptain(currentUserId: string, newCaptainId: strin
 }
 
 export async function getAll(): Promise<Team[]> {
-  const result = await pool.query<Team>('SELECT * FROM teams ORDER BY created_at DESC');
+  const seasonId = await getActiveSeasonId();
+  const result = await pool.query<Team>(
+    'SELECT * FROM teams WHERE season_id = $1 ORDER BY created_at DESC',
+    [seasonId]
+  );
   return result.rows;
 }
 

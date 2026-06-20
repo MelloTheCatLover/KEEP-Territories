@@ -3,6 +3,7 @@ import { pool } from '../config/db';
 import { AppError } from '../types/errors';
 import { SectorPublic } from '../types/sector';
 import { DifficultyLevel, DifficultySlug } from '../types/difficulty';
+import { getActiveSeasonId } from './season.service';
 
 export type RingDifficulty = Exclude<DifficultySlug, 'core'>;
 export interface RingConfig {
@@ -185,9 +186,10 @@ function shuffle<T>(arr: T[]): T[] {
   return out;
 }
 
-async function assignTasksAfterGeneration(client: PoolClient): Promise<void> {
+async function assignTasksAfterGeneration(client: PoolClient, seasonId: string): Promise<void> {
   const sectorsRes = await client.query<{ id: string; difficulty_id: string }>(
-    'SELECT id, difficulty_id FROM sectors'
+    'SELECT id, difficulty_id FROM sectors WHERE season_id = $1',
+    [seasonId]
   );
   const tasksRes = await client.query<{ id: string; difficulty_id: string }>(
     'SELECT id, difficulty_id FROM tasks'
@@ -242,8 +244,11 @@ export async function generateMap(config: MapGeneratorConfig = defaultMapConfig(
   const radius = config.rings.length;
   const homeBaseSet = new Set(homeBaseCoordsForRadius(radius).map((c) => `${c.q},${c.r}`));
 
+  const seasonId = await getActiveSeasonId();
+
   const existing = await pool.query<{ count: string }>(
-    'SELECT COUNT(*)::text AS count FROM sectors'
+    'SELECT COUNT(*)::text AS count FROM sectors WHERE season_id = $1',
+    [seasonId]
   );
   if (parseInt(existing.rows[0].count, 10) > 0) {
     throw new AppError(
@@ -292,18 +297,20 @@ export async function generateMap(config: MapGeneratorConfig = defaultMapConfig(
     const values: string[] = [];
     const params: Array<string | number | boolean | null> = [];
     rows.forEach((row, i) => {
-      const base = i * 5;
-      values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`);
-      params.push(row.number, row.q, row.r, row.difficultyId, row.isHome);
+      const base = i * 6;
+      values.push(
+        `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`
+      );
+      params.push(row.number, row.q, row.r, row.difficultyId, row.isHome, seasonId);
     });
 
     await client.query(
-      `INSERT INTO sectors (number, q, r, difficulty_id, is_home_base)
+      `INSERT INTO sectors (number, q, r, difficulty_id, is_home_base, season_id)
        VALUES ${values.join(', ')}`,
       params
     );
 
-    await assignTasksAfterGeneration(client);
+    await assignTasksAfterGeneration(client, seasonId);
 
     await client.query('COMMIT');
   } catch (error) {
@@ -321,13 +328,19 @@ export async function generateMap(config: MapGeneratorConfig = defaultMapConfig(
             dl.experience_reward AS difficulty_experience_reward
      FROM sectors s
      JOIN difficulty_levels dl ON s.difficulty_id = dl.id
-     ORDER BY dl.slug ASC, s.number ASC`
+     WHERE s.season_id = $1
+     ORDER BY dl.slug ASC, s.number ASC`,
+    [seasonId]
   );
   return result.rows.map(rowToSectorPublic);
 }
 
 export async function countTeams(): Promise<number> {
-  const r = await pool.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM teams');
+  const seasonId = await getActiveSeasonId();
+  const r = await pool.query<{ count: string }>(
+    'SELECT COUNT(*)::text AS count FROM teams WHERE season_id = $1',
+    [seasonId]
+  );
   return parseInt(r.rows[0].count, 10);
 }
 
@@ -336,16 +349,36 @@ export async function deleteAllSectors(): Promise<{ deleted_count: number; delet
   try {
     await client.query('BEGIN');
 
-    await client.query('DELETE FROM task_submissions');
-    await client.query('DELETE FROM sector_captures');
-    await client.query('DELETE FROM sector_tasks');
-
-    const sectors = await client.query('DELETE FROM sectors RETURNING id');
+    const seasonId = await getActiveSeasonId(client);
+    const seasonSectors = `(SELECT id FROM sectors WHERE season_id = $1)`;
 
     await client.query(
-      `UPDATE users SET team_id = NULL, team_role = NULL WHERE team_id IS NOT NULL`
+      `DELETE FROM task_submissions WHERE sector_id IN ${seasonSectors}`,
+      [seasonId]
     );
-    const teams = await client.query('DELETE FROM teams RETURNING id');
+    await client.query(
+      `DELETE FROM sector_captures WHERE sector_id IN ${seasonSectors}`,
+      [seasonId]
+    );
+    await client.query(
+      `DELETE FROM sector_tasks WHERE sector_id IN ${seasonSectors}`,
+      [seasonId]
+    );
+
+    const sectors = await client.query(
+      'DELETE FROM sectors WHERE season_id = $1 RETURNING id',
+      [seasonId]
+    );
+
+    await client.query(
+      `UPDATE users SET team_id = NULL, team_role = NULL
+       WHERE team_id IN (SELECT id FROM teams WHERE season_id = $1)`,
+      [seasonId]
+    );
+    const teams = await client.query(
+      'DELETE FROM teams WHERE season_id = $1 RETURNING id',
+      [seasonId]
+    );
 
     await client.query('COMMIT');
     return {
