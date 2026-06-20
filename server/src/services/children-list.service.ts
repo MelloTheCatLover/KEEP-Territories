@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import { pool } from '../config/db';
 import { AppError } from '../types/errors';
 import { ChildrenList, RosterEntry } from '../types/season';
+import { encryptSecret, decryptSecret } from '../config/crypto';
 
 // Codes are handed to children to claim their account at registration. Avoid
 // ambiguous characters (0/O, 1/I) so they are easy to read off a printed list.
@@ -95,7 +96,8 @@ export async function getEntries(listId: string): Promise<RosterEntry[]> {
       ORDER BY re.full_name ASC`,
     [listId],
   );
-  return res.rows;
+  // Stored encrypted at rest; decrypt for the admin who requested the list.
+  return res.rows.map((r) => ({ ...r, issued_password: decryptSecret(r.issued_password) }));
 }
 
 export async function addEntry(
@@ -212,7 +214,7 @@ export async function issueAccount(entryId: string): Promise<IssuedAccount> {
 
       await client.query(
         'UPDATE roster_entries SET user_id = $1, issued_password = $2 WHERE id = $3',
-        [userId, password, entryId],
+        [userId, encryptSecret(password), entryId],
       );
       await client.query('COMMIT');
 
