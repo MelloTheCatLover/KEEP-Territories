@@ -9,7 +9,7 @@ type AuthContextValue = {
   status: AuthStatus;
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, username: string, password: string) => Promise<void>;
+  register: (email: string, username: string, password: string, code?: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 };
@@ -45,8 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('authenticated');
   }
 
-  async function register(email: string, username: string, password: string) {
-    const res = await registerRequest({ email, username, password });
+  async function register(email: string, username: string, password: string, code?: string) {
+    const res = await registerRequest({ email, username, password, code: code || undefined });
     setAuthToken(res.token);
     setUser(res.user);
     setStatus('authenticated');

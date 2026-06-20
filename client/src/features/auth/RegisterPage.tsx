@@ -10,6 +10,7 @@ export function RegisterPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [code, setCode] = useState('');
   const [fieldErrors, setFieldErrors] = useState<{
     email?: string;
     username?: string;
@@ -37,7 +38,7 @@ export function RegisterPage() {
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      await register(email, username, password);
+      await register(email, username, password, code.trim() || undefined);
     } catch (err) {
       if (err instanceof ApiError) {
         setSubmitError(err.message);
@@ -96,6 +97,21 @@ export function RegisterPage() {
             onChange={(e) => setPasswordConfirm(e.target.value)}
             disabled={isSubmitting}
           />
+
+          <div>
+            <FormField
+              label="Код участника (необязательно)"
+              htmlFor="reg-code"
+              type="text"
+              autoComplete="off"
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              disabled={isSubmitting}
+            />
+            <p className="text-xs text-neutral-700 mt-1">
+              Выдаётся вожатым. Без кода вы сможете только наблюдать за картой.
+            </p>
+          </div>
 
           <ErrorBanner message={submitError} />
 
