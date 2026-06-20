@@ -14,6 +14,8 @@ export type RosterEntry = {
   code: string;
   user_id: string | null;
   username: string | null;
+  login: string | null;
+  issued_password: string | null;
   created_at: string;
 };
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { AlertCircle, KeyRound, Loader2, Plus, RefreshCw, Trash2, UserPlus } from 'lucide-react';
+import { AlertCircle, Download, KeyRound, Loader2, Plus, RefreshCw, Trash2, UserPlus } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner, Input, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -232,9 +232,19 @@ export function AdminChildrenListsPage() {
 
       {selected && (
         <Card>
-          <h2 className="font-display text-heading-sm text-neutral-1000 mb-3">
-            Дети в списке «{selected.name}»
-          </h2>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h2 className="font-display text-heading-sm text-neutral-1000">
+              Дети в списке «{selected.name}»
+            </h2>
+            {entries && entries.length > 0 && (
+              <Button variant="secondary" onClick={() => exportCsv(selected.name, entries)}>
+                <span className="flex items-center gap-2">
+                  <Download className="w-4 h-4" />
+                  Скачать CSV
+                </span>
+              </Button>
+            )}
+          </div>
 
           <form onSubmit={handleAddChild} className="flex items-end gap-3 mb-4">
             <div className="flex-1">
@@ -261,8 +271,18 @@ export function AdminChildrenListsPage() {
             <ul className="divide-y divide-neutral-300">
               {entries.map((entry) => (
                 <li key={entry.id} className="flex items-center justify-between gap-3 py-2">
-                  <span className="text-sm text-neutral-1000">{entry.full_name}</span>
-                  <div className="flex items-center gap-3">
+                  <div className="min-w-0">
+                    <span className="text-sm text-neutral-1000">{entry.full_name}</span>
+                    {entry.login && (
+                      <div className="text-xs text-neutral-700 mt-0.5 flex flex-wrap gap-x-3 font-mono">
+                        <span>логин: <span className="text-neutral-1000">{entry.login}</span></span>
+                        {entry.issued_password && (
+                          <span>пароль: <span className="text-neutral-1000">{entry.issued_password}</span></span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
                     <code className="font-mono text-sm px-2 py-0.5 rounded-sm bg-neutral-200 text-neutral-1000">
                       {entry.code}
                     </code>
@@ -310,6 +330,31 @@ export function AdminChildrenListsPage() {
       {issued && <CredentialsModal issued={issued} onClose={() => setIssued(null)} />}
     </div>
   );
+}
+
+function csvCell(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function exportCsv(listName: string, entries: RosterEntry[]): void {
+  const header = ['ФИО', 'Логин', 'Пароль', 'Аккаунт'];
+  const rows = entries.map((e) =>
+    [
+      e.full_name,
+      e.login ?? '',
+      e.issued_password ?? '',
+      e.user_id ? 'есть' : 'нет',
+    ].map(csvCell).join(';'),
+  );
+  // BOM + ';' so Excel (RU locale) opens it correctly.
+  const csv = '﻿' + [header.map(csvCell).join(';'), ...rows].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${listName.replace(/[^\p{L}\p{N}_-]+/gu, '_')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function CredentialsModal({

@@ -40,5 +40,9 @@ export interface RosterEntry {
   user_id: string | null;
   /** Username of the account that claimed this entry, null if unclaimed. */
   username: string | null;
+  /** Login (email) of the linked account, null if unclaimed. */
+  login: string | null;
+  /** Plaintext password for admin-issued accounts, null otherwise. */
+  issued_password: string | null;
   created_at: string;
 }

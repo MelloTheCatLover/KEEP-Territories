@@ -87,7 +87,8 @@ export async function getEntries(listId: string): Promise<RosterEntry[]> {
   }
   const res = await pool.query<RosterEntry>(
     `SELECT re.id, re.list_id, re.full_name, re.code, re.user_id,
-            u.username AS username, re.created_at
+            u.username AS username, u.email AS login,
+            re.issued_password, re.created_at
        FROM roster_entries re
        LEFT JOIN users u ON u.id = re.user_id
       WHERE re.list_id = $1
@@ -121,14 +122,16 @@ export async function addEntry(
   for (let attempt = 0; attempt < 6; attempt++) {
     const entryCode = wantedCode || randomCode();
     try {
-      const res = await pool.query<Omit<RosterEntry, 'username'>>(
+      const res = await pool.query<
+        Omit<RosterEntry, 'username' | 'login' | 'issued_password'>
+      >(
         `INSERT INTO roster_entries (list_id, full_name, code)
          VALUES ($1, $2, $3)
          RETURNING id, list_id, full_name, code, user_id, created_at`,
         [listId, name, entryCode],
       );
-      // A freshly added entry is always unclaimed, so no username yet.
-      return { ...res.rows[0], username: null };
+      // A freshly added entry is always unclaimed, so no account yet.
+      return { ...res.rows[0], username: null, login: null, issued_password: null };
     } catch (err) {
       const e = err as { code?: string };
       if (e.code === '23505') {
@@ -158,11 +161,14 @@ export interface IssuedAccount {
 
 /**
  * Create an account for a roster entry and link it. Returns the generated
- * login + plaintext password once (it is stored only hashed) so the admin can
- * hand the credentials to the child. The entry must not already be claimed.
+ * login + plaintext password so the admin can hand the credentials to the
+ * child; the password is also stored on the entry for later lookup/export.
+ * The entry must not already be claimed.
  */
 export async function issueAccount(entryId: string): Promise<IssuedAccount> {
-  const entryRes = await pool.query<Omit<RosterEntry, 'username'>>(
+  const entryRes = await pool.query<
+    Omit<RosterEntry, 'username' | 'login' | 'issued_password'>
+  >(
     'SELECT id, list_id, full_name, code, user_id, created_at FROM roster_entries WHERE id = $1',
     [entryId],
   );
@@ -204,13 +210,22 @@ export async function issueAccount(entryId: string): Promise<IssuedAccount> {
       );
       const userId = userRes.rows[0].id;
 
-      await client.query('UPDATE roster_entries SET user_id = $1 WHERE id = $2', [userId, entryId]);
+      await client.query(
+        'UPDATE roster_entries SET user_id = $1, issued_password = $2 WHERE id = $3',
+        [userId, password, entryId],
+      );
       await client.query('COMMIT');
 
       return {
         login,
         password,
-        entry: { ...entry, user_id: userId, username: login },
+        entry: {
+          ...entry,
+          user_id: userId,
+          username: login,
+          login,
+          issued_password: password,
+        },
       };
     } catch (err) {
       await client.query('ROLLBACK');
