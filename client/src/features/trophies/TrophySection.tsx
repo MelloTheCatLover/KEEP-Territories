@@ -99,7 +99,7 @@ function TrophyCard({ trophy }: { trophy: TrophyRanking }) {
   const winners = trophy.entries.filter((e) => e.place === 1);
   const colors = winners
     .map((w) => findTeamColorByHex(w.team_color)?.bright ?? null)
-    .filter((c): c is string => c !== null);
+    .filter((c): c is NonNullable<typeof c> => c !== null);
 
   const fillStyle = buildFillStyle(colors);
 
