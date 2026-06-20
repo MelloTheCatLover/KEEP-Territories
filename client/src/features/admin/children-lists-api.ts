@@ -13,6 +13,7 @@ export type RosterEntry = {
   full_name: string;
   code: string;
   user_id: string | null;
+  username: string | null;
   created_at: string;
 };
 

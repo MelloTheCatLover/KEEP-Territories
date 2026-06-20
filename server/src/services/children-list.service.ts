@@ -53,10 +53,12 @@ export async function getEntries(listId: string): Promise<RosterEntry[]> {
     throw new AppError(404, 'Список не найден');
   }
   const res = await pool.query<RosterEntry>(
-    `SELECT id, list_id, full_name, code, user_id, created_at
-       FROM roster_entries
-      WHERE list_id = $1
-      ORDER BY full_name ASC`,
+    `SELECT re.id, re.list_id, re.full_name, re.code, re.user_id,
+            u.username AS username, re.created_at
+       FROM roster_entries re
+       LEFT JOIN users u ON u.id = re.user_id
+      WHERE re.list_id = $1
+      ORDER BY re.full_name ASC`,
     [listId],
   );
   return res.rows;
@@ -86,13 +88,14 @@ export async function addEntry(
   for (let attempt = 0; attempt < 6; attempt++) {
     const entryCode = wantedCode || randomCode();
     try {
-      const res = await pool.query<RosterEntry>(
+      const res = await pool.query<Omit<RosterEntry, 'username'>>(
         `INSERT INTO roster_entries (list_id, full_name, code)
          VALUES ($1, $2, $3)
          RETURNING id, list_id, full_name, code, user_id, created_at`,
         [listId, name, entryCode],
       );
-      return res.rows[0];
+      // A freshly added entry is always unclaimed, so no username yet.
+      return { ...res.rows[0], username: null };
     } catch (err) {
       const e = err as { code?: string };
       if (e.code === '23505') {

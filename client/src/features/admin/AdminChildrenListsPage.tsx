@@ -250,7 +250,9 @@ export function AdminChildrenListsPage() {
                     <span
                       className={`text-xs ${entry.user_id ? 'text-success-text' : 'text-neutral-700'}`}
                     >
-                      {entry.user_id ? 'привязан' : 'свободен'}
+                      {entry.user_id
+                        ? `привязан${entry.username ? ` · @${entry.username}` : ''}`
+                        : 'свободен'}
                     </span>
                     <button
                       type="button"

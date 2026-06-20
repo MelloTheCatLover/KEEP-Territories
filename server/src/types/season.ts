@@ -38,5 +38,7 @@ export interface RosterEntry {
   full_name: string;
   code: string;
   user_id: string | null;
+  /** Username of the account that claimed this entry, null if unclaimed. */
+  username: string | null;
   created_at: string;
 }
