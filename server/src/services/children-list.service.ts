@@ -1,3 +1,4 @@
+import bcrypt from 'bcrypt';
 import { pool } from '../config/db';
 import { AppError } from '../types/errors';
 import { ChildrenList, RosterEntry } from '../types/season';
@@ -13,6 +14,38 @@ function randomCode(): string {
     out += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
   }
   return out;
+}
+
+const SALT_ROUNDS = 12;
+// Readable password alphabet (no ambiguous chars) — handed to children on paper.
+const PWD_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
+const PWD_LENGTH = 8;
+
+function randomPassword(): string {
+  let out = '';
+  for (let i = 0; i < PWD_LENGTH; i++) {
+    out += PWD_ALPHABET[Math.floor(Math.random() * PWD_ALPHABET.length)];
+  }
+  return out;
+}
+
+const TRANSLIT: Record<string, string> = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z',
+  и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r',
+  с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch',
+  ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+};
+
+/** Build a latin handle from a full name, e.g. "Петров Пётр" → "petrov-petr". */
+function handleFromName(fullName: string): string {
+  const latin = fullName
+    .toLowerCase()
+    .split('')
+    .map((ch) => (ch in TRANSLIT ? TRANSLIT[ch] : ch))
+    .join('')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return latin || 'user';
 }
 
 export async function listAll(): Promise<ChildrenList[]> {
@@ -115,4 +148,79 @@ export async function removeEntry(entryId: string): Promise<void> {
   if (res.rowCount === 0) {
     throw new AppError(404, 'Запись не найдена');
   }
+}
+
+export interface IssuedAccount {
+  login: string;
+  password: string;
+  entry: RosterEntry;
+}
+
+/**
+ * Create an account for a roster entry and link it. Returns the generated
+ * login + plaintext password once (it is stored only hashed) so the admin can
+ * hand the credentials to the child. The entry must not already be claimed.
+ */
+export async function issueAccount(entryId: string): Promise<IssuedAccount> {
+  const entryRes = await pool.query<Omit<RosterEntry, 'username'>>(
+    'SELECT id, list_id, full_name, code, user_id, created_at FROM roster_entries WHERE id = $1',
+    [entryId],
+  );
+  if (entryRes.rows.length === 0) {
+    throw new AppError(404, 'Запись не найдена');
+  }
+  const entry = entryRes.rows[0];
+  if (entry.user_id) {
+    throw new AppError(409, 'У этого ребёнка уже есть аккаунт');
+  }
+
+  const base = handleFromName(entry.full_name).slice(0, 30);
+  const password = randomPassword();
+  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const suffix = attempt === 0 ? '' : `-${randomCode().slice(0, 3).toLowerCase()}`;
+    const login = `${base}${suffix}`;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const lock = await client.query<{ user_id: string | null }>(
+        'SELECT user_id FROM roster_entries WHERE id = $1 FOR UPDATE',
+        [entryId],
+      );
+      if (lock.rows.length === 0) {
+        throw new AppError(404, 'Запись не найдена');
+      }
+      if (lock.rows[0].user_id) {
+        throw new AppError(409, 'У этого ребёнка уже есть аккаунт');
+      }
+
+      const userRes = await client.query<{ id: string }>(
+        `INSERT INTO users (email, username, password_hash, full_name)
+         VALUES ($1, $1, $2, $3)
+         RETURNING id`,
+        [login, passwordHash, entry.full_name],
+      );
+      const userId = userRes.rows[0].id;
+
+      await client.query('UPDATE roster_entries SET user_id = $1 WHERE id = $2', [userId, entryId]);
+      await client.query('COMMIT');
+
+      return {
+        login,
+        password,
+        entry: { ...entry, user_id: userId, username: login },
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      if (err instanceof AppError) throw err;
+      const e = err as { code?: string };
+      if (e.code === '23505') continue; // login/username taken — retry with a new suffix
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+  throw new AppError(500, 'Не удалось сгенерировать уникальный логин');
 }

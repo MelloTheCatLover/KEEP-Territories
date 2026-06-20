@@ -69,3 +69,16 @@ export async function removeEntry(
     next(error);
   }
 }
+
+export async function issueAccount(
+  req: Request<{ id: string; entryId: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const result = await childrenListService.issueAccount(req.params.entryId);
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+}

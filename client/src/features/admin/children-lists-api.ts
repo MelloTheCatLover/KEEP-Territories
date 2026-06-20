@@ -47,3 +47,13 @@ export function addEntry(
 export function deleteEntry(listId: string, entryId: string): Promise<void> {
   return api.delete<void>(`/children-lists/${listId}/entries/${entryId}`);
 }
+
+export type IssuedAccount = {
+  login: string;
+  password: string;
+  entry: RosterEntry;
+};
+
+export function issueAccount(listId: string, entryId: string): Promise<IssuedAccount> {
+  return api.post<IssuedAccount>(`/children-lists/${listId}/entries/${entryId}/account`);
+}

@@ -29,5 +29,6 @@ router.delete('/:id', validateParamId, childrenListController.remove);
 router.get('/:id/entries', validateParamId, childrenListController.getEntries);
 router.post('/:id/entries', validateParamId, childrenListController.addEntry);
 router.delete('/:id/entries/:entryId', validateEntryParams, childrenListController.removeEntry);
+router.post('/:id/entries/:entryId/account', validateEntryParams, childrenListController.issueAccount);
 
 export default router;

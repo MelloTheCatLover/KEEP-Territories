@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { AlertCircle, Loader2, Plus, RefreshCw, Trash2, UserPlus } from 'lucide-react';
+import { AlertCircle, KeyRound, Loader2, Plus, RefreshCw, Trash2, UserPlus } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner, Input, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -10,8 +10,10 @@ import {
   getEntries,
   addEntry,
   deleteEntry,
+  issueAccount,
   type ChildrenList,
   type RosterEntry,
+  type IssuedAccount,
 } from './children-lists-api';
 
 export function AdminChildrenListsPage() {
@@ -30,6 +32,8 @@ export function AdminChildrenListsPage() {
   const [entriesLoading, setEntriesLoading] = useState(false);
   const [newChildName, setNewChildName] = useState('');
   const [addingChild, setAddingChild] = useState(false);
+  const [issuingId, setIssuingId] = useState<string | null>(null);
+  const [issued, setIssued] = useState<IssuedAccount | null>(null);
 
   const refresh = useCallback(async () => {
     setLoadError(null);
@@ -120,6 +124,21 @@ export function AdminChildrenListsPage() {
       await Promise.all([loadEntries(selectedId), refresh()]);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Ошибка удаления');
+    }
+  }
+
+  async function handleIssueAccount(entryId: string) {
+    if (!selectedId) return;
+    setIssuingId(entryId);
+    setActionError(null);
+    try {
+      const result = await issueAccount(selectedId, entryId);
+      setIssued(result);
+      await loadEntries(selectedId);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Ошибка создания аккаунта');
+    } finally {
+      setIssuingId(null);
     }
   }
 
@@ -254,6 +273,22 @@ export function AdminChildrenListsPage() {
                         ? `привязан${entry.username ? ` · @${entry.username}` : ''}`
                         : 'свободен'}
                     </span>
+                    {!entry.user_id && (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300 disabled:opacity-50"
+                        onClick={() => void handleIssueAccount(entry.id)}
+                        disabled={issuingId === entry.id}
+                        title="Создать аккаунт для ребёнка"
+                      >
+                        {issuingId === entry.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <KeyRound className="w-4 h-4" />
+                        )}
+                        Создать аккаунт
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="text-error hover:opacity-80 p-1"
@@ -271,6 +306,56 @@ export function AdminChildrenListsPage() {
           )}
         </Card>
       )}
+
+      {issued && <CredentialsModal issued={issued} onClose={() => setIssued(null)} />}
+    </div>
+  );
+}
+
+function CredentialsModal({
+  issued,
+  onClose,
+}: {
+  issued: IssuedAccount;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'var(--state-overlay-backdrop)' }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-md shadow-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Аккаунт создан</h2>
+        <p className="text-sm text-neutral-700 mb-4">
+          {issued.entry.full_name}. Передайте эти данные ребёнку — пароль показывается{' '}
+          <span className="text-neutral-1000">только один раз</span>.
+        </p>
+
+        <dl className="text-sm space-y-2 mb-5">
+          <div className="flex justify-between gap-3 items-center">
+            <dt className="text-neutral-700">Логин</dt>
+            <dd className="font-mono px-2 py-0.5 rounded-sm bg-neutral-200 text-neutral-1000">
+              {issued.login}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-3 items-center">
+            <dt className="text-neutral-700">Пароль</dt>
+            <dd className="font-mono px-2 py-0.5 rounded-sm bg-neutral-200 text-neutral-1000">
+              {issued.password}
+            </dd>
+          </div>
+        </dl>
+
+        <div className="flex justify-end">
+          <Button variant="primary" onClick={onClose}>
+            Готово
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
