@@ -7,16 +7,39 @@ export type ChildrenList = {
   entry_count: number;
 };
 
-export type RosterEntry = {
-  id: string;
-  list_id: string;
-  full_name: string;
+export type ListMember = {
+  child_id: string;
   code: string;
+  full_name: string;
   user_id: string | null;
-  username: string | null;
   login: string | null;
   issued_password: string | null;
-  created_at: string;
+  seasons: string[];
+};
+
+export type AddChildResult = {
+  child_id: string;
+  code: string;
+  full_name: string;
+  matched: boolean;
+  login: string | null;
+  seasons: string[];
+};
+
+export type IssuedAccount = {
+  login: string;
+  password: string;
+  child_id: string;
+};
+
+export type ChildDashboardRow = {
+  id: string;
+  code: string;
+  full_name: string;
+  login: string | null;
+  has_account: boolean;
+  lists: string[];
+  seasons: string[];
 };
 
 export function getLists(): Promise<ChildrenList[]> {
@@ -31,31 +54,26 @@ export function deleteList(id: string): Promise<void> {
   return api.delete<void>(`/children-lists/${id}`);
 }
 
-export function getEntries(listId: string): Promise<RosterEntry[]> {
-  return api.get<RosterEntry[]>(`/children-lists/${listId}/entries`);
+export function getMembers(listId: string): Promise<ListMember[]> {
+  return api.get<ListMember[]>(`/children-lists/${listId}/members`);
 }
 
-export function addEntry(
-  listId: string,
-  fullName: string,
-  code?: string,
-): Promise<RosterEntry> {
-  return api.post<RosterEntry>(`/children-lists/${listId}/entries`, {
-    full_name: fullName,
-    code: code || undefined,
-  });
+export function addChild(listId: string, fullName: string): Promise<AddChildResult> {
+  return api.post<AddChildResult>(`/children-lists/${listId}/members`, { full_name: fullName });
 }
 
-export function deleteEntry(listId: string, entryId: string): Promise<void> {
-  return api.delete<void>(`/children-lists/${listId}/entries/${entryId}`);
+export function bulkAdd(listId: string, text: string): Promise<AddChildResult[]> {
+  return api.post<AddChildResult[]>(`/children-lists/${listId}/members/bulk`, { text });
 }
 
-export type IssuedAccount = {
-  login: string;
-  password: string;
-  entry: RosterEntry;
-};
+export function removeMember(listId: string, childId: string): Promise<void> {
+  return api.delete<void>(`/children-lists/${listId}/members/${childId}`);
+}
 
-export function issueAccount(listId: string, entryId: string): Promise<IssuedAccount> {
-  return api.post<IssuedAccount>(`/children-lists/${listId}/entries/${entryId}/account`);
+export function issueAccount(listId: string, childId: string): Promise<IssuedAccount> {
+  return api.post<IssuedAccount>(`/children-lists/${listId}/members/${childId}/account`);
+}
+
+export function getDashboard(): Promise<ChildDashboardRow[]> {
+  return api.get<ChildDashboardRow[]>('/children-lists/dashboard');
 }

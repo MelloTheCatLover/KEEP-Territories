@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { AlertCircle, Map, ClipboardList, BookOpen, Settings, Users, Trophy, Link2, CalendarRange, ListChecks } from 'lucide-react';
+import { AlertCircle, Map, ClipboardList, BookOpen, Settings, Users, Trophy, Link2, CalendarRange, ListChecks, UsersRound } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Card } from '../../shared/ui';
 
@@ -47,7 +47,19 @@ export function AdminHubPage() {
               <ListChecks className="w-6 h-6 text-brand-400 mt-0.5" />
               <div>
                 <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Списки детей</h2>
-                <p className="text-sm text-neutral-700">Дети и коды для регистрации.</p>
+                <p className="text-sm text-neutral-700">Загрузка ФИО, аккаунты, привязка к сменам.</p>
+              </div>
+            </div>
+          </Card>
+        </Link>
+
+        <Link to="/admin/children" className="block">
+          <Card className="hover:border-brand-500 transition-colors">
+            <div className="flex items-start gap-3">
+              <UsersRound className="w-6 h-6 text-brand-400 mt-0.5" />
+              <div>
+                <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Все дети</h2>
+                <p className="text-sm text-neutral-700">Общая база: коды, аккаунты, смены.</p>
               </div>
             </div>
           </Card>
