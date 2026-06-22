@@ -299,6 +299,23 @@ function buildOverall(
   });
 }
 
+async function loadTeamMetrics(seasonId: string): Promise<TeamMetric[]> {
+  const res = await pool.query<TeamMetric>(METRICS_QUERY, [seasonId]);
+  return res.rows;
+}
+
+/**
+ * Overall standings for any season (active or archived). Place 1 is the season
+ * champion. Independent of the viewer — used by team distribution to derive a
+ * child's "winner" category from past seasons.
+ */
+export async function computeOverall(seasonId: string): Promise<OverallEntry[]> {
+  const teams = await loadTeamMetrics(seasonId);
+  if (teams.length === 0) return [];
+  const trophies = TROPHY_DEFS.map((def) => buildTrophy(def, teams, null, true));
+  return buildOverall(teams, trophies);
+}
+
 export async function getTrophies(userId: string): Promise<TrophiesResponse> {
   const userRes = await pool.query<{ team_id: string | null; role: 'admin' | 'student' }>(
     'SELECT team_id, role FROM users WHERE id = $1',
@@ -311,8 +328,7 @@ export async function getTrophies(userId: string): Promise<TrophiesResponse> {
   const showAllValues = role === 'admin';
 
   const seasonId = await getActiveSeasonId();
-  const teamsRes = await pool.query<TeamMetric>(METRICS_QUERY, [seasonId]);
-  const teams = teamsRes.rows;
+  const teams = await loadTeamMetrics(seasonId);
   if (teams.length === 0) {
     return { trophies: [], overall: [] };
   }
