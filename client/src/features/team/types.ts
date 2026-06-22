@@ -48,3 +48,8 @@ export type UpgradeStatPayload = {
 export type LeaveTeamResponse = {
   success: true;
 };
+
+export type SetTeamIdentityPayload = {
+  name?: string;
+  color?: string | null;
+};

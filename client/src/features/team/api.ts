@@ -2,6 +2,7 @@ import { api } from '../../shared/api/client';
 import type {
   CreateTeamPayload,
   LeaveTeamResponse,
+  SetTeamIdentityPayload,
   Team,
   TeamFullStats,
   TransferCaptainPayload,
@@ -26,6 +27,10 @@ export function createTeam(payload: CreateTeamPayload): Promise<TeamFullStats> {
 
 export function joinTeam(teamId: string): Promise<TeamFullStats> {
   return api.post<TeamFullStats>(`/teams/${teamId}/join`);
+}
+
+export function setTeamIdentity(payload: SetTeamIdentityPayload): Promise<TeamFullStats> {
+  return api.patch<TeamFullStats>('/teams/mine', payload);
 }
 
 export function leaveTeam(): Promise<LeaveTeamResponse> {

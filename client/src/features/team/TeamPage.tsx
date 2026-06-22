@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Crown, LogOut, Loader2, ShieldCheck, UserCog, Users } from 'lucide-react';
-import { Button, Card, ErrorBanner } from '../../shared/ui';
+import { AlertTriangle, Crown, LogOut, Loader2, Palette, ShieldCheck, UserCog, Users } from 'lucide-react';
+import { Button, Card, ErrorBanner, Input, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { useAuth } from '../auth/AuthContext';
 import { getSettings, type GameSetting } from '../admin/settings-api';
-import { getTeamStats, leaveTeam, transferCaptain, upgradeStat } from './api';
+import { getTeamStats, leaveTeam, setTeamIdentity, transferCaptain, upgradeStat } from './api';
 import type { StatName, TeamFullStats } from './types';
+import { teamColors, TEAM_COLOR_ORDER, type TeamColorKey } from '../../design-system/design-tokens';
 import type { User } from '../auth/types';
 import { JoinOrCreateView } from './JoinOrCreateView';
 
@@ -214,6 +215,15 @@ export function TeamPage() {
 
       {actionError && <ErrorBanner message={actionError} />}
 
+      {isCaptain && needsTeamSetup(data) && (
+        <TeamSetupCard
+          data={data}
+          onSaved={(next) =>
+            setState((prev) => (prev.status === 'ready' ? { ...prev, data: next } : prev))
+          }
+        />
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         {isCaptain && hasOtherMembers && (
           <Button
@@ -334,6 +344,112 @@ export function TeamPage() {
         />
       )}
     </div>
+  );
+}
+
+/** A team is "unconfigured" after admin distribution: placeholder name or no color. */
+function needsTeamSetup(data: TeamFullStats): boolean {
+  return /^Команда\s+\d+$/.test(data.name) || data.color === null;
+}
+
+function TeamSetupCard({
+  data,
+  onSaved,
+}: {
+  data: TeamFullStats;
+  onSaved: (next: TeamFullStats) => void;
+}) {
+  const placeholderName = /^Команда\s+\d+$/.test(data.name);
+  const [name, setName] = useState(placeholderName ? '' : data.name);
+  const initialKey = useMemo<TeamColorKey | null>(
+    () => TEAM_COLOR_ORDER.find((k) => teamColors[k].base.toUpperCase() === data.color?.toUpperCase()) ?? null,
+    [data.color],
+  );
+  const [colorKey, setColorKey] = useState<TeamColorKey | null>(initialKey);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError('Придумайте название команды');
+      return;
+    }
+    if (!colorKey) {
+      setError('Выберите цвет команды');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await setTeamIdentity({ name: trimmed, color: teamColors[colorKey].base });
+      onSaved(next);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось сохранить');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <div className="flex items-start gap-3">
+        <Palette className="w-5 h-5 text-brand-400 flex-shrink-0 mt-0.5" />
+        <form onSubmit={handleSubmit} className="flex-1 space-y-3">
+          <div>
+            <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Настройте команду</h2>
+            <p className="text-sm text-neutral-700">Вас распределил администратор. Выберите название и цвет.</p>
+          </div>
+
+          {error && <ErrorBanner message={error} />}
+
+          <div>
+            <Label htmlFor="setup-name">Название</Label>
+            <Input
+              id="setup-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Например, Альфа"
+              maxLength={50}
+              disabled={busy}
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <Label>Цвет команды</Label>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {TEAM_COLOR_ORDER.map((key) => {
+                const c = teamColors[key];
+                const selected = colorKey === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setColorKey(key)}
+                    disabled={busy}
+                    className={`w-8 h-8 rounded-full border-2 transition-all disabled:cursor-not-allowed ${
+                      selected ? 'border-neutral-1000 scale-110' : 'border-transparent hover:scale-105'
+                    }`}
+                    style={{ backgroundColor: c.base }}
+                    title={key}
+                    aria-label={`Цвет ${key}`}
+                    aria-pressed={selected}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button type="submit" variant="primary" disabled={busy} isLoading={busy}>
+              Сохранить
+            </Button>
+          </div>
+        </form>
+      </div>
+    </Card>
   );
 }
 
