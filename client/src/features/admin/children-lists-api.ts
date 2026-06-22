@@ -74,6 +74,10 @@ export function issueAccount(listId: string, childId: string): Promise<IssuedAcc
   return api.post<IssuedAccount>(`/children-lists/${listId}/members/${childId}/account`);
 }
 
+export function resetPassword(childId: string, password?: string): Promise<IssuedAccount> {
+  return api.post<IssuedAccount>(`/children-lists/children/${childId}/password`, { password });
+}
+
 export function getDashboard(): Promise<ChildDashboardRow[]> {
   return api.get<ChildDashboardRow[]>('/children-lists/dashboard');
 }

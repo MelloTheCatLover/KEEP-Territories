@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
-  AlertCircle, Download, KeyRound, Loader2, Plus, RefreshCw, Trash2,
+  AlertCircle, Download, KeyRound, Loader2, Plus, RefreshCw, RotateCcw, Trash2,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -8,11 +8,11 @@ import { Button, Card, ErrorBanner, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import {
   getLists, createList, deleteList,
-  getMembers, bulkAdd, removeMember, issueAccount,
+  getMembers, bulkAdd, removeMember, issueAccount, resetPassword,
   type ChildrenList, type ListMember, type AddChildResult,
 } from './children-lists-api';
 
-type Issued = { login: string; password: string; full_name: string };
+type Issued = { login: string; password: string; full_name: string; reset?: boolean };
 
 export function AdminChildrenListsPage() {
   const { user } = useAuth();
@@ -34,6 +34,7 @@ export function AdminChildrenListsPage() {
   const [addResults, setAddResults] = useState<AddChildResult[] | null>(null);
 
   const [issuingId, setIssuingId] = useState<string | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
   const [issued, setIssued] = useState<Issued | null>(null);
 
   const refresh = useCallback(async () => {
@@ -140,6 +141,27 @@ export function AdminChildrenListsPage() {
       setActionError(err instanceof ApiError ? err.message : 'Ошибка создания аккаунта');
     } finally {
       setIssuingId(null);
+    }
+  }
+
+  async function handleResetPassword(member: ListMember) {
+    if (!selectedId) return;
+    const custom = prompt(
+      `Новый пароль для «${member.full_name}» (оставьте пустым — сгенерируется автоматически):`,
+      '',
+    );
+    if (custom === null) return;
+    const password = custom.trim();
+    setResettingId(member.child_id);
+    setActionError(null);
+    try {
+      const result = await resetPassword(member.child_id, password || undefined);
+      setIssued({ login: result.login, password: result.password, full_name: member.full_name, reset: true });
+      await loadMembers(selectedId);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Ошибка смены пароля');
+    } finally {
+      setResettingId(null);
     }
   }
 
@@ -300,7 +322,7 @@ export function AdminChildrenListsPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">
-                    {!m.user_id && (
+                    {!m.user_id ? (
                       <button
                         type="button"
                         className="inline-flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300 disabled:opacity-50"
@@ -312,6 +334,19 @@ export function AdminChildrenListsPage() {
                           ? <Loader2 className="w-4 h-4 animate-spin" />
                           : <KeyRound className="w-4 h-4" />}
                         Создать аккаунт
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300 disabled:opacity-50"
+                        onClick={() => void handleResetPassword(m)}
+                        disabled={resettingId === m.child_id}
+                        title="Сменить пароль"
+                      >
+                        {resettingId === m.child_id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <RotateCcw className="w-4 h-4" />}
+                        Сменить пароль
                       </button>
                     )}
                     <button
@@ -378,7 +413,9 @@ function CredentialsModal({ issued, onClose }: { issued: Issued; onClose: () => 
         className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-md shadow-3"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Аккаунт создан</h2>
+        <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">
+          {issued.reset ? 'Пароль изменён' : 'Аккаунт создан'}
+        </h2>
         <p className="text-sm text-neutral-700 mb-4">{issued.full_name}. Передайте данные ребёнку.</p>
         <dl className="text-sm space-y-2 mb-5">
           <div className="flex justify-between gap-3 items-center">
