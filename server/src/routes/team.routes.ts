@@ -28,6 +28,7 @@ router.post('/', validateCreateTeam, teamController.create);
 router.get('/', teamController.getAll);
 router.post('/leave', teamController.leave);
 router.post('/transfer', requireTeamRole('captain'), teamController.transferCaptain);
+router.patch('/mine', requireTeamRole('captain'), teamController.setIdentity);
 router.get('/:id', validateParamId, teamController.getById);
 router.post('/:id/join', validateParamId, teamController.join);
 

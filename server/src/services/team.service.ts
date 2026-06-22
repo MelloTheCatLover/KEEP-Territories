@@ -84,6 +84,9 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
 
     // Admins skip the roster check so they can join any active season to test it.
     if (userCheck.rows[0].role !== 'admin') {
+      if (await seasonHasDistribution(client, seasonId)) {
+        throw new AppError(403, 'Команды формирует администратор в начале сезона');
+      }
       await assertEnrolled(client, userId, seasonId);
     }
 
@@ -215,6 +218,9 @@ export async function join(teamId: string, userId: string): Promise<TeamFullStat
 
     // Admins skip the roster check so they can join any active season to test it.
     if (userCheck.rows[0].role !== 'admin') {
+      if (await seasonHasDistribution(client, seasonId)) {
+        throw new AppError(403, 'Команды формирует администратор в начале сезона');
+      }
       await assertEnrolled(client, userId, seasonId);
     }
 
@@ -362,7 +368,17 @@ export async function getAll(seasonId?: string): Promise<Team[]> {
   return result.rows;
 }
 
-export async function adminUpdate(
+/** True when the admin has prepared start-of-season distribution for the season. */
+async function seasonHasDistribution(client: PoolClient, seasonId: string): Promise<boolean> {
+  const res = await client.query(
+    'SELECT 1 FROM season_participants WHERE season_id = $1 LIMIT 1',
+    [seasonId],
+  );
+  return res.rows.length > 0;
+}
+
+/** Apply name/color changes to a team, with palette + per-season uniqueness checks. */
+async function applyTeamIdentity(
   teamId: string,
   patch: { name?: string; color?: string | null },
 ): Promise<TeamFullStats> {
@@ -418,6 +434,35 @@ export async function adminUpdate(
     throw new AppError(404, 'Team not found');
   }
   return teamStatsService.getFullStats(teamId);
+}
+
+export async function adminUpdate(
+  teamId: string,
+  patch: { name?: string; color?: string | null },
+): Promise<TeamFullStats> {
+  return applyTeamIdentity(teamId, patch);
+}
+
+/**
+ * Captain sets their own team's name/color. Used after admin distribution, when
+ * teams are created empty ("Команда N", no color) for members to personalize.
+ */
+export async function setIdentity(
+  userId: string,
+  patch: { name?: string; color?: string | null },
+): Promise<TeamFullStats> {
+  const userRes = await pool.query<{ team_id: string | null }>(
+    'SELECT team_id FROM users WHERE id = $1',
+    [userId],
+  );
+  if (userRes.rows.length === 0) {
+    throw new AppError(404, 'User not found');
+  }
+  const teamId = userRes.rows[0].team_id;
+  if (!teamId) {
+    throw new AppError(400, 'You are not in a team');
+  }
+  return applyTeamIdentity(teamId, patch);
 }
 
 export async function adminDelete(teamId: string): Promise<void> {
