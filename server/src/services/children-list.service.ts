@@ -22,9 +22,18 @@ function randomFrom(alphabet: string, len: number): string {
   return out;
 }
 
-/** Whitespace-normalized name used to recognize the same child across lists. */
+/** Split a full name into its whitespace-separated tokens. */
+function nameTokens(fullName: string): string[] {
+  return fullName.trim().split(/\s+/).filter(Boolean);
+}
+
+/**
+ * Key used to recognize the same child across lists: surname + given name only,
+ * lowercased. The patronymic is ignored so "Фамилия Имя" and "Фамилия Имя
+ * Отчество" (added later) collapse onto one registry entry instead of doubling.
+ */
 function nameKey(fullName: string): string {
-  return fullName.trim().replace(/\s+/g, ' ');
+  return nameTokens(fullName).slice(0, 2).join(' ').toLowerCase();
 }
 
 const TRANSLIT: Record<string, string> = {
@@ -34,9 +43,14 @@ const TRANSLIT: Record<string, string> = {
   ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
 };
 
-/** Build a latin handle from a full name, e.g. "Петров Пётр" → "petrov-petr". */
+/**
+ * Build a latin login handle from surname + given name only, dropping the
+ * patronymic, e.g. "Петров Пётр Иванович" → "petrov-petr".
+ */
 function handleFromName(fullName: string): string {
-  const latin = fullName
+  const latin = nameTokens(fullName)
+    .slice(0, 2)
+    .join(' ')
     .toLowerCase()
     .split('')
     .map((ch) => (ch in TRANSLIT ? TRANSLIT[ch] : ch))
