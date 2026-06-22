@@ -71,8 +71,8 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
 
     const seasonId = await getActiveSeasonId(client);
 
-    const userCheck = await client.query(
-      'SELECT team_id FROM users WHERE id = $1',
+    const userCheck = await client.query<{ team_id: string | null; role: string }>(
+      'SELECT team_id, role FROM users WHERE id = $1',
       [userId]
     );
     if (userCheck.rows.length === 0) {
@@ -82,7 +82,10 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
       throw new AppError(400, 'You are already in a team');
     }
 
-    await assertEnrolled(client, userId, seasonId);
+    // Admins skip the roster check so they can join any active season to test it.
+    if (userCheck.rows[0].role !== 'admin') {
+      await assertEnrolled(client, userId, seasonId);
+    }
 
     const nameCheck = await client.query(
       'SELECT id FROM teams WHERE name = $1 AND season_id = $2',
@@ -188,8 +191,8 @@ export async function join(teamId: string, userId: string): Promise<TeamFullStat
 
     const seasonId = await getActiveSeasonId(client);
 
-    const userCheck = await client.query(
-      'SELECT team_id FROM users WHERE id = $1',
+    const userCheck = await client.query<{ team_id: string | null; role: string }>(
+      'SELECT team_id, role FROM users WHERE id = $1',
       [userId]
     );
     if (userCheck.rows.length === 0) {
@@ -210,7 +213,10 @@ export async function join(teamId: string, userId: string): Promise<TeamFullStat
       throw new AppError(400, 'Эта команда не из активного сезона');
     }
 
-    await assertEnrolled(client, userId, seasonId);
+    // Admins skip the roster check so they can join any active season to test it.
+    if (userCheck.rows[0].role !== 'admin') {
+      await assertEnrolled(client, userId, seasonId);
+    }
 
     await client.query(
       `UPDATE users SET team_id = $1, team_role = 'member' WHERE id = $2`,
