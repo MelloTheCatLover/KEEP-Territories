@@ -95,6 +95,24 @@ export async function issueAccount(
   }
 }
 
+export async function resetPassword(
+  req: Request<{ childId: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { password } = req.body ?? {};
+    res.json(
+      await childrenListService.resetPassword(
+        req.params.childId,
+        typeof password === 'string' ? password : undefined,
+      ),
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function deleteChild(
   req: Request<{ childId: string }>,
   res: Response,

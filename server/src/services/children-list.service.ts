@@ -309,6 +309,47 @@ export async function issueAccount(childId: string): Promise<IssuedAccount> {
   throw new AppError(500, 'Не удалось сгенерировать уникальный логин');
 }
 
+/**
+ * Reset a child account's password. Pass a password to set it explicitly,
+ * otherwise a readable one is generated. Returns the login + plaintext password
+ * once and stores it encrypted for later lookup/export.
+ */
+export async function resetPassword(childId: string, password?: string): Promise<IssuedAccount> {
+  const childRes = await pool.query<{ user_id: string | null }>(
+    'SELECT user_id FROM children WHERE id = $1',
+    [childId],
+  );
+  if (childRes.rows.length === 0) {
+    throw new AppError(404, 'Ребёнок не найден');
+  }
+  const userId = childRes.rows[0].user_id;
+  if (!userId) {
+    throw new AppError(409, 'У этого ребёнка ещё нет аккаунта');
+  }
+
+  let newPassword: string;
+  if (password !== undefined) {
+    newPassword = password.trim();
+    if (newPassword.length < 6 || newPassword.length > 72) {
+      throw new AppError(400, 'Пароль: 6..72 символов');
+    }
+  } else {
+    newPassword = randomFrom(PWD_ALPHABET, PWD_LENGTH);
+  }
+  const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+  const userRes = await pool.query<{ email: string }>(
+    `UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING email`,
+    [passwordHash, userId],
+  );
+  await pool.query(
+    'UPDATE children SET issued_password = $1 WHERE id = $2',
+    [encryptSecret(newPassword), childId],
+  );
+
+  return { login: userRes.rows[0].email, password: newPassword, child_id: childId };
+}
+
 // ── Dashboard ──────────────────────────────────────────────────────────────
 
 export async function dashboard(): Promise<ChildDashboardRow[]> {

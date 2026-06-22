@@ -38,6 +38,7 @@ router.get('/', childrenListController.list);
 router.post('/', childrenListController.create);
 router.get('/dashboard', childrenListController.dashboard);
 router.delete('/children/:childId', validateChildIdParam, childrenListController.deleteChild);
+router.post('/children/:childId/password', validateChildIdParam, childrenListController.resetPassword);
 router.delete('/:id', validateParamId, childrenListController.remove);
 router.get('/:id/members', validateParamId, childrenListController.getMembers);
 router.post('/:id/members', validateParamId, childrenListController.addChild);
