@@ -15,6 +15,7 @@ import { AdminSectorTasksPage } from './features/admin/AdminSectorTasksPage';
 import { AdminSeasonsPage } from './features/admin/AdminSeasonsPage';
 import { AdminChildrenListsPage } from './features/admin/AdminChildrenListsPage';
 import { AdminChildrenDashboardPage } from './features/admin/AdminChildrenDashboardPage';
+import { AdminDistributionPage } from './features/admin/AdminDistributionPage';
 import { SeasonsPage } from './features/seasons/SeasonsPage';
 import { SeasonViewPage } from './features/seasons/SeasonViewPage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
@@ -55,6 +56,7 @@ export const router = createBrowserRouter([
       { path: '/admin/seasons', element: <AdminSeasonsPage /> },
       { path: '/admin/children-lists', element: <AdminChildrenListsPage /> },
       { path: '/admin/children', element: <AdminChildrenDashboardPage /> },
+      { path: '/admin/distribution', element: <AdminDistributionPage /> },
     ],
   },
   { path: '*', element: <NotFound /> },
