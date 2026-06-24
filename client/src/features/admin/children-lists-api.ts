@@ -32,6 +32,8 @@ export type IssuedAccount = {
   child_id: string;
 };
 
+export type IssuedAccountFull = IssuedAccount & { full_name: string };
+
 export type ChildDashboardRow = {
   id: string;
   code: string;
@@ -80,6 +82,10 @@ export function resetPassword(childId: string, password?: string): Promise<Issue
 
 export function getDashboard(): Promise<ChildDashboardRow[]> {
   return api.get<ChildDashboardRow[]>('/children-lists/dashboard');
+}
+
+export function issueAllAccounts(): Promise<IssuedAccountFull[]> {
+  return api.post<IssuedAccountFull[]>('/children-lists/accounts/issue-all');
 }
 
 export function deleteChild(childId: string): Promise<void> {
