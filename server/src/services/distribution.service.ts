@@ -228,7 +228,7 @@ export async function prepare(): Promise<DistributionState> {
       const freeBase = await client.query<{ id: string }>(
         `SELECT id FROM sectors
           WHERE season_id = $1 AND is_home_base = true AND home_team_id IS NULL AND status = 'free'
-          ORDER BY number ASC NULLS LAST, created_at ASC
+          ORDER BY q ASC, r ASC
           LIMIT 1
           FOR UPDATE`,
         [seasonId],
