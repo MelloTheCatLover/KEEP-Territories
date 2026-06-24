@@ -126,6 +126,14 @@ export async function deleteChild(
   }
 }
 
+export async function issueAllAccounts(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.status(201).json(await childrenListService.issueMissingAccounts());
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function dashboard(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     res.json(await childrenListService.dashboard());

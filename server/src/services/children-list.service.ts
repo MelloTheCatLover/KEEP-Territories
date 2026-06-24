@@ -324,6 +324,23 @@ export async function issueAccount(childId: string): Promise<IssuedAccount> {
 }
 
 /**
+ * Issue accounts for every child that doesn't have one yet. Returns the new
+ * credentials (with name) so the admin can hand them out / export. Each account
+ * is created independently — one failure does not roll back the others.
+ */
+export async function issueMissingAccounts(): Promise<Array<IssuedAccount & { full_name: string }>> {
+  const res = await pool.query<{ id: string; full_name: string }>(
+    'SELECT id, full_name FROM children WHERE user_id IS NULL ORDER BY full_name ASC',
+  );
+  const issued: Array<IssuedAccount & { full_name: string }> = [];
+  for (const row of res.rows) {
+    const acc = await issueAccount(row.id);
+    issued.push({ ...acc, full_name: row.full_name });
+  }
+  return issued;
+}
+
+/**
  * Reset a child account's password. Pass a password to set it explicitly,
  * otherwise a readable one is generated. Returns the login + plaintext password
  * once and stores it encrypted for later lookup/export.

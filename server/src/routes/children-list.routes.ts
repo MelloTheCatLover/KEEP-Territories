@@ -37,6 +37,7 @@ router.use(authenticate, requireAdmin);
 router.get('/', childrenListController.list);
 router.post('/', childrenListController.create);
 router.get('/dashboard', childrenListController.dashboard);
+router.post('/accounts/issue-all', childrenListController.issueAllAccounts);
 router.delete('/children/:childId', validateChildIdParam, childrenListController.deleteChild);
 router.post('/children/:childId/password', validateChildIdParam, childrenListController.resetPassword);
 router.delete('/:id', validateParamId, childrenListController.remove);
