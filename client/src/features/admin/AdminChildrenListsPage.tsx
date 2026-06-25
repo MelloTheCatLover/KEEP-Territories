@@ -257,9 +257,9 @@ export function AdminChildrenListsPage() {
       {selected && (
         <Card>
           <div className="flex items-center justify-between gap-3 mb-3">
-            <h2 className="font-display text-heading-sm text-neutral-1000">Список «{selected.name}»</h2>
+            <h2 className="font-display text-heading-sm text-neutral-1000 truncate min-w-0">Список «{selected.name}»</h2>
             {members && members.length > 0 && (
-              <Button variant="secondary" onClick={() => exportCsv(selected.name, members)}>
+              <Button variant="secondary" onClick={() => exportCsv(selected.name, members)} className="flex-shrink-0">
                 <span className="flex items-center gap-2"><Download className="w-4 h-4" />CSV</span>
               </Button>
             )}

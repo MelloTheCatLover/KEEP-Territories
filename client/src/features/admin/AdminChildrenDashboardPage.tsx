@@ -97,9 +97,9 @@ export function AdminChildrenDashboardPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 space-y-5">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div>
-          <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Все дети</h1>
+          <h1 className="font-display text-heading-sm sm:text-heading-md text-neutral-1000 mb-1">Все дети</h1>
           <p className="text-sm text-neutral-700">
             Общая база: коды, аккаунты и смены, в которых ребёнок участвовал.
           </p>

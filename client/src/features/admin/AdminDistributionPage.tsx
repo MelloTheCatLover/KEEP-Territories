@@ -151,9 +151,9 @@ export function AdminDistributionPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div>
-          <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Распределение команд</h1>
+          <h1 className="font-display text-heading-sm sm:text-heading-md text-neutral-1000 mb-1">Распределение команд</h1>
           <p className="text-sm text-neutral-700">
             Старт сезона: дели участников по категориям и раскидывай по командам колесом.
           </p>
