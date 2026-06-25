@@ -184,8 +184,8 @@ export function MapPage() {
   const RIGHT_SLOTS: SlotKey[] = ['tr', 'r', 'br'];
 
   return (
-    <div className="max-w-[1500px] mx-auto px-4">
-      <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Карта</h1>
+    <div className="max-w-[1500px] mx-auto px-3 sm:px-4">
+      <h1 className="font-display text-heading-sm sm:text-heading-md text-neutral-1000 mb-1">Карта</h1>
       <p className="text-sm text-neutral-700 mb-4">
         Гексагональное поле
         {state.status === 'ready' ? ` — ${state.sectors.length} секторов.` : '.'}
@@ -222,14 +222,8 @@ export function MapPage() {
       )}
 
       {state.status === 'ready' && mapLayout && (
-        <div
-          className="grid gap-4 items-stretch"
-          style={{
-            gridTemplateColumns:
-              'minmax(260px, 300px) minmax(0, 1fr) minmax(260px, 300px)',
-          }}
-        >
-          <div className="flex flex-col gap-3 justify-center">
+        <div className="grid gap-4 lg:items-stretch lg:grid-cols-[minmax(260px,300px)_minmax(0,1fr)_minmax(260px,300px)]">
+          <div className="order-2 grid grid-cols-2 gap-3 lg:order-1 lg:flex lg:flex-col lg:justify-center">
             {LEFT_SLOTS.map((key) => {
               const entry = mapLayout.slots[key];
               if (!entry) return null;
@@ -246,10 +240,9 @@ export function MapPage() {
           </div>
 
           <div
-            className="relative w-full self-center"
+            className="relative w-full self-center order-1 lg:order-2 lg:max-h-[82vh]"
             style={{
               aspectRatio: `${mapLayout.vbW} / ${mapLayout.vbH}`,
-              maxHeight: '82vh',
             }}
           >
             <div className="absolute inset-0">
@@ -262,7 +255,7 @@ export function MapPage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 justify-center">
+          <div className="order-3 grid grid-cols-2 gap-3 lg:flex lg:flex-col lg:justify-center">
             {RIGHT_SLOTS.map((key) => {
               const entry = mapLayout.slots[key];
               if (!entry) return null;

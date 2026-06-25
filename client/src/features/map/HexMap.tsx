@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
 import type { Sector, DifficultySlug } from './types';
 import { formatSectorLabel } from './types';
 import { axialToPixel, hexPoints, bbox } from './hex-utils';
@@ -17,6 +18,24 @@ export const MAP_VIEWBOX_PADDING = VIEWBOX_PADDING;
 const BADGE_RADIUS = 4;
 const CAPTURE_RING_SCALE = 0.92;
 const FORT_SCALES = [0.65, 0.4, 0.2];
+
+// Pan/zoom: max zoom-in factor relative to the fitted view, and the
+// pointer-travel (in px) above which a gesture counts as a drag, not a tap.
+const MAX_ZOOM = 4;
+const TAP_MOVE_THRESHOLD = 8;
+
+type ViewBox = { x: number; y: number; w: number; h: number };
+
+function clampView(view: ViewBox, base: ViewBox): ViewBox {
+  // Don't zoom out past the fitted base, nor in past MAX_ZOOM.
+  const minW = base.w / MAX_ZOOM;
+  const w = Math.min(base.w, Math.max(minW, view.w));
+  const h = w * (base.h / base.w);
+  // Keep the view inside the base bounds (no panning the map off-screen).
+  const x = Math.min(base.x + base.w - w, Math.max(base.x, view.x));
+  const y = Math.min(base.y + base.h - h, Math.max(base.y, view.y));
+  return { x, y, w, h };
+}
 
 export type TeamInfo = {
   id: string;
@@ -91,16 +110,144 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
 export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexMapProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
-  if (sectors.length === 0) {
+  const base = useMemo<ViewBox | null>(() => {
+    if (sectors.length === 0) return null;
+    const { minX, minY, maxX, maxY } = bbox(sectors, HEX_SIZE);
+    return {
+      x: minX - VIEWBOX_PADDING,
+      y: minY - VIEWBOX_PADDING,
+      w: maxX - minX + VIEWBOX_PADDING * 2,
+      h: maxY - minY + VIEWBOX_PADDING * 2,
+    };
+  }, [sectors]);
+
+  const [view, setView] = useState<ViewBox | null>(base);
+  useEffect(() => {
+    // Reset the view whenever the map (and therefore the fitted base) changes.
+    setView(base);
+  }, [base]);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Active pointers in client coords, keyed by pointerId.
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  // Snapshot taken when a two-finger pinch begins.
+  const pinchRef = useRef<{ dist: number; view: ViewBox } | null>(null);
+  // Total pointer travel for the current gesture — used to tell taps from drags.
+  const movedRef = useRef(0);
+  const draggedRef = useRef(false);
+
+  function rect() {
+    return containerRef.current?.getBoundingClientRect() ?? null;
+  }
+
+  function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    movedRef.current = 0;
+    draggedRef.current = false;
+    if (pointersRef.current.size === 2 && view) {
+      const pts = [...pointersRef.current.values()];
+      pinchRef.current = {
+        dist: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y),
+        view,
+      };
+    }
+  }
+
+  function handlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const prev = pointersRef.current.get(e.pointerId);
+    if (!prev || !view || !base) return;
+    const r = rect();
+    if (!r) return;
+    const next = { x: e.clientX, y: e.clientY };
+    pointersRef.current.set(e.pointerId, next);
+
+    if (pointersRef.current.size >= 2 && pinchRef.current) {
+      // Pinch: scale the viewBox around the midpoint of the two fingers.
+      const pts = [...pointersRef.current.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
+      const start = pinchRef.current;
+      const factor = start.dist / dist; // fingers apart -> smaller viewBox -> zoom in
+      const midX = (pts[0].x + pts[1].x) / 2 - r.left;
+      const midY = (pts[0].y + pts[1].y) / 2 - r.top;
+      const ux = start.view.x + (midX / r.width) * start.view.w;
+      const uy = start.view.y + (midY / r.height) * start.view.h;
+      const w = start.view.w * factor;
+      const h = start.view.h * factor;
+      movedRef.current += Math.abs(start.dist - dist);
+      draggedRef.current = true;
+      setView(
+        clampView(
+          { x: ux - (midX / r.width) * w, y: uy - (midY / r.height) * h, w, h },
+          base,
+        ),
+      );
+      return;
+    }
+
+    // Single-pointer pan.
+    const dx = next.x - prev.x;
+    const dy = next.y - prev.y;
+    movedRef.current += Math.hypot(dx, dy);
+    if (movedRef.current > TAP_MOVE_THRESHOLD) draggedRef.current = true;
+    setView(
+      clampView(
+        {
+          x: view.x - dx * (view.w / r.width),
+          y: view.y - dy * (view.h / r.height),
+          w: view.w,
+          h: view.h,
+        },
+        base,
+      ),
+    );
+  }
+
+  function handlePointerUp(e: ReactPointerEvent<HTMLDivElement>) {
+    pointersRef.current.delete(e.pointerId);
+    if (pointersRef.current.size < 2) pinchRef.current = null;
+  }
+
+  function handleWheel(e: ReactWheelEvent<HTMLDivElement>) {
+    if (!view || !base) return;
+    const r = rect();
+    if (!r) return;
+    const factor = e.deltaY > 0 ? 1.1 : 1 / 1.1; // down = zoom out
+    const px = e.clientX - r.left;
+    const py = e.clientY - r.top;
+    const ux = view.x + (px / r.width) * view.w;
+    const uy = view.y + (py / r.height) * view.h;
+    const w = view.w * factor;
+    const h = view.h * factor;
+    setView(
+      clampView(
+        { x: ux - (px / r.width) * w, y: uy - (py / r.height) * h, w, h },
+        base,
+      ),
+    );
+  }
+
+  function handleSectorClick(s: Sector) {
+    if (draggedRef.current || !onSectorClick) return;
+    onSectorClick(s);
+  }
+
+  if (!base || !view) {
     return null;
   }
 
-  const { minX, minY, maxX, maxY } = bbox(sectors, HEX_SIZE);
-  const width = maxX - minX + VIEWBOX_PADDING * 2;
-  const height = maxY - minY + VIEWBOX_PADDING * 2;
-  const viewBox = `${minX - VIEWBOX_PADDING} ${minY - VIEWBOX_PADDING} ${width} ${height}`;
+  const viewBox = `${view.x} ${view.y} ${view.w} ${view.h}`;
 
   return (
+    <div
+      ref={containerRef}
+      className="w-full h-full touch-none select-none"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      onWheel={handleWheel}
+    >
     <svg
       viewBox={viewBox}
       xmlns="http://www.w3.org/2000/svg"
@@ -272,7 +419,7 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
               onMouseLeave={() =>
                 setHoveredId((curr) => (curr === s.id ? null : curr))
               }
-              onClick={onSectorClick ? () => onSectorClick(s) : undefined}
+              onClick={onSectorClick ? () => handleSectorClick(s) : undefined}
             >
               <polygon
                 className="hex-events"
@@ -285,5 +432,6 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
         })}
       </g>
     </svg>
+    </div>
   );
 }
