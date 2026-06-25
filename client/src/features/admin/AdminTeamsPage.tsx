@@ -184,10 +184,10 @@ function TeamRow({
 
   return (
     <Card>
-      <div className="flex items-center justify-between gap-3 mb-3">
+      <div className="flex flex-col gap-3 mb-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <div
-            className="w-1 h-10 self-stretch rounded-full flex-shrink-0"
+            className="w-1 self-stretch min-h-10 rounded-full flex-shrink-0"
             style={{ backgroundColor: swatchColor }}
           />
           <div className="min-w-0">
@@ -202,7 +202,7 @@ function TeamRow({
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-shrink-0">
           <Button variant="secondary" onClick={onEdit}>
             <span className="flex items-center gap-2">
               <Pencil className="w-4 h-4" />
@@ -619,7 +619,7 @@ function TuneTeamModal({
           <h3 className="text-2xs uppercase tracking-wider text-neutral-700 mb-2">
             Ресурсы
           </h3>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <NumField label="Влияние" value={influence} onChange={setInfluence} disabled={busy} />
             <NumField label="Опыт" value={experience} onChange={setExperience} disabled={busy} />
             <NumField
