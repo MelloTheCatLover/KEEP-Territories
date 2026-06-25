@@ -220,7 +220,7 @@ export function SectorActionModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-neutral-50 border border-neutral-400 rounded-md w-full max-w-lg shadow-3 overflow-hidden"
+        className="bg-neutral-50 border border-neutral-400 rounded-md w-full max-w-lg shadow-3 max-h-[90vh] overflow-y-auto"
       >
         <header className="flex items-center gap-4 px-5 py-4 bg-neutral-100 border-b border-neutral-300">
           <div

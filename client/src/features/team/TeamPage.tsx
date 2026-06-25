@@ -493,7 +493,7 @@ function ModalShell({
       onClick={onBackdrop}
     >
       <div
-        className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-md shadow-3"
+        className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-3"
         onClick={(e) => e.stopPropagation()}
       >
         {children}
