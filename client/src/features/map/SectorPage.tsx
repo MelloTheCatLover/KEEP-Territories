@@ -86,7 +86,7 @@ export function SectorPage() {
       <Card>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="font-display text-heading-md text-neutral-1000 mb-1">
+            <h1 className="font-display text-heading-sm sm:text-heading-md text-neutral-1000 mb-1">
               Сектор {label}
             </h1>
             <p className="text-sm text-neutral-700">
