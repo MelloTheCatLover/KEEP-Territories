@@ -8,6 +8,8 @@ type SummaryProps = {
   isOwn: boolean;
   pendingCount: number;
   className?: string;
+  /** 'grid' = 2 columns (default), 'list' = single column for narrow screens. */
+  statsLayout?: 'grid' | 'list';
 };
 
 const STAT_LABELS: Array<[keyof TeamFullStats['stats'], string]> = [
@@ -24,6 +26,7 @@ export function TeamSummaryCard({
   isOwn,
   pendingCount,
   className = '',
+  statsLayout = 'grid',
 }: SummaryProps) {
   const palette = findTeamColorByHex(team.color) ?? getTeamColor(index);
   const accent = palette?.base ?? 'var(--color-neutral-500)';
@@ -67,7 +70,11 @@ export function TeamSummaryCard({
         <div className="text-2xs uppercase tracking-wider text-neutral-700 mb-2">
           Характеристики
         </div>
-        <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+        <ul
+          className={`grid gap-x-3 gap-y-1.5 ${
+            statsLayout === 'list' ? 'grid-cols-1' : 'grid-cols-2'
+          }`}
+        >
           {STAT_LABELS.map(([key, label]) => (
             <li
               key={key}
