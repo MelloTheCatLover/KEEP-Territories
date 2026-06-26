@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Loader2, MapPin } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Loader2, MapPin, Users } from 'lucide-react';
 import { getSectorsMap } from './api';
 import type { Sector } from './types';
 import { HexMap, type TeamInfo, MAP_HEX_SIZE, MAP_VIEWBOX_PADDING } from './HexMap';
@@ -185,11 +185,22 @@ export function MapPage() {
 
   return (
     <div className="max-w-[1500px] mx-auto px-3 sm:px-4">
-      <h1 className="font-display text-heading-sm sm:text-heading-md text-neutral-1000 mb-1">Карта</h1>
-      <p className="text-sm text-neutral-700 mb-4">
-        Гексагональное поле
-        {state.status === 'ready' ? ` — ${state.sectors.length} секторов.` : '.'}
-      </p>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <h1 className="font-display text-heading-sm sm:text-heading-md text-neutral-1000 mb-1">Карта</h1>
+          <p className="text-sm text-neutral-700">
+            Гексагональное поле
+            {state.status === 'ready' ? ` — ${state.sectors.length} секторов.` : '.'}
+          </p>
+        </div>
+        <Link
+          to="/teams"
+          className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-400 text-sm font-medium text-neutral-900 hover:bg-neutral-200 hover:text-neutral-1000 transition-colors"
+        >
+          <Users className="w-4 h-4" />
+          Команды
+        </Link>
+      </div>
 
       {canCreateTeam && state.status === 'ready' && (
         <div className="mb-4 flex items-start gap-2 bg-brand-900/30 border border-brand-700 text-sm text-brand-100 px-3 py-2 rounded-sm">
@@ -223,7 +234,7 @@ export function MapPage() {
 
       {state.status === 'ready' && mapLayout && (
         <div className="grid gap-4 lg:items-stretch lg:grid-cols-[minmax(260px,300px)_minmax(0,1fr)_minmax(260px,300px)]">
-          <div className="order-2 grid grid-cols-2 gap-3 lg:order-1 lg:flex lg:flex-col lg:justify-center">
+          <div className="hidden gap-3 lg:order-1 lg:flex lg:flex-col lg:justify-center">
             {LEFT_SLOTS.map((key) => {
               const entry = mapLayout.slots[key];
               if (!entry) return null;
@@ -255,7 +266,7 @@ export function MapPage() {
             </div>
           </div>
 
-          <div className="order-3 grid grid-cols-2 gap-3 lg:flex lg:flex-col lg:justify-center">
+          <div className="hidden gap-3 lg:order-3 lg:flex lg:flex-col lg:justify-center">
             {RIGHT_SLOTS.map((key) => {
               const entry = mapLayout.slots[key];
               if (!entry) return null;

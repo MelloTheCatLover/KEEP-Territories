@@ -19,7 +19,7 @@ function navLinkClass({ isActive }: { isActive: boolean }) {
 
 function mobileNavLinkClass({ isActive }: { isActive: boolean }) {
   const base =
-    'block w-full text-sm font-medium px-3 py-2.5 rounded-sm transition-colors';
+    'block w-full text-base font-medium px-4 py-3.5 rounded-sm transition-colors';
   return isActive
     ? `${base} text-brand-400 bg-brand-900/30`
     : `${base} text-neutral-900 hover:text-neutral-1000 hover:bg-neutral-300`;
@@ -141,8 +141,8 @@ export function Header() {
         </button>
 
         {mobileOpen && (
-          <div className="absolute right-0 top-full mt-1 w-56 bg-glass-strong backdrop-blur-glass border border-glass rounded-md shadow-3 p-1 z-[1000]">
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-glass mb-1">
+          <div className="absolute right-0 top-full mt-1 w-64 bg-glass-strong backdrop-blur-glass border border-glass rounded-md shadow-3 p-1.5 z-[1000]">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-glass mb-1">
               <span className="bg-brand-700 text-neutral-1000 w-8 h-8 rounded-full font-semibold text-sm flex items-center justify-center flex-shrink-0">
                 {user?.username?.charAt(0).toUpperCase() ?? '?'}
               </span>
@@ -168,9 +168,9 @@ export function Header() {
                   navigate('/profile');
                   setMobileOpen(false);
                 }}
-                className="w-full px-3 py-2.5 text-sm text-left text-neutral-900 hover:bg-neutral-300 transition-colors flex items-center gap-2 rounded-sm"
+                className="w-full px-4 py-3.5 text-base text-left text-neutral-900 hover:bg-neutral-300 transition-colors flex items-center gap-3 rounded-sm"
               >
-                <User className="w-4 h-4" />
+                <User className="w-5 h-5" />
                 Профиль
               </button>
               <button
@@ -178,9 +178,9 @@ export function Header() {
                   logout();
                   setMobileOpen(false);
                 }}
-                className="w-full px-3 py-2.5 text-sm text-left text-neutral-900 hover:bg-neutral-300 transition-colors flex items-center gap-2 rounded-sm"
+                className="w-full px-4 py-3.5 text-base text-left text-neutral-900 hover:bg-neutral-300 transition-colors flex items-center gap-3 rounded-sm"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-5 h-5" />
                 Выйти
               </button>
             </div>

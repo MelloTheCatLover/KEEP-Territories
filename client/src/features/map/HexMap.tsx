@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
+import { Plus, Minus } from 'lucide-react';
 import type { Sector, DifficultySlug } from './types';
 import { formatSectorLabel } from './types';
 import { axialToPixel, hexPoints, bbox } from './hex-utils';
@@ -140,8 +141,18 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
     return containerRef.current?.getBoundingClientRect() ?? null;
   }
 
+  // True once the user has zoomed past the fitted base view.
+  const isZoomed = !!view && !!base && view.w < base.w - 0.5;
+  // On touch, a single finger only pans when zoomed in — otherwise the page
+  // scrolls normally. Mouse always pans (desktop scrolls with the wheel).
+  function canPanWith(pointerType: string) {
+    return pointerType === 'mouse' || isZoomed;
+  }
+
   function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+    if (canPanWith(e.pointerType)) {
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+    }
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     movedRef.current = 0;
     draggedRef.current = false;
@@ -185,7 +196,8 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
       return;
     }
 
-    // Single-pointer pan.
+    // Single-pointer pan — skipped on touch at base zoom so the page scrolls.
+    if (!canPanWith(e.pointerType)) return;
     const dx = next.x - prev.x;
     const dy = next.y - prev.y;
     movedRef.current += Math.hypot(dx, dy);
@@ -227,6 +239,16 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
     );
   }
 
+  // Zoom around the centre of the view — used by the on-screen +/- buttons.
+  function zoomBy(factor: number) {
+    if (!view || !base) return;
+    const cx = view.x + view.w / 2;
+    const cy = view.y + view.h / 2;
+    const w = view.w * factor;
+    const h = view.h * factor;
+    setView(clampView({ x: cx - w / 2, y: cy - h / 2, w, h }, base));
+  }
+
   function handleSectorClick(s: Sector) {
     if (draggedRef.current || !onSectorClick) return;
     onSectorClick(s);
@@ -241,7 +263,8 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
   return (
     <div
       ref={containerRef}
-      className="w-full h-full touch-none select-none"
+      className="relative w-full h-full select-none"
+      style={{ touchAction: isZoomed ? 'none' : 'pan-y' }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -432,6 +455,29 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
         })}
       </g>
     </svg>
+
+      <div className="absolute top-2 right-2 flex flex-col gap-1.5">
+        <button
+          type="button"
+          aria-label="Приблизить"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => zoomBy(1 / 1.4)}
+          disabled={view.w <= base.w / MAX_ZOOM + 0.5}
+          className="w-9 h-9 flex items-center justify-center rounded-sm bg-glass-strong backdrop-blur-glass border border-glass text-neutral-1000 shadow-2 hover:bg-neutral-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          aria-label="Отдалить"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => zoomBy(1.4)}
+          disabled={!isZoomed}
+          className="w-9 h-9 flex items-center justify-center rounded-sm bg-glass-strong backdrop-blur-glass border border-glass text-neutral-1000 shadow-2 hover:bg-neutral-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <Minus className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
