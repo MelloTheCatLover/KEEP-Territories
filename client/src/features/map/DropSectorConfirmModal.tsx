@@ -49,7 +49,7 @@ export function DropSectorConfirmModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-neutral-50 border border-neutral-400 rounded-md w-full max-w-md shadow-3 overflow-hidden"
+        className="bg-neutral-50 border border-neutral-400 rounded-md w-full max-w-md shadow-3 max-h-[90vh] overflow-y-auto"
       >
         <header className="flex items-center gap-3 px-5 py-4 bg-neutral-100 border-b border-neutral-300">
           <div className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xs bg-danger/20 border border-danger">

@@ -69,7 +69,7 @@ export function CreateTeamModal({ sector, takenColors = EMPTY_TAKEN, onCancel, o
       <form
         onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}
-        className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-md shadow-3 space-y-4"
+        className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-3 space-y-4"
       >
         <div className="flex items-start justify-between gap-3">
           <div>

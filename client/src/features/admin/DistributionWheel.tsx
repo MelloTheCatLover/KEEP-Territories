@@ -51,7 +51,10 @@ export function DistributionWheel({ pool, winnerId, spinToken, durationMs, onDon
   const sliceAngle = 360 / Math.max(1, pool.length);
 
   return (
-    <div className="relative mx-auto" style={{ width: SIZE, height: SIZE }}>
+    <div
+      className="relative mx-auto w-full"
+      style={{ maxWidth: SIZE, aspectRatio: '1 / 1' }}
+    >
       <div
         aria-hidden
         className="absolute inset-0 rounded-full"

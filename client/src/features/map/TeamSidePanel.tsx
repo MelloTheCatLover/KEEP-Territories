@@ -30,7 +30,7 @@ export function TeamSummaryCard({
 
   return (
     <div
-      className={`relative border rounded-md bg-glass-medium backdrop-blur-glass p-4 ${
+      className={`relative border rounded-md bg-glass-medium backdrop-blur-glass p-3 sm:p-4 ${
         isOwn
           ? 'border-brand-500 shadow-[0_0_0_1px_var(--color-brand-500)]'
           : 'border-neutral-400'

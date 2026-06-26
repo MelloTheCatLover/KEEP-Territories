@@ -182,7 +182,7 @@ export function TeamPage() {
             aria-hidden
           />
           <div className="flex-1 min-w-0">
-            <h1 className="font-display text-heading-md text-neutral-1000 truncate">
+            <h1 className="font-display text-heading-sm sm:text-heading-md text-neutral-1000 truncate">
               {data.name}
             </h1>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
@@ -493,7 +493,7 @@ function ModalShell({
       onClick={onBackdrop}
     >
       <div
-        className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-md shadow-3"
+        className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-3"
         onClick={(e) => e.stopPropagation()}
       >
         {children}

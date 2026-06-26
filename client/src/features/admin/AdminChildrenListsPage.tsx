@@ -257,9 +257,9 @@ export function AdminChildrenListsPage() {
       {selected && (
         <Card>
           <div className="flex items-center justify-between gap-3 mb-3">
-            <h2 className="font-display text-heading-sm text-neutral-1000">Список «{selected.name}»</h2>
+            <h2 className="font-display text-heading-sm text-neutral-1000 truncate min-w-0">Список «{selected.name}»</h2>
             {members && members.length > 0 && (
-              <Button variant="secondary" onClick={() => exportCsv(selected.name, members)}>
+              <Button variant="secondary" onClick={() => exportCsv(selected.name, members)} className="flex-shrink-0">
                 <span className="flex items-center gap-2"><Download className="w-4 h-4" />CSV</span>
               </Button>
             )}
@@ -410,7 +410,7 @@ function CredentialsModal({ issued, onClose }: { issued: Issued; onClose: () => 
       onClick={onClose}
     >
       <div
-        className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-md shadow-3"
+        className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-3"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">
