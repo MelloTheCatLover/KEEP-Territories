@@ -4,7 +4,7 @@ import { ChevronDown, User, LogOut, Menu, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 const navLinks = [
-  { to: '/map', label: 'Карта', hideForCaptain: true },
+  { to: '/map', label: 'Карта' },
   { to: '/team', label: 'Команда' },
   { to: '/seasons', label: 'Смены' },
   { to: '/admin', label: 'Админ', adminOnly: true },
@@ -69,11 +69,8 @@ export function Header() {
     };
   }, [mobileOpen]);
 
-  const isCaptain = user?.team_role === 'captain';
   const links = navLinks.filter(
-    (link) =>
-      (!link.adminOnly || user?.role === 'admin') &&
-      !(link.hideForCaptain && isCaptain),
+    (link) => !link.adminOnly || user?.role === 'admin',
   );
 
   return (

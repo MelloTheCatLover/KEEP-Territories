@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Loader2, MapPin, Users } from 'lucide-react';
 import { getSectorsMap } from './api';
 import type { Sector } from './types';
@@ -60,6 +60,8 @@ export function MapPage() {
 
   const canCreateTeam = user?.team_id === null;
   const teamId = user?.team_id ?? null;
+  // Captains view the map but never act on the field.
+  const isCaptain = user?.team_role === 'captain';
 
   const userActiveSectorId = useMemo(() => {
     if (!teamId || state.status !== 'ready') return null;
@@ -90,6 +92,7 @@ export function MapPage() {
   }, [teamId, state]);
 
   const highlightIds = useMemo(() => {
+    if (isCaptain) return undefined;
     if (canCreateTeam && state.status === 'ready') {
       const set = new Set<string>();
       state.sectors.forEach((s) => {
@@ -101,11 +104,11 @@ export function MapPage() {
       return new Set<string>([userActiveSectorId]);
     }
     return reachableIds;
-  }, [canCreateTeam, state, reachableIds, userActiveSectorId]);
+  }, [canCreateTeam, state, reachableIds, userActiveSectorId, isCaptain]);
 
   const handleClick = useCallback(
     (s: Sector) => {
-      if (s.is_special) return;
+      if (s.is_special || isCaptain) return;
       if (canCreateTeam) {
         if (!s.is_home_base || s.home_team_id !== null) return;
         setCreateFor(s);
@@ -115,7 +118,7 @@ export function MapPage() {
         setActionFor(s);
       }
     },
-    [canCreateTeam, teamId],
+    [canCreateTeam, teamId, isCaptain],
   );
 
   const freeHomeCount = useMemo(() => {
@@ -184,11 +187,6 @@ export function MapPage() {
 
   const LEFT_SLOTS: SlotKey[] = ['tl', 'l', 'bl'];
   const RIGHT_SLOTS: SlotKey[] = ['tr', 'r', 'br'];
-
-  // Captains manage team stats, not the field — keep them off the map.
-  if (user?.team_role === 'captain') {
-    return <Navigate to="/team" replace />;
-  }
 
   return (
     <div className="max-w-[1500px] mx-auto px-3 sm:px-4">
@@ -267,7 +265,7 @@ export function MapPage() {
               <HexMap
                 sectors={state.sectors}
                 teamsById={state.teamsById}
-                onSectorClick={canCreateTeam || teamId ? handleClick : undefined}
+                onSectorClick={!isCaptain && (canCreateTeam || teamId) ? handleClick : undefined}
                 highlightIds={highlightIds}
               />
             </div>
