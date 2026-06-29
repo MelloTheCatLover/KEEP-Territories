@@ -30,14 +30,19 @@ export function TeamSummaryCard({
 }: SummaryProps) {
   const palette = findTeamColorByHex(team.color) ?? getTeamColor(index);
   const accent = palette?.base ?? 'var(--color-neutral-500)';
+  // Team-coloured frame with a faint wash showing through the dark glass —
+  // an accent, not a full recolour. Own team keeps an extra brand ring.
+  const wash = `color-mix(in srgb, ${accent} 16%, transparent)`;
 
   return (
     <div
       className={`relative border rounded-md bg-glass-medium backdrop-blur-glass p-3 sm:p-4 ${
-        isOwn
-          ? 'border-brand-500 shadow-[0_0_0_1px_var(--color-brand-500)]'
-          : 'border-neutral-400'
+        isOwn ? 'shadow-[0_0_0_2px_var(--color-brand-500)]' : ''
       } ${className}`}
+      style={{
+        borderColor: accent,
+        backgroundImage: `linear-gradient(135deg, ${wash}, transparent 70%)`,
+      }}
     >
       <div className="flex items-center gap-2 min-w-0 pb-3 mb-3 border-b border-neutral-300">
         <span
