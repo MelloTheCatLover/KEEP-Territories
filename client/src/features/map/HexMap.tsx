@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
-import { Plus, Minus } from 'lucide-react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { Sector, DifficultySlug } from './types';
 import { formatSectorLabel } from './types';
 import { axialToPixel, hexPoints, bbox } from './hex-utils';
@@ -231,35 +230,6 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
     if (pointersRef.current.size < 2) pinchRef.current = null;
   }
 
-  function handleWheel(e: ReactWheelEvent<HTMLDivElement>) {
-    if (!view || !base) return;
-    const r = rect();
-    if (!r) return;
-    const factor = e.deltaY > 0 ? 1.1 : 1 / 1.1; // down = zoom out
-    const px = e.clientX - r.left;
-    const py = e.clientY - r.top;
-    const ux = view.x + (px / r.width) * view.w;
-    const uy = view.y + (py / r.height) * view.h;
-    const w = view.w * factor;
-    const h = view.h * factor;
-    setView(
-      clampView(
-        { x: ux - (px / r.width) * w, y: uy - (py / r.height) * h, w, h },
-        base,
-      ),
-    );
-  }
-
-  // Zoom around the centre of the view — used by the on-screen +/- buttons.
-  function zoomBy(factor: number) {
-    if (!view || !base) return;
-    const cx = view.x + view.w / 2;
-    const cy = view.y + view.h / 2;
-    const w = view.w * factor;
-    const h = view.h * factor;
-    setView(clampView({ x: cx - w / 2, y: cy - h / 2, w, h }, base));
-  }
-
   function handleSectorClick(s: Sector) {
     if (draggedRef.current || !onSectorClick) return;
     onSectorClick(s);
@@ -280,7 +250,6 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
-      onWheel={handleWheel}
     >
     <svg
       viewBox={viewBox}
@@ -468,29 +437,6 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
         })}
       </g>
     </svg>
-
-      <div className="absolute top-2 right-2 flex flex-col gap-1.5">
-        <button
-          type="button"
-          aria-label="Приблизить"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => zoomBy(1 / 1.4)}
-          disabled={view.w <= base.w / MAX_ZOOM + 0.5}
-          className="w-9 h-9 flex items-center justify-center rounded-sm bg-glass-strong backdrop-blur-glass border border-glass text-neutral-1000 shadow-2 hover:bg-neutral-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          aria-label="Отдалить"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => zoomBy(1.4)}
-          disabled={!isZoomed}
-          className="w-9 h-9 flex items-center justify-center rounded-sm bg-glass-strong backdrop-blur-glass border border-glass text-neutral-1000 shadow-2 hover:bg-neutral-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          <Minus className="w-4 h-4" />
-        </button>
-      </div>
     </div>
   );
 }

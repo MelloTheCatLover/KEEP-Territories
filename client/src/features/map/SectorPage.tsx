@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, Navigate, useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Clock, Loader2, Trash2 } from 'lucide-react';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -8,7 +8,6 @@ import type { Sector } from './types';
 import { formatSectorLabel } from './types';
 import type { TaskSubmissionWithDetails } from '../admin/submissions-api';
 import { DropSectorConfirmModal } from './DropSectorConfirmModal';
-import { useAuth } from '../auth/AuthContext';
 
 type State =
   | { status: 'loading' }
@@ -27,7 +26,6 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 export function SectorPage() {
-  const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [state, setState] = useState<State>({ status: 'loading' });
@@ -51,11 +49,6 @@ export function SectorPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  // Captains have no field access — sectors are off-limits.
-  if (user?.team_role === 'captain') {
-    return <Navigate to="/team" replace />;
-  }
 
   if (!id) {
     return <div className="max-w-3xl mx-auto px-4 text-danger-text">Нет id сектора</div>;
