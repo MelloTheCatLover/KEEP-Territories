@@ -2,7 +2,7 @@ import { useAuth } from './AuthContext';
 import { Card, Button } from '../../shared/ui';
 
 const roleLabels: Record<string, string> = {
-  student: 'Ученик',
+  student: 'Участник',
   admin: 'Администратор',
 };
 
