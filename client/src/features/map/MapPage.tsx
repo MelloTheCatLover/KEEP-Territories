@@ -150,6 +150,12 @@ export function MapPage() {
     return map;
   }, [state]);
 
+  // Highest leadership across teams — that team(s) gets the gold frame.
+  const maxLeadership = useMemo(() => {
+    if (state.status !== 'ready') return 0;
+    return state.fullTeams.reduce((m, t) => Math.max(m, t.stats.leadership), 0);
+  }, [state]);
+
   type SlotKey = 'tl' | 'tr' | 'l' | 'r' | 'bl' | 'br';
 
   const mapLayout = useMemo(() => {
@@ -251,6 +257,9 @@ export function MapPage() {
                   index={entry.index}
                   isOwn={entry.team.id === teamId}
                   pendingCount={pendingByTeam.get(entry.team.id) ?? 0}
+                  isLeadershipLeader={
+                    maxLeadership > 0 && entry.team.stats.leadership === maxLeadership
+                  }
                 />
               );
             })}
@@ -283,6 +292,9 @@ export function MapPage() {
                   index={entry.index}
                   isOwn={entry.team.id === teamId}
                   pendingCount={pendingByTeam.get(entry.team.id) ?? 0}
+                  isLeadershipLeader={
+                    maxLeadership > 0 && entry.team.stats.leadership === maxLeadership
+                  }
                 />
               );
             })}

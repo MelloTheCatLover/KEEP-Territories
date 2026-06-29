@@ -62,6 +62,11 @@ export function TeamsOverviewPage() {
     );
   }, [state]);
 
+  const maxLeadership = useMemo(() => {
+    if (state.status !== 'ready') return 0;
+    return state.teams.reduce((m, t) => Math.max(m, t.stats.leadership), 0);
+  }, [state]);
+
   return (
     <div className="max-w-[1100px] mx-auto px-3 sm:px-4 space-y-4">
       <Link
@@ -108,6 +113,7 @@ export function TeamsOverviewPage() {
               isOwn={team.id === ownTeamId}
               pendingCount={state.pendingByTeam.get(team.id) ?? 0}
               statsLayout="list"
+              isLeadershipLeader={maxLeadership > 0 && team.stats.leadership === maxLeadership}
             />
           ))}
         </div>
