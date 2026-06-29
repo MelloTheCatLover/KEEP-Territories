@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Loader2, MapPin, Users } from 'lucide-react';
 import { getSectorsMap } from './api';
 import type { Sector } from './types';
@@ -184,6 +184,11 @@ export function MapPage() {
 
   const LEFT_SLOTS: SlotKey[] = ['tl', 'l', 'bl'];
   const RIGHT_SLOTS: SlotKey[] = ['tr', 'r', 'br'];
+
+  // Captains manage team stats, not the field — keep them off the map.
+  if (user?.team_role === 'captain') {
+    return <Navigate to="/team" replace />;
+  }
 
   return (
     <div className="max-w-[1500px] mx-auto px-3 sm:px-4">

@@ -28,8 +28,8 @@ function assertActionType(value: unknown): SectorActionType {
 }
 
 async function getUserTeamId(client: PoolClient, userId: string): Promise<string> {
-  const res = await client.query<{ team_id: string | null }>(
-    'SELECT team_id FROM users WHERE id = $1',
+  const res = await client.query<{ team_id: string | null; team_role: string | null }>(
+    'SELECT team_id, team_role FROM users WHERE id = $1',
     [userId],
   );
   if (res.rows.length === 0) {
@@ -37,6 +37,10 @@ async function getUserTeamId(client: PoolClient, userId: string): Promise<string
   }
   if (!res.rows[0].team_id) {
     throw new AppError(400, 'You are not in a team');
+  }
+  // Captains manage team stats, not the field — sector actions are off-limits.
+  if (res.rows[0].team_role === 'captain') {
+    throw new AppError(403, 'Капитан не может захватывать сектора');
   }
   return res.rows[0].team_id;
 }
