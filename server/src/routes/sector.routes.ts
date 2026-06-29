@@ -15,13 +15,14 @@ router.delete('/all', requireAdmin, mapGeneratorController.deleteAll);
 router.get('/admin/status', requireAdmin, mapGeneratorController.getStatus);
 router.get('/admin/task-bindings', requireAdmin, sectorController.getBindings);
 
-router.post('/', sectorController.create);
-router.post('/bulk', sectorController.createBulk);
+router.post('/', requireAdmin, sectorController.create);
+router.post('/bulk', requireAdmin, sectorController.createBulk);
 router.get('/', sectorController.getAll);
 router.get('/map', sectorController.getMap);
 router.get('/:id', validateParamId, sectorController.getById);
 
-router.post('/:sectorId/action/start', submissionController.startAction);
+// Participants are observers: only admins drive the field. Reads stay open.
+router.post('/:sectorId/action/start', requireAdmin, submissionController.startAction);
 router.get('/:sectorId/submission/current', submissionController.getCurrentForSector);
 
 router.get('/:id/tasks', requireAdmin, validateParamId, sectorController.listSectorTasks);

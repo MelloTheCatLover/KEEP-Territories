@@ -60,8 +60,9 @@ export function MapPage() {
 
   const canCreateTeam = user?.team_id === null;
   const teamId = user?.team_id ?? null;
-  // Captains view the map but never act on the field.
-  const isCaptain = user?.team_role === 'captain';
+  // Participants are observers — they view the map but never act on the field.
+  // Only admins drive captures and changes.
+  const isObserver = user?.role !== 'admin';
 
   const userActiveSectorId = useMemo(() => {
     if (!teamId || state.status !== 'ready') return null;
@@ -92,7 +93,7 @@ export function MapPage() {
   }, [teamId, state]);
 
   const highlightIds = useMemo(() => {
-    if (isCaptain) return undefined;
+    if (isObserver) return undefined;
     if (canCreateTeam && state.status === 'ready') {
       const set = new Set<string>();
       state.sectors.forEach((s) => {
@@ -104,11 +105,11 @@ export function MapPage() {
       return new Set<string>([userActiveSectorId]);
     }
     return reachableIds;
-  }, [canCreateTeam, state, reachableIds, userActiveSectorId, isCaptain]);
+  }, [canCreateTeam, state, reachableIds, userActiveSectorId, isObserver]);
 
   const handleClick = useCallback(
     (s: Sector) => {
-      if (s.is_special || isCaptain) return;
+      if (s.is_special || isObserver) return;
       if (canCreateTeam) {
         if (!s.is_home_base || s.home_team_id !== null) return;
         setCreateFor(s);
@@ -118,7 +119,7 @@ export function MapPage() {
         setActionFor(s);
       }
     },
-    [canCreateTeam, teamId, isCaptain],
+    [canCreateTeam, teamId, isObserver],
   );
 
   const freeHomeCount = useMemo(() => {
@@ -207,7 +208,7 @@ export function MapPage() {
         </Link>
       </div>
 
-      {canCreateTeam && state.status === 'ready' && (
+      {!isObserver && canCreateTeam && state.status === 'ready' && (
         <div className="mb-4 flex items-start gap-2 bg-brand-900/30 border border-brand-700 text-sm text-brand-100 px-3 py-2 rounded-sm">
           <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0 text-brand-300" />
           <span>
@@ -265,7 +266,7 @@ export function MapPage() {
               <HexMap
                 sectors={state.sectors}
                 teamsById={state.teamsById}
-                onSectorClick={!isCaptain && (canCreateTeam || teamId) ? handleClick : undefined}
+                onSectorClick={!isObserver && (canCreateTeam || teamId) ? handleClick : undefined}
                 highlightIds={highlightIds}
               />
             </div>
