@@ -179,8 +179,17 @@ export const zIndex = {
 export const getTeamColor = (index: number) =>
   teamColors[TEAM_COLOR_ORDER[index % TEAM_COLOR_ORDER.length]];
 
+/** Renderable team palette — the shape shared by `teamColors` entries. */
+export type TeamColor = {
+  base: string;
+  bright: string;
+  dark: string;
+  muted: string;
+  textOnBase: string;
+};
+
 /** Resolve a TeamColor entry from a hex value, matching any palette base. */
-export const findTeamColorByHex = (hex: string | null | undefined) => {
+export const findTeamColorByHex = (hex: string | null | undefined): TeamColor | null => {
   if (!hex) return null;
   const normalized = hex.toUpperCase();
   for (const key of TEAM_COLOR_ORDER) {
@@ -188,6 +197,54 @@ export const findTeamColorByHex = (hex: string | null | undefined) => {
   }
   return null;
 };
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const int = parseInt(full, 16);
+  return [(int >> 16) & 255, (int >> 8) & 255, int & 255];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const to = (v: number) =>
+    Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  return `#${to(r)}${to(g)}${to(b)}`.toUpperCase();
+}
+
+function mix(a: [number, number, number], b: [number, number, number], t: number): [number, number, number] {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+function relativeLuminance([r, g, b]: [number, number, number]): number {
+  const f = (v: number) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+
+const SHADE_WHITE: [number, number, number] = [255, 255, 255];
+const SHADE_BLACK: [number, number, number] = [13, 14, 17];
+
+/** Derive a full team palette (shades + readable text) from an arbitrary hex. */
+export const paletteFromHex = (hex: string): TeamColor => {
+  const rgb = hexToRgb(hex);
+  return {
+    base: rgbToHex(...rgb),
+    bright: rgbToHex(...mix(rgb, SHADE_WHITE, 0.28)),
+    dark: rgbToHex(...mix(rgb, SHADE_BLACK, 0.3)),
+    muted: rgbToHex(...mix(rgb, SHADE_BLACK, 0.48)),
+    textOnBase: relativeLuminance(rgb) > 0.45 ? '#0D0E11' : '#F2F4F8',
+  };
+};
+
+/** Palette for a stored team color (palette hue or any custom hex); null if unset. */
+export const teamPaletteFromColor = (color: string | null | undefined): TeamColor | null =>
+  findTeamColorByHex(color) ?? (color ? paletteFromHex(color) : null);
+
+/** Stored color → palette, falling back to the index-assigned hue when unset. */
+export const resolveTeamPalette = (color: string | null | undefined, index: number): TeamColor =>
+  teamPaletteFromColor(color) ?? getTeamColor(index);
 
 /** Get difficulty color by level. */
 export const getDifficultyColor = (level: DifficultyKey) => difficultyColors[level];

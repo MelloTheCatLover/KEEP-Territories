@@ -23,7 +23,7 @@ import type {
   TrophyKey,
   TrophyRanking,
 } from '../trophies/types';
-import { findTeamColorByHex } from '../../design-system/design-tokens';
+import { teamPaletteFromColor } from '../../design-system/design-tokens';
 
 type State =
   | { status: 'loading' }
@@ -247,7 +247,7 @@ function TrophyTable({ trophy }: { trophy: TrophyRanking }) {
 }
 
 function TeamCell({ name, color }: { name: string; color: string | null }) {
-  const palette = findTeamColorByHex(color);
+  const palette = teamPaletteFromColor(color);
   const fill = palette?.base ?? 'var(--color-neutral-500)';
   return (
     <span className="inline-flex items-center gap-2 min-w-0">

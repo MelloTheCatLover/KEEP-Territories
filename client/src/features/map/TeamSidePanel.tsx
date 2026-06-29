@@ -1,6 +1,6 @@
 import { Activity } from 'lucide-react';
 import type { TeamFullStats } from '../team/types';
-import { findTeamColorByHex, getTeamColor } from '../../design-system/design-tokens';
+import { resolveTeamPalette } from '../../design-system/design-tokens';
 
 type SummaryProps = {
   team: TeamFullStats;
@@ -33,8 +33,8 @@ export function TeamSummaryCard({
   statsLayout = 'grid',
   isLeadershipLeader = false,
 }: SummaryProps) {
-  const palette = findTeamColorByHex(team.color) ?? getTeamColor(index);
-  const accent = palette?.base ?? 'var(--color-neutral-500)';
+  const palette = resolveTeamPalette(team.color, index);
+  const accent = palette.base;
   // Team-coloured frame with a faint wash showing through the dark glass —
   // an accent, not a full recolour. The leadership leader gets a gold frame;
   // own team keeps an extra brand ring.

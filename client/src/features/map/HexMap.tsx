@@ -5,8 +5,7 @@ import { formatSectorLabel } from './types';
 import { axialToPixel, hexPoints, bbox } from './hex-utils';
 import {
   difficultyColors,
-  findTeamColorByHex,
-  getTeamColor,
+  resolveTeamPalette as resolvePalette,
   specialSectorColor,
 } from '../../design-system/design-tokens';
 
@@ -46,7 +45,7 @@ export type TeamInfo = {
 };
 
 function resolveTeamPalette(team: TeamInfo) {
-  return findTeamColorByHex(team.color) ?? getTeamColor(team.index);
+  return resolvePalette(team.color, team.index);
 }
 
 const DIFFICULTY_BADGE: Record<DifficultySlug, string> = {
