@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, Loader2, Pencil, Sliders, Trash2, UserMinus, X, RefreshCw } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner, Input, Label } from '../../shared/ui';
@@ -12,12 +12,7 @@ import {
   adminUpdateTeam,
 } from './teams-api';
 import type { StatName, Team, TeamFullStats } from '../team/types';
-import {
-  teamColors,
-  TEAM_COLOR_ORDER,
-  findTeamColorByHex,
-  type TeamColorKey,
-} from '../../design-system/design-tokens';
+import { teamColors, TEAM_COLOR_ORDER } from '../../design-system/design-tokens';
 
 type LoadState =
   | { status: 'loading' }
@@ -277,18 +272,13 @@ function EditTeamModal({
   onCancel: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const initialColorKey = useMemo<TeamColorKey | null>(() => {
-    const found = team.color ? findTeamColorByHex(team.color) : null;
-    if (!found) return null;
-    return (TEAM_COLOR_ORDER.find((k) => teamColors[k].base === found.base) ?? null) as
-      | TeamColorKey
-      | null;
-  }, [team.color]);
-
   const [name, setName] = useState(team.name);
-  const [colorKey, setColorKey] = useState<TeamColorKey | null>(initialColorKey);
+  const [color, setColor] = useState<string | null>(team.color);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const normalizedColor = color ? color.toUpperCase() : null;
+  const isValidColor = normalizedColor === null || /^#[0-9A-F]{6}$/.test(normalizedColor);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -297,13 +287,16 @@ function EditTeamModal({
       setError('Название не может быть пустым');
       return;
     }
+    if (!isValidColor) {
+      setError('Цвет должен быть в формате #RRGGBB');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const patch: { name?: string; color?: string | null } = {};
       if (trimmed !== team.name) patch.name = trimmed;
-      const nextColor = colorKey ? teamColors[colorKey].base : null;
-      if (nextColor !== team.color) patch.color = nextColor;
+      if (normalizedColor !== team.color) patch.color = normalizedColor;
       if (Object.keys(patch).length === 0) {
         onCancel();
         return;
@@ -357,16 +350,58 @@ function EditTeamModal({
 
         <div>
           <Label>Цвет</Label>
-          <div className="flex flex-wrap gap-2 mt-2">
+          <div className="flex items-center gap-3 mt-2">
+            <input
+              type="color"
+              value={normalizedColor ?? '#888888'}
+              onChange={(e) => setColor(e.target.value.toUpperCase())}
+              disabled={busy}
+              className="w-10 h-10 rounded-sm border border-neutral-400 bg-transparent cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Выбрать цвет"
+              title="Выбрать любой цвет"
+            />
+            <input
+              type="text"
+              value={color ?? ''}
+              onChange={(e) => {
+                const v = e.target.value.trim();
+                setColor(v === '' ? null : v.toUpperCase());
+              }}
+              placeholder="#RRGGBB"
+              maxLength={7}
+              disabled={busy}
+              className="font-mono w-28 px-2 py-1.5 rounded-sm bg-neutral-100 border border-neutral-500 text-neutral-1000 text-sm focus:outline-none focus:border-brand-500 disabled:opacity-50"
+            />
+            <button
+              type="button"
+              onClick={() => setColor(null)}
+              disabled={busy}
+              className={`h-8 px-3 rounded-full border-2 text-xs transition-all disabled:opacity-40 ${
+                normalizedColor === null
+                  ? 'border-neutral-1000 text-neutral-1000'
+                  : 'border-neutral-400 text-neutral-700 hover:border-neutral-600'
+              }`}
+            >
+              Без цвета
+            </button>
+          </div>
+          {!isValidColor && (
+            <p className="text-xs text-danger-text mt-1">Формат: #RRGGBB</p>
+          )}
+
+          <div className="text-2xs uppercase tracking-wider text-neutral-700 mt-3 mb-1.5">
+            Палитра
+          </div>
+          <div className="flex flex-wrap gap-2">
             {TEAM_COLOR_ORDER.map((key) => {
               const c = teamColors[key];
-              const selected = colorKey === key;
-              const taken = takenColors.has(c.base.toUpperCase());
+              const selected = normalizedColor === c.base.toUpperCase();
+              const taken = !selected && takenColors.has(c.base.toUpperCase());
               return (
                 <button
                   key={key}
                   type="button"
-                  onClick={() => !taken && setColorKey(key)}
+                  onClick={() => !taken && setColor(c.base.toUpperCase())}
                   disabled={busy || taken}
                   className={`relative w-8 h-8 rounded-full border-2 transition-all disabled:cursor-not-allowed ${
                     taken
@@ -390,18 +425,6 @@ function EditTeamModal({
                 </button>
               );
             })}
-            <button
-              type="button"
-              onClick={() => setColorKey(null)}
-              disabled={busy}
-              className={`h-8 px-3 rounded-full border-2 text-xs transition-all disabled:opacity-40 ${
-                colorKey === null
-                  ? 'border-neutral-1000 text-neutral-1000'
-                  : 'border-neutral-400 text-neutral-700 hover:border-neutral-600'
-              }`}
-            >
-              Без цвета
-            </button>
           </div>
         </div>
 

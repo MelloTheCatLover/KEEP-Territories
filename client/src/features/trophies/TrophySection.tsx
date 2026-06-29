@@ -10,7 +10,7 @@ import {
   Trophy,
   Loader2,
 } from 'lucide-react';
-import { findTeamColorByHex } from '../../design-system/design-tokens';
+import { teamPaletteFromColor } from '../../design-system/design-tokens';
 import { ApiError } from '../../shared/api/client';
 import { getTrophies } from './api';
 import type {
@@ -98,7 +98,7 @@ function TrophyCard({ trophy }: { trophy: TrophyRanking }) {
   const Icon = TROPHY_ICON[trophy.key];
   const winners = trophy.entries.filter((e) => e.place === 1);
   const colors = winners
-    .map((w) => findTeamColorByHex(w.team_color)?.bright ?? null)
+    .map((w) => teamPaletteFromColor(w.team_color)?.bright ?? null)
     .filter((c): c is NonNullable<typeof c> => c !== null);
 
   const fillStyle = buildFillStyle(colors);
