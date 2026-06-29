@@ -15,6 +15,7 @@ export interface Sector {
   is_home_base: boolean;
   home_team_id: string | null;
   current_action_type: SectorActionType | null;
+  is_special: boolean;
 }
 
 export type SectorStatus = 'free' | 'capturing' | 'captured';

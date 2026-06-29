@@ -82,6 +82,7 @@ export function MapPage() {
     state.sectors.forEach((s) => {
       if (s.captured_by_team_id === teamId) return;
       if (s.is_home_base) return;
+      if (s.is_special) return;
       const adjacent = offsets.some(([dq, dr]) => owned.has(`${s.q + dq}:${s.r + dr}`));
       if (adjacent) set.add(s.id);
     });
@@ -104,6 +105,7 @@ export function MapPage() {
 
   const handleClick = useCallback(
     (s: Sector) => {
+      if (s.is_special) return;
       if (canCreateTeam) {
         if (!s.is_home_base || s.home_team_id !== null) return;
         setCreateFor(s);

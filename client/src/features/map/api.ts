@@ -36,12 +36,12 @@ export type GenerateMapResponse = {
   count: number;
 };
 
-export type RingDifficulty = 'easy' | 'medium' | 'hard';
-export type RingConfig = { difficulty: RingDifficulty };
-export type MapGeneratorConfig = { rings: RingConfig[] };
-
-export function generateMap(config?: MapGeneratorConfig): Promise<GenerateMapResponse> {
-  return api.post<GenerateMapResponse>('/sectors/generate-map', config);
+/**
+ * (Re)generate the season map from the fixed preset. Existing teams and the
+ * children distribution survive — they are re-anchored to new home bases.
+ */
+export function generateMap(): Promise<GenerateMapResponse> {
+  return api.post<GenerateMapResponse>('/sectors/generate-map');
 }
 
 export function deleteAllSectors(): Promise<{ deleted_count: number; deleted_teams_count: number }> {

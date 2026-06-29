@@ -25,6 +25,7 @@ export type Sector = {
   is_home_base: boolean;
   home_team_id: string | null;
   current_action_type: ActionType | null;
+  is_special: boolean;
   difficulty: Difficulty;
   /**
    * ID of the team that currently has a pending submission on this sector,

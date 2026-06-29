@@ -5,22 +5,19 @@ import { SectorPublic } from '../types/sector';
 import { DifficultyLevel, DifficultySlug } from '../types/difficulty';
 import { getActiveSeasonId } from './season.service';
 
-export type RingDifficulty = Exclude<DifficultySlug, 'core'>;
-export interface RingConfig {
-  difficulty: RingDifficulty;
-}
-export interface MapGeneratorConfig {
-  rings: RingConfig[];
-}
-
-const MAX_RINGS = 6;
-const DEFAULT_CONFIG: MapGeneratorConfig = {
-  rings: [{ difficulty: 'hard' }, { difficulty: 'medium' }, { difficulty: 'easy' }],
-};
-
-export function defaultMapConfig(): MapGeneratorConfig {
-  return { rings: DEFAULT_CONFIG.rings.map((r) => ({ ...r })) };
-}
+/**
+ * Fixed camp map preset. Radius 4 → 5 rings (incl. core), 61 sectors:
+ *
+ *   r0  core            — 1
+ *   r1  hard            — 6
+ *   r2  medium / special alternating (corners medium, edges special-blue) — 12
+ *   r3  medium edges, easy corners — 18
+ *   r4  easy, 6 home bases at corners — 24
+ *
+ * The ring layout, difficulties, special sectors and home-base positions are
+ * not configurable — this is the single canonical world for a season.
+ */
+export const PRESET_RADIUS = 4;
 
 export function generateHexCoordinates(radius: number): Array<{ q: number; r: number }> {
   const coords: Array<{ q: number; r: number }> = [];
@@ -38,7 +35,8 @@ export function getRing(q: number, r: number): number {
   return (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
 }
 
-export function homeBaseCoordsForRadius(radius: number): Array<{ q: number; r: number }> {
+/** The 6 corner cells of the hex ring at the given radius. */
+export function cornerCoordsForRadius(radius: number): Array<{ q: number; r: number }> {
   if (radius < 1) return [];
   return [
     { q: radius, r: 0 },
@@ -50,37 +48,45 @@ export function homeBaseCoordsForRadius(radius: number): Array<{ q: number; r: n
   ];
 }
 
-export function validateMapConfig(input: unknown): MapGeneratorConfig {
-  if (input == null) return defaultMapConfig();
-  if (typeof input !== 'object') {
-    throw new AppError(400, 'Invalid map config');
-  }
-  const obj = input as { rings?: unknown };
-  if (obj.rings == null) return defaultMapConfig();
-  if (!Array.isArray(obj.rings)) {
-    throw new AppError(400, 'rings must be an array');
-  }
-  if (obj.rings.length < 1 || obj.rings.length > MAX_RINGS) {
-    throw new AppError(400, `rings must contain between 1 and ${MAX_RINGS} entries`);
-  }
-  const rings: RingConfig[] = obj.rings.map((entry, idx) => {
-    if (!entry || typeof entry !== 'object') {
-      throw new AppError(400, `rings[${idx}] must be an object`);
-    }
-    const diff = (entry as { difficulty?: unknown }).difficulty;
-    if (diff !== 'easy' && diff !== 'medium' && diff !== 'hard') {
-      throw new AppError(400, `rings[${idx}].difficulty must be easy|medium|hard`);
-    }
-    return { difficulty: diff };
-  });
-  return { rings };
+interface PresetCell {
+  q: number;
+  r: number;
+  slug: DifficultySlug;
+  isHome: boolean;
+  isSpecial: boolean;
 }
 
-function ringDifficultyAt(ringIndex: number, config: MapGeneratorConfig): DifficultySlug {
-  if (ringIndex === 0) return 'core';
-  const entry = config.rings[ringIndex - 1];
-  if (!entry) throw new AppError(500, `ring ${ringIndex} not configured`);
-  return entry.difficulty;
+/** Build the fixed preset cells with their difficulty / home / special roles. */
+export function buildPresetCells(): PresetCell[] {
+  const cornerSetByRing = new Map<number, Set<string>>();
+  for (let ring = 1; ring <= PRESET_RADIUS; ring++) {
+    cornerSetByRing.set(
+      ring,
+      new Set(cornerCoordsForRadius(ring).map((c) => `${c.q},${c.r}`)),
+    );
+  }
+
+  const cells: PresetCell[] = [];
+  for (const { q, r } of generateHexCoordinates(PRESET_RADIUS)) {
+    const ring = getRing(q, r);
+    const isCorner = cornerSetByRing.get(ring)?.has(`${q},${r}`) ?? false;
+
+    if (ring === 0) {
+      cells.push({ q, r, slug: 'core', isHome: false, isSpecial: false });
+    } else if (ring === 1) {
+      cells.push({ q, r, slug: 'hard', isHome: false, isSpecial: false });
+    } else if (ring === 2) {
+      // corners → medium, edges → special-event (blue, non-capturable)
+      cells.push({ q, r, slug: 'medium', isHome: false, isSpecial: !isCorner });
+    } else if (ring === 3) {
+      // corners → easy, edges → medium
+      cells.push({ q, r, slug: isCorner ? 'easy' : 'medium', isHome: false, isSpecial: false });
+    } else {
+      // ring 4: corners → home bases, edges → easy
+      cells.push({ q, r, slug: 'easy', isHome: isCorner, isSpecial: false });
+    }
+  }
+  return cells;
 }
 
 interface DiffIdMap {
@@ -105,6 +111,7 @@ type SectorRow = {
   is_home_base: boolean;
   home_team_id: string | null;
   current_action_type: 'capture' | 'fortify' | 'remove_fortification' | 'recapture' | null;
+  is_special: boolean;
   difficulty_name: string;
   difficulty_slug: DifficultySlug;
   difficulty_influence_reward: number;
@@ -134,6 +141,7 @@ function rowToSectorPublic(row: SectorRow): SectorPublic {
     is_home_base: row.is_home_base,
     home_team_id: row.home_team_id,
     current_action_type: row.current_action_type,
+    is_special: row.is_special,
     difficulty,
     active_submission_team_id: null,
   };
@@ -153,11 +161,7 @@ async function loadDifficultyMap(client: PoolClient): Promise<DiffIdMap> {
   return { easy: map.easy, medium: map.medium, hard: map.hard, core: map.core };
 }
 
-async function checkTaskCounts(
-  client: PoolClient,
-  diffMap: DiffIdMap,
-  needed: { easyNonHome: number; mediumNonHome: number }
-): Promise<void> {
+async function checkTaskCounts(client: PoolClient, diffMap: DiffIdMap): Promise<void> {
   const res = await client.query<{ difficulty_id: string; count: string }>(
     'SELECT difficulty_id, COUNT(*)::text AS count FROM tasks GROUP BY difficulty_id'
   );
@@ -170,8 +174,8 @@ async function checkTaskCounts(
   const core = counts[diffMap.core] ?? 0;
   const errors: string[] = [];
   if (core < 1) errors.push(`core ${core}/1`);
-  if (needed.easyNonHome > 0 && easy < 4) errors.push(`easy ${easy}/4`);
-  if (needed.mediumNonHome > 0 && medium < 5) errors.push(`medium ${medium}/5`);
+  if (easy < 4) errors.push(`easy ${easy}/4`);
+  if (medium < 5) errors.push(`medium ${medium}/5`);
   if (errors.length > 0) {
     throw new AppError(400, `Not enough tasks: ${errors.join(', ')}`);
   }
@@ -187,8 +191,10 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 async function assignTasksAfterGeneration(client: PoolClient, seasonId: string): Promise<void> {
+  // Special and home-base sectors never get tasks — they can't be captured.
   const sectorsRes = await client.query<{ id: string; difficulty_id: string }>(
-    'SELECT id, difficulty_id FROM sectors WHERE season_id = $1',
+    `SELECT id, difficulty_id FROM sectors
+      WHERE season_id = $1 AND is_special = false AND is_home_base = false`,
     [seasonId]
   );
   const tasksRes = await client.query<{ id: string; difficulty_id: string }>(
@@ -209,17 +215,17 @@ async function assignTasksAfterGeneration(client: PoolClient, seasonId: string):
 
   for (const sector of sectorsRes.rows) {
     const slug = slugById[sector.difficulty_id];
-    const pool = tasksByDiff[sector.difficulty_id] ?? [];
+    const taskPool = tasksByDiff[sector.difficulty_id] ?? [];
 
     if (slug === 'easy' || slug === 'medium') {
       const need = slug === 'easy' ? 4 : 5;
-      if (pool.length < need) {
+      if (taskPool.length < need) {
         throw new AppError(
           400,
-          `Not enough ${slug} tasks: need ${need} distinct, have ${pool.length}`
+          `Not enough ${slug} tasks: need ${need} distinct, have ${taskPool.length}`
         );
       }
-      const picked = shuffle(pool).slice(0, need);
+      const picked = shuffle(taskPool).slice(0, need);
       const values: string[] = [];
       const params: string[] = [];
       picked.forEach((taskId, i) => {
@@ -231,86 +237,114 @@ async function assignTasksAfterGeneration(client: PoolClient, seasonId: string):
         params
       );
     } else if (slug === 'core') {
-      if (pool.length < 1) {
+      if (taskPool.length < 1) {
         throw new AppError(400, 'Not enough core tasks: need 1, have 0');
       }
-      const picked = shuffle(pool)[0];
+      const picked = shuffle(taskPool)[0];
       await client.query('UPDATE sectors SET task_id = $1 WHERE id = $2', [picked, sector.id]);
     }
   }
 }
 
-export async function generateMap(config: MapGeneratorConfig = defaultMapConfig()): Promise<SectorPublic[]> {
-  const radius = config.rings.length;
-  const homeBaseSet = new Set(homeBaseCoordsForRadius(radius).map((c) => `${c.q},${c.r}`));
+/** Delete this season's sectors and everything anchored to them, keeping teams. */
+async function clearSeasonSectors(client: PoolClient, seasonId: string): Promise<void> {
+  const seasonSectors = `(SELECT id FROM sectors WHERE season_id = $1)`;
+  await client.query(`DELETE FROM task_submissions WHERE sector_id IN ${seasonSectors}`, [seasonId]);
+  await client.query(`DELETE FROM sector_captures WHERE sector_id IN ${seasonSectors}`, [seasonId]);
+  await client.query(`DELETE FROM sector_tasks WHERE sector_id IN ${seasonSectors}`, [seasonId]);
+  await client.query('DELETE FROM sectors WHERE season_id = $1', [seasonId]);
+}
 
-  const seasonId = await getActiveSeasonId();
-
-  const existing = await pool.query<{ count: string }>(
-    'SELECT COUNT(*)::text AS count FROM sectors WHERE season_id = $1',
-    [seasonId]
+/** Re-anchor each surviving team 1:1 to a fresh free home base. */
+async function repinTeams(client: PoolClient, seasonId: string, teamIds: string[]): Promise<void> {
+  const bases = await client.query<{ id: string }>(
+    `SELECT id FROM sectors
+      WHERE season_id = $1 AND is_home_base = true
+      ORDER BY q ASC, r ASC`,
+    [seasonId],
   );
-  if (parseInt(existing.rows[0].count, 10) > 0) {
+  if (teamIds.length > bases.rows.length) {
     throw new AppError(
-      409,
-      'Map already exists. Delete existing map first via DELETE /api/sectors/all'
+      400,
+      `Команд (${teamIds.length}) больше, чем домашних баз (${bases.rows.length})`,
     );
   }
+  for (let i = 0; i < teamIds.length; i++) {
+    const teamId = teamIds[i];
+    const baseId = bases.rows[i].id;
+    await client.query(
+      `UPDATE sectors
+          SET status = 'captured', captured_by_team_id = $1, home_team_id = $1,
+              fortification_level = 0, capturing_by_team_id = NULL,
+              capture_started_at = NULL, current_action_type = NULL
+        WHERE id = $2`,
+      [teamId, baseId],
+    );
+    await client.query(
+      `INSERT INTO sector_captures (sector_id, team_id) VALUES ($1, $2)`,
+      [baseId, teamId],
+    );
+  }
+}
+
+/**
+ * (Re)generate the season map from the fixed preset. Existing teams and the
+ * children distribution (`season_participants`, `users.team_id`) are preserved:
+ * teams are re-anchored to new home bases, only field progress is reset.
+ */
+export async function generateMap(): Promise<SectorPublic[]> {
+  const seasonId = await getActiveSeasonId();
+  const cells = buildPresetCells();
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const diffMap = await loadDifficultyMap(client);
+    await checkTaskCounts(client, diffMap);
 
-    const coords = generateHexCoordinates(radius);
-    const bySlug: Record<DifficultySlug, Array<{ q: number; r: number; isHome: boolean }>> = {
-      easy: [],
-      medium: [],
-      hard: [],
-      core: [],
-    };
-    for (const { q, r } of coords) {
-      const slug = ringDifficultyAt(getRing(q, r), config);
-      const isHome = homeBaseSet.has(`${q},${r}`);
-      bySlug[slug].push({ q, r, isHome });
-    }
+    // Snapshot surviving teams before wiping the old field.
+    const teamsRes = await client.query<{ id: string }>(
+      'SELECT id FROM teams WHERE season_id = $1 ORDER BY created_at ASC',
+      [seasonId],
+    );
+    const teamIds = teamsRes.rows.map((t) => t.id);
 
-    await checkTaskCounts(client, diffMap, {
-      easyNonHome: bySlug.easy.filter((c) => !c.isHome).length,
-      mediumNonHome: bySlug.medium.filter((c) => !c.isHome).length,
-    });
+    await clearSeasonSectors(client, seasonId);
 
-    const rows: Array<{ number: number | null; q: number; r: number; difficultyId: string; isHome: boolean }> = [];
-    (Object.keys(bySlug) as DifficultySlug[]).forEach((slug) => {
-      const bucket = bySlug[slug];
-      const nonHome = shuffle(bucket.filter((c) => !c.isHome));
-      const homes = bucket.filter((c) => c.isHome);
-      nonHome.forEach(({ q, r, isHome }, idx) => {
-        rows.push({ number: idx + 1, q, r, difficultyId: diffMap[slug], isHome });
-      });
-      homes.forEach(({ q, r, isHome }) => {
-        rows.push({ number: null, q, r, difficultyId: diffMap[slug], isHome });
-      });
+    // Sequential per-difficulty numbers over capturable cells only.
+    const numberBySlug: Record<DifficultySlug, number> = { easy: 0, medium: 0, hard: 0, core: 0 };
+    const rows = cells.map((cell) => {
+      const numbered = !cell.isHome && !cell.isSpecial;
+      const number = numbered ? (numberBySlug[cell.slug] += 1) : null;
+      return {
+        number,
+        q: cell.q,
+        r: cell.r,
+        difficultyId: diffMap[cell.slug],
+        isHome: cell.isHome,
+        isSpecial: cell.isSpecial,
+      };
     });
 
     const values: string[] = [];
     const params: Array<string | number | boolean | null> = [];
     rows.forEach((row, i) => {
-      const base = i * 6;
+      const base = i * 7;
       values.push(
-        `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`
+        `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`,
       );
-      params.push(row.number, row.q, row.r, row.difficultyId, row.isHome, seasonId);
+      params.push(row.number, row.q, row.r, row.difficultyId, row.isHome, row.isSpecial, seasonId);
     });
 
     await client.query(
-      `INSERT INTO sectors (number, q, r, difficulty_id, is_home_base, season_id)
+      `INSERT INTO sectors (number, q, r, difficulty_id, is_home_base, is_special, season_id)
        VALUES ${values.join(', ')}`,
-      params
+      params,
     );
 
     await assignTasksAfterGeneration(client, seasonId);
+    await repinTeams(client, seasonId, teamIds);
 
     await client.query('COMMIT');
   } catch (error) {
@@ -350,35 +384,20 @@ export async function deleteAllSectors(): Promise<{ deleted_count: number; delet
     await client.query('BEGIN');
 
     const seasonId = await getActiveSeasonId(client);
-    const seasonSectors = `(SELECT id FROM sectors WHERE season_id = $1)`;
-
-    await client.query(
-      `DELETE FROM task_submissions WHERE sector_id IN ${seasonSectors}`,
-      [seasonId]
-    );
-    await client.query(
-      `DELETE FROM sector_captures WHERE sector_id IN ${seasonSectors}`,
-      [seasonId]
-    );
-    await client.query(
-      `DELETE FROM sector_tasks WHERE sector_id IN ${seasonSectors}`,
-      [seasonId]
-    );
-
-    const sectors = await client.query(
-      'DELETE FROM sectors WHERE season_id = $1 RETURNING id',
-      [seasonId]
-    );
 
     await client.query(
       `UPDATE users SET team_id = NULL, team_role = NULL
        WHERE team_id IN (SELECT id FROM teams WHERE season_id = $1)`,
       [seasonId]
     );
-    const teams = await client.query(
-      'DELETE FROM teams WHERE season_id = $1 RETURNING id',
-      [seasonId]
-    );
+
+    const seasonSectors = `(SELECT id FROM sectors WHERE season_id = $1)`;
+    await client.query(`DELETE FROM task_submissions WHERE sector_id IN ${seasonSectors}`, [seasonId]);
+    await client.query(`DELETE FROM sector_captures WHERE sector_id IN ${seasonSectors}`, [seasonId]);
+    await client.query(`DELETE FROM sector_tasks WHERE sector_id IN ${seasonSectors}`, [seasonId]);
+
+    const sectors = await client.query('DELETE FROM sectors WHERE season_id = $1 RETURNING id', [seasonId]);
+    const teams = await client.query('DELETE FROM teams WHERE season_id = $1 RETURNING id', [seasonId]);
 
     await client.query('COMMIT');
     return {

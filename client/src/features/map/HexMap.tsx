@@ -8,6 +8,7 @@ import {
   difficultyColors,
   findTeamColorByHex,
   getTeamColor,
+  specialSectorColor,
 } from '../../design-system/design-tokens';
 
 const HEX_SIZE = 34;
@@ -74,6 +75,16 @@ type HexStyle = {
 function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle {
   const diffBadge = DIFFICULTY_BADGE[s.difficulty.slug];
   const numberLabel = s.number != null ? formatSectorLabel(s.difficulty.slug, s.number) : '';
+
+  if (s.is_special) {
+    return {
+      fill: specialSectorColor,
+      fillOpacity: 1,
+      label: '',
+      labelFill: 'var(--color-neutral-0)',
+      titleExtra: ' · особое событие',
+    };
+  }
 
   if (s.is_home_base && s.home_team_id) {
     const team = teamsById[s.home_team_id];
@@ -298,7 +309,9 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
         {sectors.map((s) => {
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
           const style = resolveStyle(s, teamsById);
-          const badgeColor = DIFFICULTY_BADGE[s.difficulty.slug];
+          const badgeColor = s.is_special
+            ? specialSectorColor
+            : DIFFICULTY_BADGE[s.difficulty.slug];
           const badgeX = x - HEX_SIZE * 0.55;
           const badgeY = y - HEX_SIZE * 0.55;
           const fortLevel = Math.max(0, Math.min(3, s.fortification_level | 0));

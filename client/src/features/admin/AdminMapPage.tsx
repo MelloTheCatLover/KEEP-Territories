@@ -1,29 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, Loader2, Plus, RefreshCw, Trash2, Hammer, X } from 'lucide-react';
+import { AlertCircle, Loader2, RefreshCw, Trash2, Hammer, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
-import {
-  deleteAllSectors,
-  generateMap,
-  getAdminMapStatus,
-  getSectorsMap,
-  type RingConfig,
-  type RingDifficulty,
-} from '../map/api';
+import { deleteAllSectors, generateMap, getAdminMapStatus, getSectorsMap } from '../map/api';
 
-const MAX_RINGS = 6;
-const DEFAULT_RINGS: RingConfig[] = [
-  { difficulty: 'hard' },
-  { difficulty: 'medium' },
-  { difficulty: 'easy' },
+// Fixed preset (radius 4) — must mirror buildPresetCells on the server.
+const PRESET_RINGS: Array<{ label: string; detail: string }> = [
+  { label: 'Ядро', detail: '1 сектор · core' },
+  { label: 'Кольцо 1', detail: '6 секторов · сложные' },
+  { label: 'Кольцо 2', detail: '12 секторов · средние через один с особыми (синие)' },
+  { label: 'Кольцо 3', detail: '18 секторов · средние, лёгкие в углах' },
+  { label: 'Кольцо 4', detail: '24 сектора · лёгкие, 6 домашних баз в углах' },
 ];
-const DIFFICULTY_LABEL: Record<RingDifficulty, string> = {
-  easy: 'Лёгкие',
-  medium: 'Средние',
-  hard: 'Сложные',
-};
-const DIFFICULTY_OPTIONS: RingDifficulty[] = ['easy', 'medium', 'hard'];
+const PRESET_TOTAL = 61;
+const PRESET_HOME_BASES = 6;
 
 type State =
   | { status: 'loading' }
@@ -39,10 +30,6 @@ export function AdminMapPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [rings, setRings] = useState<RingConfig[]>(DEFAULT_RINGS);
-
-  const totalSectors = 1 + rings.reduce((sum, _, idx) => sum + 6 * (idx + 1), 0);
-  const homeBaseCount = rings.length >= 1 ? 6 : 0;
 
   const refresh = useCallback(async () => {
     setState({ status: 'loading' });
@@ -65,30 +52,14 @@ export function AdminMapPage() {
     setActionError(null);
     setFlash(null);
     try {
-      const result = await generateMap({ rings });
-      setFlash(`Создано секторов: ${result.count}`);
+      const result = await generateMap();
+      setFlash(`Карта собрана: ${result.count} секторов. Команды и распределение сохранены.`);
       await refresh();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Ошибка генерации');
     } finally {
       setBusy(null);
     }
-  }
-
-  function setRingDifficulty(idx: number, diff: RingDifficulty) {
-    setRings((prev) => prev.map((r, i) => (i === idx ? { difficulty: diff } : r)));
-  }
-
-  function addRing() {
-    setRings((prev) => (prev.length >= MAX_RINGS ? prev : [...prev, { difficulty: 'easy' }]));
-  }
-
-  function removeRing(idx: number) {
-    setRings((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
-  }
-
-  function resetRings() {
-    setRings(DEFAULT_RINGS);
   }
 
   async function handleDelete() {
@@ -179,88 +150,26 @@ export function AdminMapPage() {
       {actionError && <ErrorBanner message={actionError} />}
 
       <Card>
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div>
-            <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">
-              Конфигурация колец
-            </h2>
-            <p className="text-sm text-neutral-700">
-              Ядро в центре всегда одно. Каждое следующее кольцо окружает предыдущее.
-              Внешнее кольцо содержит 6 домашних секторов в углах.
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={resetRings}
-            disabled={busy !== null || exists}
-          >
-            Сбросить
-          </Button>
-        </div>
-
-        <div className="space-y-2 mb-3">
-          <div className="flex items-center gap-3 px-3 py-2 rounded-sm bg-neutral-200 border border-neutral-400">
-            <span className="font-mono text-xs text-neutral-700 w-16">Ядро</span>
-            <span className="text-sm text-neutral-900">1 сектор · core</span>
-          </div>
-          {rings.map((ring, idx) => (
+        <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Раскладка</h2>
+        <p className="text-sm text-neutral-700 mb-3">
+          Фиксированная схема лагеря: пять колец от ядра наружу. Синие сектора особых
+          событий захватывать нельзя. Внешнее кольцо несёт 6 домашних баз.
+        </p>
+        <div className="space-y-2">
+          {PRESET_RINGS.map((ring) => (
             <div
-              key={idx}
+              key={ring.label}
               className="flex items-center gap-3 px-3 py-2 rounded-sm bg-neutral-200 border border-neutral-400"
             >
-              <span className="font-mono text-xs text-neutral-700 w-16">
-                Кольцо {idx + 1}
-              </span>
-              <span className="text-sm text-neutral-900 w-24">
-                {6 * (idx + 1)} секторов
-              </span>
-              <select
-                value={ring.difficulty}
-                onChange={(e) => setRingDifficulty(idx, e.target.value as RingDifficulty)}
-                disabled={busy !== null || exists}
-                className="bg-neutral-100 border border-neutral-500 text-neutral-1000 text-sm px-2 py-1 rounded-sm focus:outline-none focus:border-brand-500 disabled:opacity-50"
-              >
-                {DIFFICULTY_OPTIONS.map((d) => (
-                  <option key={d} value={d}>
-                    {DIFFICULTY_LABEL[d]}
-                  </option>
-                ))}
-              </select>
-              {idx === rings.length - 1 && (
-                <span className="text-xs text-brand-300 ml-auto mr-2">+ домашние базы</span>
-              )}
-              <button
-                type="button"
-                onClick={() => removeRing(idx)}
-                disabled={busy !== null || exists || rings.length <= 1}
-                className="text-neutral-700 hover:text-danger-text disabled:opacity-30 disabled:hover:text-neutral-700"
-                aria-label="Убрать кольцо"
-                title="Убрать кольцо"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <span className="font-mono text-xs text-neutral-700 w-16">{ring.label}</span>
+              <span className="text-sm text-neutral-900">{ring.detail}</span>
             </div>
           ))}
         </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={addRing}
-            disabled={busy !== null || exists || rings.length >= MAX_RINGS}
-          >
-            <span className="flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              Добавить кольцо
-            </span>
-          </Button>
-          <p className="text-xs text-neutral-700">
-            Итого: <span className="font-mono text-neutral-1000">{totalSectors}</span> секторов,{' '}
-            <span className="font-mono text-neutral-1000">{homeBaseCount}</span> домашних
-          </p>
-        </div>
+        <p className="text-xs text-neutral-700 mt-3">
+          Итого: <span className="font-mono text-neutral-1000">{PRESET_TOTAL}</span> секторов,{' '}
+          <span className="font-mono text-neutral-1000">{PRESET_HOME_BASES}</span> домашних
+        </p>
       </Card>
 
       <Card>
@@ -269,12 +178,12 @@ export function AdminMapPage() {
           <Button
             variant="primary"
             onClick={() => void handleGenerate()}
-            disabled={busy !== null || exists}
+            disabled={busy !== null}
             isLoading={busy === 'generate'}
           >
             <span className="flex items-center gap-2">
               <Hammer className="w-4 h-4" />
-              Сгенерировать карту
+              {exists ? 'Пересобрать карту' : 'Сгенерировать карту'}
             </span>
           </Button>
           <Button
@@ -290,7 +199,9 @@ export function AdminMapPage() {
           </Button>
         </div>
         <p className="text-xs text-neutral-700 mt-3">
-          Для генерации необходимо: 1 core; если есть кольца easy — 4 easy задания; если medium — 5 medium.
+          Пересборка сохраняет команды и распределение детей — они переносятся на новые
+          домашние базы. Прогресс захватов на поле сбрасывается. Нужны задания: 1 core,
+          4 easy, 5 medium.
         </p>
       </Card>
 
@@ -325,7 +236,8 @@ export function AdminMapPage() {
                 <span>
                   Вместе с картой будут удалены <b>{teamsCount}</b> {' '}
                   {teamsCount === 1 ? 'команда' : 'команды/команд'} со всей прогрессией.
-                  Пользователи будут отключены от команд. Действие необратимо.
+                  Пользователи будут отключены от команд. Действие необратимо. Чтобы
+                  сменить карту, сохранив команды, используйте «Пересобрать карту».
                 </span>
               </div>
             )}
