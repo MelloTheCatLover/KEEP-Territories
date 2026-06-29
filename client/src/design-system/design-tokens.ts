@@ -62,6 +62,9 @@ export const difficultyColors = {
   core:   '#E11D48',
 } as const;
 
+/** Special-event sectors (blue, non-capturable). */
+export const specialSectorColor = '#3B82F6';
+
 export type DifficultyKey = keyof typeof difficultyColors;
 
 export const glass = {
@@ -193,6 +196,7 @@ export const tokens = {
   colors,
   teamColors,
   difficultyColors,
+  specialSectorColor,
   glass,
   state,
   fontFamily,

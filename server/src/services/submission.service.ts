@@ -161,6 +161,10 @@ export async function startAction(
     }
     const sector = sectorRes.rows[0];
 
+    if (sector.is_special) {
+      throw new AppError(400, 'Особый сектор — действия недоступны');
+    }
+
     validateActionForSector(actionType, sector, teamId);
 
     if (actionType === 'capture' || actionType === 'recapture' || actionType === 'remove_fortification') {

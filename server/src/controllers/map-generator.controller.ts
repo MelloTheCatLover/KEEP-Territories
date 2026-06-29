@@ -2,13 +2,12 @@ import { Request, Response, NextFunction } from 'express';
 import * as mapGeneratorService from '../services/map-generator.service';
 
 export async function generateMap(
-  req: Request,
+  _req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
   try {
-    const config = mapGeneratorService.validateMapConfig(req.body);
-    const result = await mapGeneratorService.generateMap(config);
+    const result = await mapGeneratorService.generateMap();
     res.status(201).json({ sectors: result, count: result.length });
   } catch (err) {
     next(err);

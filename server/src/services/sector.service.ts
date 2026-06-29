@@ -50,6 +50,7 @@ function rowToSectorPublic(row: SectorRow): SectorPublic {
     is_home_base: row.is_home_base,
     home_team_id: row.home_team_id,
     current_action_type: row.current_action_type,
+    is_special: row.is_special,
     difficulty,
     active_submission_team_id: row.active_submission_team_id,
   };
