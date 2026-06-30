@@ -25,6 +25,19 @@ export async function getTeamInfluence(): Promise<CongressTeamInfluence[]> {
   return res.rows;
 }
 
+/** Laws visible to participants: only those already decided (accepted/rejected). */
+export async function listPublicLaws(): Promise<CongressLaw[]> {
+  const seasonId = await getActiveSeasonId();
+  const res = await pool.query<CongressLaw>(
+    `SELECT id, season_id, text, status, created_at, decided_at
+       FROM congress_laws
+      WHERE season_id = $1 AND status IN ('accepted', 'rejected')
+      ORDER BY (status = 'accepted') DESC, decided_at DESC NULLS LAST, created_at DESC`,
+    [seasonId],
+  );
+  return res.rows;
+}
+
 export async function listLaws(): Promise<CongressLaw[]> {
   const seasonId = await getActiveSeasonId();
   const res = await pool.query<CongressLaw>(

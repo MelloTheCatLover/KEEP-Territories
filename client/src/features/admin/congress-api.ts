@@ -26,6 +26,11 @@ export function getCongressLaws(): Promise<{ laws: CongressLaw[] }> {
   return api.get<{ laws: CongressLaw[] }>('/congress/laws');
 }
 
+/** Participant-facing: only decided (accepted/rejected) laws. */
+export function getPublicLaws(): Promise<{ laws: CongressLaw[] }> {
+  return api.get<{ laws: CongressLaw[] }>('/congress/public-laws');
+}
+
 export function createCongressLaw(text: string): Promise<CongressLaw> {
   return api.post<CongressLaw>('/congress/laws', { text });
 }

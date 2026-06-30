@@ -7,6 +7,10 @@ import { validateParamId } from '../middleware/validate.middleware';
 const router = Router();
 
 router.use(authenticate);
+
+// Participant-facing: decided laws only, available to any authenticated user.
+router.get('/public-laws', congressController.listPublicLaws);
+
 router.use(requireAdmin);
 
 router.get('/overview', congressController.getOverview);
