@@ -1,4 +1,4 @@
-import { Activity } from 'lucide-react';
+import { Activity, Crown } from 'lucide-react';
 import type { TeamFullStats } from '../team/types';
 import { resolveTeamPalette } from '../../design-system/design-tokens';
 
@@ -10,7 +10,7 @@ type SummaryProps = {
   className?: string;
   /** 'grid' = 2 columns (default), 'list' = single column for narrow screens. */
   statsLayout?: 'grid' | 'list';
-  /** Team currently leading on leadership — gets a gold frame. */
+  /** Team currently leading on leadership — gets a small crown beside its name. */
   isLeadershipLeader?: boolean;
 };
 
@@ -36,23 +36,20 @@ export function TeamSummaryCard({
   const palette = resolveTeamPalette(team.color, index);
   const accent = palette.base;
   // Team-coloured frame with a faint wash showing through the dark glass —
-  // an accent, not a full recolour. The leadership leader gets a gold frame;
-  // own team keeps an extra brand ring.
+  // an accent, not a full recolour. The leadership leader is marked with a small
+  // crown beside its name; own team keeps an extra brand ring.
   const wash = `color-mix(in srgb, ${accent} 16%, transparent)`;
 
   const shadows: string[] = [];
-  if (isLeadershipLeader) {
-    shadows.push(`0 0 0 2px ${GOLD}`, `0 0 16px color-mix(in srgb, ${GOLD} 45%, transparent)`);
-  }
   if (isOwn) {
-    shadows.push(`0 0 0 ${isLeadershipLeader ? 4 : 2}px var(--color-brand-500)`);
+    shadows.push('0 0 0 2px var(--color-brand-500)');
   }
 
   return (
     <div
       className={`relative border rounded-md bg-glass-medium backdrop-blur-glass p-3 sm:p-4 ${className}`}
       style={{
-        borderColor: isLeadershipLeader ? GOLD : accent,
+        borderColor: accent,
         backgroundImage: `linear-gradient(135deg, ${wash}, transparent 70%)`,
         boxShadow: shadows.length ? shadows.join(', ') : undefined,
       }}
@@ -63,6 +60,13 @@ export function TeamSummaryCard({
           className="w-3.5 h-3.5 rounded-full flex-shrink-0"
           style={{ backgroundColor: accent }}
         />
+        {isLeadershipLeader && (
+          <Crown
+            className="w-4 h-4 flex-shrink-0"
+            style={{ color: GOLD, fill: GOLD }}
+            aria-label="Лидер по лидерству"
+          />
+        )}
         <span className="font-display font-semibold text-lg text-neutral-1000 truncate flex-1 leading-tight">
           {team.name}
         </span>
