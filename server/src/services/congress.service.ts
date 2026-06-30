@@ -25,14 +25,14 @@ export async function getTeamInfluence(): Promise<CongressTeamInfluence[]> {
   return res.rows;
 }
 
-/** Laws visible to participants: only those already decided (accepted/rejected). */
+/** Laws visible to participants: only accepted ones. */
 export async function listPublicLaws(): Promise<CongressLaw[]> {
   const seasonId = await getActiveSeasonId();
   const res = await pool.query<CongressLaw>(
     `SELECT id, season_id, text, status, created_at, decided_at
        FROM congress_laws
-      WHERE season_id = $1 AND status IN ('accepted', 'rejected')
-      ORDER BY (status = 'accepted') DESC, decided_at DESC NULLS LAST, created_at DESC`,
+      WHERE season_id = $1 AND status = 'accepted'
+      ORDER BY decided_at DESC NULLS LAST, created_at DESC`,
     [seasonId],
   );
   return res.rows;
@@ -62,6 +62,22 @@ export async function createLaw(rawText: unknown): Promise<CongressLaw> {
        RETURNING id, season_id, text, status, created_at, decided_at`,
     [seasonId, text],
   );
+  return res.rows[0];
+}
+
+export async function updateLawText(id: string, rawText: unknown): Promise<CongressLaw> {
+  const text = typeof rawText === 'string' ? rawText.trim() : '';
+  if (text.length === 0) {
+    throw new AppError(400, 'Текст закона обязателен');
+  }
+  const res = await pool.query<CongressLaw>(
+    `UPDATE congress_laws SET text = $1 WHERE id = $2
+      RETURNING id, season_id, text, status, created_at, decided_at`,
+    [text, id],
+  );
+  if (res.rows.length === 0) {
+    throw new AppError(404, 'Закон не найден');
+  }
   return res.rows[0];
 }
 
