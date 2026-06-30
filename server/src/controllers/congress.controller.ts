@@ -53,6 +53,27 @@ export async function createLaw(req: Request, res: Response, next: NextFunction)
   }
 }
 
+export async function updateLawText(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const law = await congressService.updateLawText(req.params.id, req.body?.text);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'congress.law_edit',
+      entityType: 'congress',
+      entityId: law.id,
+      seasonId: law.season_id,
+      summary: `Изменён текст закона: «${law.text.slice(0, 80)}»`,
+    });
+    res.status(200).json(law);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function setLawStatus(
   req: Request<{ id: string }>,
   res: Response,

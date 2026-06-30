@@ -39,6 +39,10 @@ export function setCongressLawStatus(id: string, status: LawStatus): Promise<Con
   return api.patch<CongressLaw>(`/congress/laws/${id}`, { status });
 }
 
+export function updateCongressLawText(id: string, text: string): Promise<CongressLaw> {
+  return api.patch<CongressLaw>(`/congress/laws/${id}/text`, { text });
+}
+
 export function deleteCongressLaw(id: string): Promise<void> {
   return api.delete<void>(`/congress/laws/${id}`);
 }

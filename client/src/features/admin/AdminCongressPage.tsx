@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Check, Loader2, Plus, RotateCcw, Trash2, X } from 'lucide-react';
+import { AlertCircle, Check, Loader2, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -9,6 +9,7 @@ import {
   getCongressLaws,
   getCongressOverview,
   setCongressLawStatus,
+  updateCongressLawText,
   type CongressLaw,
   type CongressTeam,
   type LawStatus,
@@ -73,6 +74,8 @@ export function AdminCongressPage() {
 
   const [newLaw, setNewLaw] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,6 +130,28 @@ export function AdminCongressPage() {
       setLaws((prev) => prev.map((l) => (l.id === id ? law : l)));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Не удалось обновить закон');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function startEdit(law: CongressLaw) {
+    setEditingId(law.id);
+    setEditText(law.text);
+  }
+
+  async function saveEdit(id: string) {
+    const text = editText.trim();
+    if (!text) return;
+    setBusyId(id);
+    setError(null);
+    try {
+      const law = await updateCongressLawText(id, text);
+      setLaws((prev) => prev.map((l) => (l.id === id ? law : l)));
+      setEditingId(null);
+      setEditText('');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось изменить закон');
     } finally {
       setBusyId(null);
     }
@@ -275,6 +300,43 @@ export function AdminCongressPage() {
                 {laws.map((law) => {
                   const busy = busyId === law.id;
                   const label = STATUS_LABEL[law.status];
+                  if (editingId === law.id) {
+                    return (
+                      <li
+                        key={law.id}
+                        className={`border rounded-sm p-3 ${STATUS_CARD[law.status]}`}
+                      >
+                        <textarea
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          rows={2}
+                          autoFocus
+                          className="w-full px-3 py-2 mb-2 rounded-sm bg-neutral-50 border border-neutral-500 text-neutral-1000 text-sm resize-y focus:outline-none focus:border-brand-500"
+                        />
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingId(null);
+                              setEditText('');
+                            }}
+                            disabled={busy}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-neutral-400 text-neutral-700 hover:bg-neutral-200 disabled:opacity-50"
+                          >
+                            <X className="w-3.5 h-3.5" /> Отмена
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => saveEdit(law.id)}
+                            disabled={busy || editText.trim().length === 0}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-success text-success-text hover:bg-success-bg disabled:opacity-50"
+                          >
+                            <Check className="w-3.5 h-3.5" /> Сохранить
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  }
                   return (
                     <li
                       key={law.id}
@@ -288,6 +350,14 @@ export function AdminCongressPage() {
                           {label.text}
                         </span>
                         <div className="flex-1" />
+                        <button
+                          type="button"
+                          onClick={() => startEdit(law)}
+                          disabled={busy}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-neutral-400 text-neutral-700 hover:bg-neutral-200 disabled:opacity-50"
+                        >
+                          <Pencil className="w-3.5 h-3.5" /> Изменить
+                        </button>
                         {law.status !== 'accepted' && (
                           <button
                             type="button"
