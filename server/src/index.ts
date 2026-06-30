@@ -19,6 +19,7 @@ import seasonRoutes from './routes/season.routes';
 import childrenListRoutes from './routes/children-list.routes';
 import distributionRoutes from './routes/distribution.routes';
 import auditRoutes from './routes/audit.routes';
+import congressRoutes from './routes/congress.routes';
 import { errorHandler } from './middleware/error.middleware';
 import { AppError } from './types/errors';
 
@@ -52,6 +53,7 @@ app.use('/api/seasons', seasonRoutes);
 app.use('/api/children-lists', childrenListRoutes);
 app.use('/api/distribution', distributionRoutes);
 app.use('/api/audit', auditRoutes);
+app.use('/api/congress', congressRoutes);
 
 // Single-process deploy (shared hosting): serve built SPA from ./public.
 // Harmless if ./public doesn't exist (Docker/Caddy deploy serves static elsewhere).
