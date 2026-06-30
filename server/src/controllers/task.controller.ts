@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as taskService from '../services/task.service';
+import * as audit from '../services/audit.service';
 import { AppError } from '../types/errors';
 import { CreateTaskDto } from '../types/task';
 
@@ -40,6 +41,14 @@ export async function create(req: Request, res: Response, next: NextFunction): P
 
     const task = await taskService.create(dto);
 
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'task.create',
+      entityType: 'task',
+      entityId: task.id,
+      summary: `Создано задание «${task.title}»`,
+      metadata: { difficulty_id: task.difficulty_id },
+    });
     res.status(201).json(task);
   } catch (error) {
     next(error);
@@ -109,6 +118,14 @@ export async function update(req: Request<{ id: string }>, res: Response, next: 
     }
 
     const task = await taskService.update(req.params.id, dto);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'task.update',
+      entityType: 'task',
+      entityId: task.id,
+      summary: `Изменено задание «${task.title}»`,
+      metadata: { patch: dto },
+    });
     res.status(200).json(task);
   } catch (error) {
     next(error);
@@ -117,7 +134,15 @@ export async function update(req: Request<{ id: string }>, res: Response, next: 
 
 export async function remove(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
   try {
+    const doomed = await taskService.getById(req.params.id).catch(() => null);
     await taskService.remove(req.params.id);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'task.delete',
+      entityType: 'task',
+      entityId: req.params.id,
+      summary: `Удалено задание${doomed ? ` «${doomed.title}»` : ''}`,
+    });
     res.status(200).json({ message: 'Task deleted' });
   } catch (error) {
     next(error);

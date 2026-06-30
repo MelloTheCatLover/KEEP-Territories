@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { pool } from '../config/db';
 import * as teamStatsService from '../services/team-stats.service';
+import * as audit from '../services/audit.service';
 import { StatName } from '../types/team-stats';
 import { AppError } from '../types/errors';
 
@@ -79,6 +80,15 @@ export async function adminSetResources(
     if (exp !== undefined) payload.experience = exp;
     if (up !== undefined) payload.upgrade_points = up;
     const stats = await teamStatsService.adminSetResources(req.params.teamId, payload);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      teamId: req.params.teamId,
+      action: 'team.set_resources',
+      entityType: 'team',
+      entityId: req.params.teamId,
+      summary: `Админ задал ресурсы команде «${stats.name}»`,
+      metadata: { payload, result: { influence: stats.influence, experience: stats.experience } },
+    });
     res.status(200).json(stats);
   } catch (error) {
     next(error);
@@ -97,6 +107,15 @@ export async function adminSetStats(
       if (v !== undefined) payload[stat] = v;
     }
     const stats = await teamStatsService.adminSetStats(req.params.teamId, payload);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      teamId: req.params.teamId,
+      action: 'team.set_stats',
+      entityType: 'team',
+      entityId: req.params.teamId,
+      summary: `Админ задал характеристики команде «${stats.name}»`,
+      metadata: { payload },
+    });
     res.status(200).json(stats);
   } catch (error) {
     next(error);

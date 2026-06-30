@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as sectorService from '../services/sector.service';
+import * as audit from '../services/audit.service';
 import { CreateSectorDto } from '../types/sector';
 import { AppError } from '../types/errors';
 
@@ -125,6 +126,14 @@ export async function attachSectorTask(
       throw new AppError(400, 'task_id обязателен');
     }
     const tasks = await sectorService.attachTask(req.params.id, taskId);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'sector_task.attach',
+      entityType: 'sector',
+      entityId: req.params.id,
+      summary: 'Админ привязал задание к сектору',
+      metadata: { sector_id: req.params.id, task_id: taskId },
+    });
     res.status(200).json({ tasks });
   } catch (error) {
     next(error);
@@ -138,6 +147,14 @@ export async function detachSectorTask(
 ): Promise<void> {
   try {
     const tasks = await sectorService.detachTask(req.params.id, req.params.taskId);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'sector_task.detach',
+      entityType: 'sector',
+      entityId: req.params.id,
+      summary: 'Админ отвязал задание от сектора',
+      metadata: { sector_id: req.params.id, task_id: req.params.taskId },
+    });
     res.status(200).json({ tasks });
   } catch (error) {
     next(error);
