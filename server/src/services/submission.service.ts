@@ -27,6 +27,39 @@ function assertActionType(value: unknown): SectorActionType {
   return value as SectorActionType;
 }
 
+/**
+ * Resolve which team an action is performed for.
+ * Admins drive the field on behalf of a team via `actingTeamId` (no membership
+ * required). Other callers fall back to their own team membership.
+ */
+async function resolveActingTeam(
+  client: PoolClient,
+  userId: string,
+  actingTeamId?: string,
+): Promise<string> {
+  if (!actingTeamId) {
+    return getUserTeamId(client, userId);
+  }
+  const userRes = await client.query<{ role: string }>(
+    'SELECT role FROM users WHERE id = $1',
+    [userId],
+  );
+  if (userRes.rows.length === 0) {
+    throw new AppError(404, 'User not found');
+  }
+  if (userRes.rows[0].role !== 'admin') {
+    throw new AppError(403, 'Только администратор может играть за команду');
+  }
+  const teamRes = await client.query<{ id: string }>(
+    'SELECT id FROM teams WHERE id = $1',
+    [actingTeamId],
+  );
+  if (teamRes.rows.length === 0) {
+    throw new AppError(404, 'Команда не найдена');
+  }
+  return actingTeamId;
+}
+
 async function getUserTeamId(client: PoolClient, userId: string): Promise<string> {
   const res = await client.query<{ team_id: string | null; team_role: string | null }>(
     'SELECT team_id, team_role FROM users WHERE id = $1',
@@ -147,6 +180,7 @@ export async function startAction(
   sectorId: string,
   userId: string,
   rawActionType: unknown,
+  actingTeamId?: string,
 ): Promise<StartActionResponse> {
   const actionType = assertActionType(rawActionType);
 
@@ -154,7 +188,7 @@ export async function startAction(
   try {
     await client.query('BEGIN');
 
-    const teamId = await getUserTeamId(client, userId);
+    const teamId = await resolveActingTeam(client, userId, actingTeamId);
 
     const sectorRes = await client.query<Sector>(
       'SELECT * FROM sectors WHERE id = $1 FOR UPDATE',

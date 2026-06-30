@@ -19,9 +19,11 @@ export function getSectorById(id: string): Promise<Sector> {
 export function startAction(
   sectorId: string,
   actionType: ActionType,
+  teamId?: string,
 ): Promise<StartActionResponse> {
   return api.post<StartActionResponse>(`/sectors/${sectorId}/action/start`, {
     action_type: actionType,
+    ...(teamId ? { team_id: teamId } : {}),
   });
 }
 

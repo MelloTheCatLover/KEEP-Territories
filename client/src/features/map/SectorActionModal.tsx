@@ -189,7 +189,7 @@ export function SectorActionModal({
     setBusy(type);
     setError(null);
     try {
-      const result = await startAction(sector.id, type);
+      const result = await startAction(sector.id, type, userTeamId);
       const winnerId = result.submission.task_id;
       const showWheel =
         winnerId !== null &&
