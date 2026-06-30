@@ -82,13 +82,14 @@ export async function updateLawText(id: string, rawText: unknown): Promise<Congr
 }
 
 export async function setLawStatus(id: string, status: LawStatus): Promise<CongressLaw> {
+  const decidedAt = status === 'pending' ? null : new Date();
   const res = await pool.query<CongressLaw>(
     `UPDATE congress_laws
         SET status = $1,
-            decided_at = CASE WHEN $1 = 'pending' THEN NULL ELSE NOW() END
-      WHERE id = $2
+            decided_at = $2
+      WHERE id = $3
       RETURNING id, season_id, text, status, created_at, decided_at`,
-    [status, id],
+    [status, decidedAt, id],
   );
   if (res.rows.length === 0) {
     throw new AppError(404, 'Закон не найден');
