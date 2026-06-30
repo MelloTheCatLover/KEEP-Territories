@@ -20,10 +20,12 @@ export async function startAction(
   next: NextFunction,
 ): Promise<void> {
   try {
+    const teamId = typeof req.body?.team_id === 'string' ? req.body.team_id : undefined;
     const result = await submissionService.startAction(
       req.params.sectorId,
       req.user!.userId,
       req.body?.action_type,
+      teamId,
     );
     const s = result.submission;
     await audit.record({

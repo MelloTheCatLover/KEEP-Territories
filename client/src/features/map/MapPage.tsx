@@ -58,11 +58,36 @@ export function MapPage() {
     void load();
   }, [load]);
 
-  const canCreateTeam = user?.team_id === null;
-  const teamId = user?.team_id ?? null;
+  const isAdmin = user?.role === 'admin';
+
+  // Admins are never team members — they drive the field on behalf of a team
+  // picked here ("играю за команду"), persisted across reloads.
+  const [actingTeamId, setActingTeamIdState] = useState<string | null>(
+    () => (typeof localStorage !== 'undefined' ? localStorage.getItem('acting_team_id') : null),
+  );
+  const setActingTeam = useCallback((id: string | null) => {
+    setActingTeamIdState(id);
+    if (id) localStorage.setItem('acting_team_id', id);
+    else localStorage.removeItem('acting_team_id');
+  }, []);
+
+  const teamId = isAdmin ? actingTeamId : user?.team_id ?? null;
+  // Players create their own team; admins never create via the map.
+  const canCreateTeam = !isAdmin && user?.team_id === null;
   // Participants are observers — they view the map but never act on the field.
   // Only admins drive captures and changes.
-  const isObserver = user?.role !== 'admin';
+  const isObserver = !isAdmin;
+
+  // Drop a stale acting team if it no longer exists on the loaded map.
+  useEffect(() => {
+    if (!isAdmin || actingTeamId === null || state.status !== 'ready') return;
+    if (!state.teamsById[actingTeamId]) setActingTeam(null);
+  }, [isAdmin, actingTeamId, state, setActingTeam]);
+
+  const teamOptions = useMemo(() => {
+    if (state.status !== 'ready') return [];
+    return Object.values(state.teamsById).sort((a, b) => a.index - b.index);
+  }, [state]);
 
   const userActiveSectorId = useMemo(() => {
     if (!teamId || state.status !== 'ready') return null;
@@ -213,6 +238,36 @@ export function MapPage() {
           Команды
         </Link>
       </div>
+
+      {isAdmin && state.status === 'ready' && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 bg-neutral-100 border border-neutral-400 px-3 py-2 rounded-sm">
+          <span className="text-sm font-medium text-neutral-900">Играю за:</span>
+          <select
+            value={actingTeamId ?? ''}
+            onChange={(e) => setActingTeam(e.target.value || null)}
+            className="px-2 py-1.5 rounded-sm bg-neutral-50 border border-neutral-500 text-neutral-1000 text-sm focus:outline-none focus:border-brand-500 max-w-[16rem]"
+          >
+            <option value="">— выберите команду —</option>
+            {teamOptions.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          {actingTeamId && state.teamsById[actingTeamId]?.color && (
+            <span
+              aria-hidden
+              className="w-4 h-4 rounded-full border border-neutral-400 flex-shrink-0"
+              style={{ backgroundColor: state.teamsById[actingTeamId].color ?? undefined }}
+            />
+          )}
+          <span className="text-xs text-neutral-700">
+            {actingTeamId
+              ? 'Кликните по сектору, чтобы крутить колесо за эту команду.'
+              : 'Выберите команду, чтобы действовать на карте.'}
+          </span>
+        </div>
+      )}
 
       {!isObserver && canCreateTeam && state.status === 'ready' && (
         <div className="mb-4 flex items-start gap-2 bg-brand-900/30 border border-brand-700 text-sm text-brand-100 px-3 py-2 rounded-sm">

@@ -187,6 +187,10 @@ export async function join(teamId: string, userId: string): Promise<TeamFullStat
     if (userCheck.rows[0].team_id) {
       throw new AppError(400, 'You are already in a team');
     }
+    // Admins run the field via the "play as team" selector — they never join.
+    if (userCheck.rows[0].role === 'admin') {
+      throw new AppError(403, 'Администратор не вступает в команды — используйте режим «играю за команду» на карте');
+    }
 
     const teamCheck = await client.query<{ season_id: string }>(
       'SELECT season_id FROM teams WHERE id = $1',
