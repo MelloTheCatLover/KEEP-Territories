@@ -28,6 +28,14 @@ export async function listLaws(_req: Request, res: Response, next: NextFunction)
   }
 }
 
+export async function listPublicLaws(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.status(200).json({ laws: await congressService.listPublicLaws() });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function createLaw(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const law = await congressService.createLaw(req.body?.text);
