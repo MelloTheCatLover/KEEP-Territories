@@ -15,6 +15,7 @@ import { ApiError } from '../../shared/api/client';
 import type { ActionType, Sector } from './types';
 import { formatSectorLabel } from './types';
 import { startAction, type StartActionResponse } from './api';
+import { resolveEncounter, type EncounterInstance } from '../admin/encounters-api';
 import { TaskWheel } from './TaskWheel';
 import { difficultyColors } from '../../design-system/design-tokens';
 
@@ -165,6 +166,32 @@ export function SectorActionModal({
   const [busy, setBusy] = useState<ActionType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [wheel, setWheel] = useState<StartActionResponse | null>(null);
+  const [encounter, setEncounter] = useState<EncounterInstance | null>(null);
+  const [pendingSubmissionId, setPendingSubmissionId] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);
+
+  function proceed(result: StartActionResponse) {
+    if (result.encounter && result.encounter.status === 'pending') {
+      setWheel(null);
+      setPendingSubmissionId(result.submission.id);
+      setEncounter(result.encounter);
+    } else {
+      onStarted(result.submission.id);
+    }
+  }
+
+  async function resolveEnc(choice?: string) {
+    if (!encounter) return;
+    setResolving(true);
+    setError(null);
+    try {
+      await resolveEncounter(encounter.id, choice);
+      if (pendingSubmissionId) onStarted(pendingSubmissionId);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось разрешить встречу');
+      setResolving(false);
+    }
+  }
 
   const isThisSectorActive = userActiveSectorId === sector.id;
   const hasActiveElsewhere =
@@ -198,7 +225,7 @@ export function SectorActionModal({
       if (showWheel) {
         setWheel(result);
       } else {
-        onStarted(result.submission.id);
+        proceed(result);
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Не удалось начать действие');
@@ -207,9 +234,10 @@ export function SectorActionModal({
   }
 
   const inWheel = wheel !== null;
-  const lockClose = busy !== null || inWheel;
+  const inEncounter = encounter !== null;
+  const lockClose = busy !== null || inWheel || inEncounter;
   const showActions =
-    !inWheel && !hasActiveElsewhere && !isThisSectorActive;
+    !inWheel && !inEncounter && !hasActiveElsewhere && !isThisSectorActive;
   const { bg: emblemBg, fg: emblemFg } = emblemColors(sector.difficulty.slug);
 
   return (
@@ -268,17 +296,21 @@ export function SectorActionModal({
             <TaskWheel
               pool={wheel.task_pool}
               winnerId={wheel.submission.task_id}
-              onDone={() => onStarted(wheel.submission.id)}
+              onDone={() => proceed(wheel)}
             />
           )}
 
-          {!inWheel && hasActiveElsewhere && userActiveSectorId && (
+          {inEncounter && encounter && (
+            <EncounterPanel inst={encounter} busy={resolving} onResolve={resolveEnc} />
+          )}
+
+          {!inWheel && !inEncounter && hasActiveElsewhere && userActiveSectorId && (
             <BlockedElsewherePanel
               onNavigate={() => onNavigateToActive(userActiveSectorId)}
             />
           )}
 
-          {!inWheel && isThisSectorActive && (
+          {!inWheel && !inEncounter && isThisSectorActive && (
             <InProgressPanel
               actionType={sector.current_action_type}
               onOpen={() => onNavigateToActive(sector.id)}
@@ -297,7 +329,7 @@ export function SectorActionModal({
             />
           )}
 
-          {!inWheel && (
+          {!inWheel && !inEncounter && (
             <div className="flex items-center justify-end pt-1">
               <Button
                 variant="secondary"
@@ -310,6 +342,55 @@ export function SectorActionModal({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function EncounterPanel({
+  inst,
+  busy,
+  onResolve,
+}: {
+  inst: EncounterInstance;
+  busy: boolean;
+  onResolve: (choice?: string) => void;
+}) {
+  const ev = inst.eval;
+  return (
+    <div className="p-4 bg-brand-900/30 border border-brand-700 rounded-sm space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-2xs uppercase tracking-wider text-brand-300">Случайная встреча #{ev.number}</span>
+      </div>
+      <p className="text-sm text-neutral-1000">{ev.title}</p>
+      <p className="text-xs text-neutral-700 italic">{ev.description}</p>
+      {ev.relevant && (
+        <p className="text-xs text-neutral-700">
+          <span className="uppercase tracking-wider text-2xs">{ev.relevant.label}:</span>{' '}
+          <span className="font-mono text-neutral-1000">{ev.relevant.value}</span>
+        </p>
+      )}
+      {ev.choice ? (
+        <div>
+          <p className="text-xs text-neutral-700 mb-2">{ev.choice.prompt}</p>
+          <div className="flex flex-wrap gap-2">
+            {ev.choice.options.map((o) => (
+              <Button key={o.key} variant="secondary" onClick={() => onResolve(o.key)} disabled={busy}>
+                {o.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : ev.resolution ? (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <span className={`text-sm ${ev.resolution.manual ? 'text-warning-text' : 'text-neutral-1000 font-medium'}`}>
+            Исход: {ev.resolution.outcomeText}
+          </span>
+          <div className="flex-1" />
+          <Button variant="primary" onClick={() => onResolve()} isLoading={busy} disabled={busy}>
+            {ev.resolution.manual ? 'Отметить' : 'Применить'}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

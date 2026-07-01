@@ -259,17 +259,26 @@ export async function startAction(
       [sectorId, teamId, userId, taskId, actionType],
     );
 
-    // A capture attempt rolls a random encounter for the acting team; the admin
-    // resolves it on the dedicated encounters page.
+    // A capture attempt rolls a random encounter for the acting team; it is
+    // shown and resolved inside the capture window.
+    let encounterInstanceId: string | null = null;
     if (actionType === 'capture' || actionType === 'recapture') {
       const seasonId = await seasonService.getActiveSeasonId(client);
-      await encounterService.rollForCapture(client, inserted.rows[0].id, teamId, seasonId);
+      encounterInstanceId = await encounterService.rollForCapture(
+        client,
+        inserted.rows[0].id,
+        teamId,
+        seasonId,
+      );
     }
 
     await client.query('COMMIT');
 
     const submission = await getById(inserted.rows[0].id);
-    return { submission, task_pool: taskPool };
+    const encounter = encounterInstanceId
+      ? await encounterService.getInstanceView(encounterInstanceId)
+      : null;
+    return { submission, task_pool: taskPool, encounter };
   } catch (error) {
     await client.query('ROLLBACK');
     if (
