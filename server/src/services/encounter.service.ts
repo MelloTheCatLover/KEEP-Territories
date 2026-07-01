@@ -78,18 +78,19 @@ export async function rollForCapture(
   submissionId: string,
   teamId: string,
   seasonId: string,
-): Promise<number | null> {
+): Promise<string | null> {
   const pick = await db.query<{ number: number }>(
     'SELECT number FROM random_encounters WHERE active = true ORDER BY random() LIMIT 1',
   );
   if (pick.rows.length === 0) return null;
   const number = pick.rows[0].number;
-  await db.query(
+  const ins = await db.query<{ id: string }>(
     `INSERT INTO encounter_instances (submission_id, team_id, season_id, encounter_number)
-       VALUES ($1, $2, $3, $4)`,
+       VALUES ($1, $2, $3, $4)
+       RETURNING id`,
     [submissionId, teamId, seasonId, number],
   );
-  return number;
+  return ins.rows[0].id;
 }
 
 async function snapshot(teamId: string): Promise<TeamSnapshot> {
@@ -150,6 +151,49 @@ export async function listPending(): Promise<EncounterInstanceView[]> {
     });
   }
   return views;
+}
+
+export async function getInstanceView(instanceId: string): Promise<EncounterInstanceView | null> {
+  const res = await pool.query<{
+    id: string;
+    team_id: string;
+    team_name: string | null;
+    encounter_number: number;
+    title: string;
+    target_team_id: string | null;
+    status: 'pending' | 'resolved';
+    choice: string | null;
+    outcome_text: string | null;
+    applied: EncounterEffect | null;
+    created_at: string;
+    resolved_at: string | null;
+  }>(
+    `SELECT ei.id, ei.team_id, t.name AS team_name, ei.encounter_number,
+            re.title, re.target_team_id, ei.status, ei.choice, ei.outcome_text,
+            ei.applied, ei.created_at, ei.resolved_at
+       FROM encounter_instances ei
+       JOIN random_encounters re ON re.number = ei.encounter_number
+       LEFT JOIN teams t ON t.id = ei.team_id
+      WHERE ei.id = $1`,
+    [instanceId],
+  );
+  if (res.rows.length === 0) return null;
+  const row = res.rows[0];
+  const snap = await snapshot(row.team_id);
+  const ev = evaluate(row.encounter_number, row.title, snap, undefined, row.target_team_id);
+  return {
+    id: row.id,
+    team_id: row.team_id,
+    team_name: row.team_name,
+    encounter_number: row.encounter_number,
+    status: row.status,
+    choice: row.choice,
+    outcome_text: row.outcome_text,
+    applied: row.applied,
+    created_at: row.created_at,
+    resolved_at: row.resolved_at,
+    eval: ev,
+  };
 }
 
 /** Cumulative experience required to reach a given level. */

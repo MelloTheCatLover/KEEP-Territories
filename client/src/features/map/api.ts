@@ -1,11 +1,13 @@
 import { api } from '../../shared/api/client';
 import type { ActionType, Sector } from './types';
 import type { TaskSubmissionWithDetails } from '../admin/submissions-api';
+import type { EncounterInstance } from '../admin/encounters-api';
 
 export type TaskBrief = { id: string; title: string; question: string };
 export type StartActionResponse = {
   submission: TaskSubmissionWithDetails;
   task_pool: TaskBrief[];
+  encounter?: EncounterInstance | null;
 };
 
 export function getSectorsMap(): Promise<Sector[]> {

@@ -1,5 +1,6 @@
 import { DifficultyLevel } from './difficulty';
 import { SectorActionType } from './sector';
+import { EncounterInstanceView } from './encounter';
 
 export type SubmissionStatus = 'pending' | 'approved' | 'rejected';
 
@@ -55,6 +56,7 @@ export interface TaskBrief {
 export interface StartActionResponse {
   submission: TaskSubmissionWithDetails;
   task_pool: TaskBrief[];
+  encounter?: EncounterInstanceView | null;
 }
 
 export interface ApproveSubmissionDto {
