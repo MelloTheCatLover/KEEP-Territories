@@ -10,6 +10,8 @@ import {
 } from '../types/task-submission';
 import { Sector, SectorActionType } from '../types/sector';
 import { StatName } from '../types/team-stats';
+import * as encounterService from './encounter.service';
+import * as seasonService from './season.service';
 
 const MAX_FORTIFICATION = 3;
 
@@ -256,6 +258,13 @@ export async function startAction(
        RETURNING id`,
       [sectorId, teamId, userId, taskId, actionType],
     );
+
+    // A capture attempt rolls a random encounter for the acting team; the admin
+    // resolves it on the dedicated encounters page.
+    if (actionType === 'capture' || actionType === 'recapture') {
+      const seasonId = await seasonService.getActiveSeasonId(client);
+      await encounterService.rollForCapture(client, inserted.rows[0].id, teamId, seasonId);
+    }
 
     await client.query('COMMIT');
 
