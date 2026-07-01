@@ -18,6 +18,7 @@ import { AdminChildrenDashboardPage } from './features/admin/AdminChildrenDashbo
 import { AdminDistributionPage } from './features/admin/AdminDistributionPage';
 import { AdminAuditPage } from './features/admin/AdminAuditPage';
 import { AdminCongressPage } from './features/admin/AdminCongressPage';
+import { AdminEncountersPage } from './features/admin/AdminEncountersPage';
 import { LawsPage } from './features/laws/LawsPage';
 import { TeamsOverviewPage } from './features/leaderboard/TeamsOverviewPage';
 import { SeasonsPage } from './features/seasons/SeasonsPage';
@@ -65,6 +66,7 @@ export const router = createBrowserRouter([
       { path: '/admin/distribution', element: <AdminDistributionPage /> },
       { path: '/admin/audit', element: <AdminAuditPage /> },
       { path: '/admin/congress', element: <AdminCongressPage /> },
+      { path: '/admin/encounters', element: <AdminEncountersPage /> },
     ],
   },
   { path: '*', element: <NotFound /> },
