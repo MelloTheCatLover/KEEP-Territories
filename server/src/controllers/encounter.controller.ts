@@ -26,6 +26,22 @@ export async function setActive(
   }
 }
 
+export async function setTarget(
+  req: Request<{ number: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const num = Number(req.params.number);
+    if (!Number.isInteger(num)) throw new AppError(400, 'Некорректный номер');
+    const raw = req.body?.target_team_id;
+    const teamId = typeof raw === 'string' && raw.length > 0 ? raw : null;
+    res.status(200).json(await encounterService.setTarget(num, teamId));
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getPending(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     res.status(200).json({ instances: await encounterService.listPending() });

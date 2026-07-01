@@ -7,7 +7,7 @@ import {
   EncounterInstanceView,
   TeamSnapshot,
 } from '../types/encounter';
-import { evaluate } from './encounter-engine';
+import { evaluate, describe } from './encounter-engine';
 import * as teamStatsService from './team-stats.service';
 import * as gameSettingsService from './game-settings.service';
 import { getActiveSeasonId } from './season.service';
@@ -18,22 +18,55 @@ export interface EncounterPoolRow {
   number: number;
   title: string;
   active: boolean;
+  description: string;
+  /** Encounters 16, 20-24: the team whose captain triggers the swap. */
+  target_team_id: string | null;
+  /** true for the swap encounters that support a team binding. */
+  supports_target: boolean;
+}
+
+const SWAP_NUMBERS = new Set([16, 20, 21, 22, 23, 24]);
+
+type PoolDbRow = { number: number; title: string; active: boolean; target_team_id: string | null };
+
+function toPoolRow(r: PoolDbRow): EncounterPoolRow {
+  return {
+    ...r,
+    description: describe(r.number),
+    supports_target: SWAP_NUMBERS.has(r.number),
+  };
 }
 
 export async function listPool(): Promise<EncounterPoolRow[]> {
-  const res = await pool.query<EncounterPoolRow>(
-    'SELECT number, title, active FROM random_encounters ORDER BY number',
+  const res = await pool.query<PoolDbRow>(
+    'SELECT number, title, active, target_team_id FROM random_encounters ORDER BY number',
   );
-  return res.rows;
+  return res.rows.map(toPoolRow);
 }
 
 export async function setActive(numberValue: number, active: boolean): Promise<EncounterPoolRow> {
-  const res = await pool.query<EncounterPoolRow>(
-    'UPDATE random_encounters SET active = $1 WHERE number = $2 RETURNING number, title, active',
+  const res = await pool.query<PoolDbRow>(
+    'UPDATE random_encounters SET active = $1 WHERE number = $2 RETURNING number, title, active, target_team_id',
     [active, numberValue],
   );
   if (res.rows.length === 0) throw new AppError(404, 'Встреча не найдена');
-  return res.rows[0];
+  return toPoolRow(res.rows[0]);
+}
+
+export async function setTarget(numberValue: number, teamId: string | null): Promise<EncounterPoolRow> {
+  if (!SWAP_NUMBERS.has(numberValue)) {
+    throw new AppError(400, 'Для этой встречи привязка команды не поддерживается');
+  }
+  if (teamId !== null) {
+    const t = await pool.query('SELECT id FROM teams WHERE id = $1', [teamId]);
+    if (t.rows.length === 0) throw new AppError(404, 'Команда не найдена');
+  }
+  const res = await pool.query<PoolDbRow>(
+    'UPDATE random_encounters SET target_team_id = $1 WHERE number = $2 RETURNING number, title, active, target_team_id',
+    [teamId, numberValue],
+  );
+  if (res.rows.length === 0) throw new AppError(404, 'Встреча не найдена');
+  return toPoolRow(res.rows[0]);
 }
 
 /**
@@ -62,6 +95,7 @@ export async function rollForCapture(
 async function snapshot(teamId: string): Promise<TeamSnapshot> {
   const full = await teamStatsService.getFullStats(teamId);
   return {
+    id: teamId,
     stats: full.stats as Record<StatName, number>,
     influence: full.influence,
     experience: full.experience,
@@ -83,9 +117,10 @@ export async function listPending(): Promise<EncounterInstanceView[]> {
     applied: EncounterEffect | null;
     created_at: string;
     resolved_at: string | null;
+    target_team_id: string | null;
   }>(
     `SELECT ei.id, ei.team_id, t.name AS team_name, ei.encounter_number,
-            re.title, ei.status, ei.choice, ei.outcome_text, ei.applied,
+            re.title, re.target_team_id, ei.status, ei.choice, ei.outcome_text, ei.applied,
             ei.created_at, ei.resolved_at
        FROM encounter_instances ei
        JOIN random_encounters re ON re.number = ei.encounter_number
@@ -99,7 +134,7 @@ export async function listPending(): Promise<EncounterInstanceView[]> {
   const views: EncounterInstanceView[] = [];
   for (const row of res.rows) {
     const snap = await snapshot(row.team_id);
-    const ev = evaluate(row.encounter_number, row.title, snap);
+    const ev = evaluate(row.encounter_number, row.title, snap, undefined, row.target_team_id);
     views.push({
       id: row.id,
       team_id: row.team_id,
@@ -150,11 +185,16 @@ async function applyEffect(teamId: string, effect: EncounterEffect): Promise<voi
     await teamStatsService.adminSetResources(teamId, resources);
   }
 
-  if (effect.stats || effect.zeroStats) {
+  if (effect.stats || effect.zeroStats || effect.swapStats) {
     const statsPayload: teamStatsService.AdminStatsPayload = {};
     for (const [key, delta] of Object.entries(effect.stats ?? {})) {
       const stat = key as StatName;
       statsPayload[stat] = Math.max(0, full.stats[stat] + (delta ?? 0));
+    }
+    if (effect.swapStats) {
+      const [a, b] = effect.swapStats;
+      statsPayload[a] = full.stats[b];
+      statsPayload[b] = full.stats[a];
     }
     for (const stat of effect.zeroStats ?? []) {
       statsPayload[stat] = 0;
@@ -175,8 +215,10 @@ export async function resolve(instanceId: string, choice?: string): Promise<Enco
     status: string;
     title: string;
     season_id: string | null;
+    target_team_id: string | null;
   }>(
-    `SELECT ei.id, ei.team_id, ei.encounter_number, ei.status, ei.season_id, re.title
+    `SELECT ei.id, ei.team_id, ei.encounter_number, ei.status, ei.season_id,
+            re.title, re.target_team_id
        FROM encounter_instances ei
        JOIN random_encounters re ON re.number = ei.encounter_number
       WHERE ei.id = $1`,
@@ -187,7 +229,7 @@ export async function resolve(instanceId: string, choice?: string): Promise<Enco
   if (inst.status !== 'pending') throw new AppError(409, 'Встреча уже разрешена');
 
   const snap = await snapshot(inst.team_id);
-  const ev = evaluate(inst.encounter_number, inst.title, snap, choice);
+  const ev = evaluate(inst.encounter_number, inst.title, snap, choice, inst.target_team_id);
 
   if (ev.choice !== null) {
     throw new AppError(400, 'Требуется выбор игрока');

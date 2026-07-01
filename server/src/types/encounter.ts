@@ -7,9 +7,12 @@ export interface EncounterEffect {
   level?: number;
   /** Stats to reset to 0 (overrides any delta on the same stat). */
   zeroStats?: StatName[];
+  /** Two stats to swap values. */
+  swapStats?: [StatName, StatName];
 }
 
 export interface TeamSnapshot {
+  id: string;
   stats: Record<StatName, number>;
   influence: number;
   experience: number;
@@ -32,6 +35,8 @@ export interface EncounterResolution {
 export interface EncounterEval {
   number: number;
   title: string;
+  /** Full human-readable rules of the encounter (all branches). */
+  description: string;
   /** The stat/aggregate the encounter reads, for display. */
   relevant: { label: string; value: number } | null;
   /** Non-null when a player choice is required before resolving. */

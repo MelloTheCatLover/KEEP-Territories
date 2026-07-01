@@ -24,6 +24,56 @@ const eff = (text: string, effect: EncounterEffect): EncounterResolution => ({
 
 const ALL_STATS: StatName[] = ['strength', 'intelligence', 'endurance', 'leadership', 'luck'];
 
+/** Full human-readable rules of each encounter (all branches), for the admin. */
+const DESCRIPTIONS: Record<number, string> = {
+  1: 'Интеллект 1–4: ничего · 5–7: координаты мастера · 8+: случайный предмет мастера',
+  2: 'Сила 1–4: ничего · 5–6: координаты диверсанта · 7+: случайная диверсия',
+  3: 'Согласиться → монета: орёл −4 влияния / решка +6 влияния · Отказаться: ничего',
+  4: 'Выносливость 1–4: −1 сила · 5–7: +70 опыта · 8+: +1 уровень',
+  5: 'Удача 1–3: ничего · 4–6: координаты торговца · 7+: 2 предмета торговца',
+  6: 'Лидерство 1–6: ничего · 7–8: координаты имплантера · 9+: случайный имплант',
+  7: 'Сила 1–5: −1 лидерство · 6–7: +100 опыта · 8+: +1 уровень',
+  8: 'Открыть → +2 влияния · Нет: ничего',
+  9: 'Открыть → бомба −6 влияния · Нет: ничего',
+  10: 'Открыть → +100 опыта · Нет: ничего',
+  11: 'Открыть → −8 влияния · Нет: ничего',
+  12: 'Открыть → +2 влияния · Нет: ничего',
+  13: 'Открыть → +2 влияния · Нет: ничего',
+  14: 'Фаза 2 (вручную): руби 4 силы → +100 опыта; меньше всех → обнуление уровня',
+  15: 'Фаза 2 (вручную): больше всех силы → +50 опыта; меньше всех → сброс уровня',
+  16: 'Если играешь за привязанную команду (её капитан) — Сила ↔ Выносливость, иначе ничего (нужна привязка команды)',
+  17: 'Фаза 2 (вручную): выбери команду для пересбора характеристик',
+  18: 'Интеллект = 5 → +4 влияния, иначе ничего',
+  19: 'Фаза 2 (вручную): больше всех лидерства → встреча с имплантером',
+  20: 'Если играешь за привязанную команду (её капитан) — Сила ↔ Интеллект, иначе ничего (нужна привязка команды)',
+  21: 'Если играешь за привязанную команду (её капитан) — Лидерство ↔ Удача, иначе ничего (нужна привязка команды)',
+  22: 'Если играешь за привязанную команду (её капитан) — Интеллект ↔ Удача, иначе ничего (нужна привязка команды)',
+  23: 'Если играешь за привязанную команду (её капитан) — Интеллект ↔ Лидерство, иначе ничего (нужна привязка команды)',
+  24: 'Если играешь за привязанную команду (её капитан) — Сила ↔ Удача, иначе ничего (нужна привязка команды)',
+  25: 'Сумма характеристик > 35 → +5 влияния, +75 опыта, иначе ничего',
+  26: 'Сила = 1 → +50 опыта, иначе ничего',
+  27: 'Сила больше суммы остальных характеристик → +3 влияния, +75 опыта, иначе ничего',
+  28: 'Фаза 2 (вручную): совет 5 интеллекта → +100 опыта; меньше всех → обнуление уровня',
+  29: 'Интеллект 3–5 → команда может получить совет (вручную), иначе ничего',
+  30: 'Сила > 3 ИЛИ интеллект < 6 → −4 влияния, иначе ничего',
+  31: 'Интеллект + сила > 12 → −100 опыта, иначе ничего',
+  32: '+2 влияния',
+  33: 'Ничего (пустышка)',
+  34: 'Ничего (пустышка)',
+  35: 'Ничего (пустышка)',
+  36: 'Обнуляется 1 случайная характеристика',
+  37: 'Обнуляются все характеристики',
+  38: 'Согласиться → монета: +5 влияния / обнуление случайной характеристики · Нет: ничего',
+  39: 'Удача 6+ → +100 опыта, иначе ничего',
+  40: 'Выносливость < 3 → обнуляется сила, иначе +50 опыта',
+  41: 'Интеллект 7+ → +5 влияния, иначе −2 влияния',
+  42: 'Согласиться → монета: +8 влияния / обнуление всех характеристик · Нет: ничего',
+};
+
+export function describe(number: number): string {
+  return DESCRIPTIONS[number] ?? 'Разрешается вручную (правило 2-й фазы)';
+}
+
 function statOf(team: TeamSnapshot, s: StatName): { label: string; value: number } {
   return { label: STAT_RU[s], value: team.stats[s] };
 }
@@ -45,12 +95,14 @@ function envelope(
   yesText: string,
   yesEffect: EncounterEffect,
 ): EncounterEval {
+  const description = describe(number);
   if (!choice) {
-    return { number, title, relevant: null, choice: { prompt: 'Откроешь?', options: YES_NO }, resolution: null };
+    return { number, title, description, relevant: null, choice: { prompt: 'Откроешь?', options: YES_NO }, resolution: null };
   }
   return {
     number,
     title,
+    description,
     relevant: null,
     choice: null,
     resolution: choice === 'yes' ? eff(yesText, yesEffect) : none(),
@@ -66,8 +118,21 @@ export function evaluate(
   title: string,
   team: TeamSnapshot,
   choice?: string,
+  targetTeamId?: string | null,
 ): EncounterEval {
-  const base = { number, title };
+  const base = { number, title, description: describe(number) };
+
+  const swap = (a: StatName, b: StatName): EncounterEval => {
+    const isTarget = !!targetTeamId && team.id === targetTeamId;
+    return {
+      ...base,
+      relevant: null,
+      choice: null,
+      resolution: isTarget
+        ? eff(`${STAT_RU[a]} ↔ ${STAT_RU[b]}: характеристики меняются местами`, { swapStats: [a, b] })
+        : none(),
+    };
+  };
 
   switch (number) {
     // 1 — старый путник (интеллект)
@@ -204,6 +269,19 @@ export function evaluate(
       const r = total > 12 ? eff('−100 опыта', { experience: -100 }) : none();
       return { ...base, relevant: { label: 'Интеллект + Сила', value: total }, choice: null, resolution: r };
     }
+    // 16, 20–24 — свопы характеристик по капитану привязанной команды
+    case 16:
+      return swap('strength', 'endurance');
+    case 20:
+      return swap('strength', 'intelligence');
+    case 21:
+      return swap('leadership', 'luck');
+    case 22:
+      return swap('intelligence', 'luck');
+    case 23:
+      return swap('intelligence', 'leadership');
+    case 24:
+      return swap('strength', 'luck');
     // 32 — подарок
     case 32:
       return { ...base, relevant: null, choice: null, resolution: eff('+2 влияния', { influence: 2 }) };
