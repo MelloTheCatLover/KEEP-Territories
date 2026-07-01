@@ -2,15 +2,21 @@ import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, Dices, Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
-import { ApiError } from '../../shared/api/client';
+import { ApiError, api } from '../../shared/api/client';
 import {
   getEncounterPool,
   getPendingEncounters,
   resolveEncounter,
   setEncounterActive,
+  setEncounterTarget,
   type EncounterInstance,
   type EncounterPoolRow,
 } from './encounters-api';
+
+interface TeamOption {
+  id: string;
+  name: string;
+}
 
 export function AdminEncountersPage() {
   const { user } = useAuth();
@@ -18,6 +24,7 @@ export function AdminEncountersPage() {
 
   const [pending, setPending] = useState<EncounterInstance[]>([]);
   const [pool, setPool] = useState<EncounterPoolRow[]>([]);
+  const [teams, setTeams] = useState<TeamOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -39,6 +46,23 @@ export function AdminEncountersPage() {
   useEffect(() => {
     if (isAdmin) load();
   }, [isAdmin, load]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    api
+      .get<TeamOption[]>('/teams')
+      .then((rows) => setTeams(rows.map((r) => ({ id: r.id, name: r.name }))))
+      .catch(() => setTeams([]));
+  }, [isAdmin]);
+
+  async function bindTarget(row: EncounterPoolRow, teamId: string | null) {
+    try {
+      const updated = await setEncounterTarget(row.number, teamId);
+      setPool((prev) => prev.map((r) => (r.number === updated.number ? updated : r)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось привязать команду');
+    }
+  }
 
   async function resolve(inst: EncounterInstance, choice?: string) {
     setBusyId(inst.id);
@@ -122,11 +146,31 @@ export function AdminEncountersPage() {
             <p className="text-xs text-neutral-700 mb-3">Отключённые не выпадают при захвате.</p>
             <ul className="divide-y divide-neutral-200">
               {pool.map((row) => (
-                <li key={row.number} className="flex items-center gap-3 py-2">
-                  <span className="font-mono text-2xs text-neutral-600 w-6 flex-shrink-0">{row.number}</span>
-                  <span className={`flex-1 text-sm ${row.active ? 'text-neutral-1000' : 'text-neutral-500 line-through'}`}>
-                    {row.title}
-                  </span>
+                <li key={row.number} className="flex items-start gap-3 py-2">
+                  <span className="font-mono text-2xs text-neutral-600 w-6 flex-shrink-0 mt-0.5">{row.number}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm ${row.active ? 'text-neutral-1000' : 'text-neutral-500 line-through'}`}>
+                      {row.title}
+                    </p>
+                    <p className="text-xs text-neutral-600 mt-0.5">{row.description}</p>
+                    {row.supports_target && (
+                      <label className="flex items-center gap-2 mt-1.5">
+                        <span className="text-2xs uppercase tracking-wider text-neutral-700">Команда:</span>
+                        <select
+                          value={row.target_team_id ?? ''}
+                          onChange={(e) => bindTarget(row, e.target.value || null)}
+                          className="px-2 py-1 rounded-sm bg-neutral-50 border border-neutral-500 text-neutral-1000 text-xs focus:outline-none focus:border-brand-500 max-w-[12rem]"
+                        >
+                          <option value="">— не привязана —</option>
+                          {teams.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={() => toggle(row)}
@@ -164,7 +208,8 @@ function PendingCard({
         <span className="text-2xs font-mono text-neutral-600">#{ev.number}</span>
         <span className="text-sm font-medium text-neutral-1000">{inst.team_name ?? '—'}</span>
       </div>
-      <p className="text-sm text-neutral-900 mb-2">{ev.title}</p>
+      <p className="text-sm text-neutral-900 mb-1">{ev.title}</p>
+      <p className="text-xs text-neutral-600 mb-2 italic">{ev.description}</p>
 
       {ev.relevant && (
         <p className="text-xs text-neutral-700 mb-2">

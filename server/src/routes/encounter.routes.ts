@@ -11,6 +11,7 @@ router.use(requireAdmin);
 
 router.get('/pool', encounterController.getPool);
 router.patch('/pool/:number', encounterController.setActive);
+router.patch('/pool/:number/target', encounterController.setTarget);
 router.get('/pending', encounterController.getPending);
 router.post('/:id/resolve', validateParamId, encounterController.resolve);
 
