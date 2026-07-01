@@ -21,36 +21,66 @@ export interface EncounterPoolRow {
   description: string;
   /** Encounters 16, 20-24: the team whose captain triggers the swap. */
   target_team_id: string | null;
+  target_team_name: string | null;
+  target_captain_name: string | null;
   /** true for the swap encounters that support a team binding. */
   supports_target: boolean;
 }
 
 const SWAP_NUMBERS = new Set([16, 20, 21, 22, 23, 24]);
 
-type PoolDbRow = { number: number; title: string; active: boolean; target_team_id: string | null };
+/** Display name of a team's captain, or null. */
+function captainName(full: string | null, username: string | null): string | null {
+  return (full && full.trim()) || username || null;
+}
+
+type PoolDbRow = {
+  number: number;
+  title: string;
+  active: boolean;
+  target_team_id: string | null;
+  target_team_name: string | null;
+  cap_full: string | null;
+  cap_user: string | null;
+};
+
+const POOL_SELECT = `
+  SELECT re.number, re.title, re.active, re.target_team_id,
+         t.name AS target_team_name,
+         cap.full_name AS cap_full, cap.username AS cap_user
+    FROM random_encounters re
+    LEFT JOIN teams t ON t.id = re.target_team_id
+    LEFT JOIN users cap ON cap.team_id = re.target_team_id AND cap.team_role = 'captain'
+`;
 
 function toPoolRow(r: PoolDbRow): EncounterPoolRow {
   return {
-    ...r,
+    number: r.number,
+    title: r.title,
+    active: r.active,
+    target_team_id: r.target_team_id,
+    target_team_name: r.target_team_name,
+    target_captain_name: captainName(r.cap_full, r.cap_user),
     description: describe(r.number),
     supports_target: SWAP_NUMBERS.has(r.number),
   };
 }
 
+async function getPoolRow(numberValue: number): Promise<EncounterPoolRow> {
+  const res = await pool.query<PoolDbRow>(`${POOL_SELECT} WHERE re.number = $1`, [numberValue]);
+  if (res.rows.length === 0) throw new AppError(404, 'Встреча не найдена');
+  return toPoolRow(res.rows[0]);
+}
+
 export async function listPool(): Promise<EncounterPoolRow[]> {
-  const res = await pool.query<PoolDbRow>(
-    'SELECT number, title, active, target_team_id FROM random_encounters ORDER BY number',
-  );
+  const res = await pool.query<PoolDbRow>(`${POOL_SELECT} ORDER BY re.number`);
   return res.rows.map(toPoolRow);
 }
 
 export async function setActive(numberValue: number, active: boolean): Promise<EncounterPoolRow> {
-  const res = await pool.query<PoolDbRow>(
-    'UPDATE random_encounters SET active = $1 WHERE number = $2 RETURNING number, title, active, target_team_id',
-    [active, numberValue],
-  );
-  if (res.rows.length === 0) throw new AppError(404, 'Встреча не найдена');
-  return toPoolRow(res.rows[0]);
+  const res = await pool.query('UPDATE random_encounters SET active = $1 WHERE number = $2', [active, numberValue]);
+  if (res.rowCount === 0) throw new AppError(404, 'Встреча не найдена');
+  return getPoolRow(numberValue);
 }
 
 export async function setTarget(numberValue: number, teamId: string | null): Promise<EncounterPoolRow> {
@@ -61,12 +91,12 @@ export async function setTarget(numberValue: number, teamId: string | null): Pro
     const t = await pool.query('SELECT id FROM teams WHERE id = $1', [teamId]);
     if (t.rows.length === 0) throw new AppError(404, 'Команда не найдена');
   }
-  const res = await pool.query<PoolDbRow>(
-    'UPDATE random_encounters SET target_team_id = $1 WHERE number = $2 RETURNING number, title, active, target_team_id',
+  const res = await pool.query(
+    'UPDATE random_encounters SET target_team_id = $1 WHERE number = $2',
     [teamId, numberValue],
   );
-  if (res.rows.length === 0) throw new AppError(404, 'Встреча не найдена');
-  return toPoolRow(res.rows[0]);
+  if (res.rowCount === 0) throw new AppError(404, 'Встреча не найдена');
+  return getPoolRow(numberValue);
 }
 
 /**
@@ -119,13 +149,19 @@ export async function listPending(): Promise<EncounterInstanceView[]> {
     created_at: string;
     resolved_at: string | null;
     target_team_id: string | null;
+    target_team_name: string | null;
+    cap_full: string | null;
+    cap_user: string | null;
   }>(
     `SELECT ei.id, ei.team_id, t.name AS team_name, ei.encounter_number,
             re.title, re.target_team_id, ei.status, ei.choice, ei.outcome_text, ei.applied,
-            ei.created_at, ei.resolved_at
+            ei.created_at, ei.resolved_at,
+            tt.name AS target_team_name, cap.full_name AS cap_full, cap.username AS cap_user
        FROM encounter_instances ei
        JOIN random_encounters re ON re.number = ei.encounter_number
        LEFT JOIN teams t ON t.id = ei.team_id
+       LEFT JOIN teams tt ON tt.id = re.target_team_id
+       LEFT JOIN users cap ON cap.team_id = re.target_team_id AND cap.team_role = 'captain'
       WHERE ei.status = 'pending'
         AND ($1::uuid IS NULL OR ei.season_id = $1)
       ORDER BY ei.created_at DESC`,
@@ -140,6 +176,8 @@ export async function listPending(): Promise<EncounterInstanceView[]> {
       id: row.id,
       team_id: row.team_id,
       team_name: row.team_name,
+      target_team_name: row.target_team_name,
+      target_captain_name: captainName(row.cap_full, row.cap_user),
       encounter_number: row.encounter_number,
       status: row.status,
       choice: row.choice,
@@ -167,13 +205,19 @@ export async function getInstanceView(instanceId: string): Promise<EncounterInst
     applied: EncounterEffect | null;
     created_at: string;
     resolved_at: string | null;
+    target_team_name: string | null;
+    cap_full: string | null;
+    cap_user: string | null;
   }>(
     `SELECT ei.id, ei.team_id, t.name AS team_name, ei.encounter_number,
             re.title, re.target_team_id, ei.status, ei.choice, ei.outcome_text,
-            ei.applied, ei.created_at, ei.resolved_at
+            ei.applied, ei.created_at, ei.resolved_at,
+            tt.name AS target_team_name, cap.full_name AS cap_full, cap.username AS cap_user
        FROM encounter_instances ei
        JOIN random_encounters re ON re.number = ei.encounter_number
        LEFT JOIN teams t ON t.id = ei.team_id
+       LEFT JOIN teams tt ON tt.id = re.target_team_id
+       LEFT JOIN users cap ON cap.team_id = re.target_team_id AND cap.team_role = 'captain'
       WHERE ei.id = $1`,
     [instanceId],
   );
@@ -185,6 +229,8 @@ export async function getInstanceView(instanceId: string): Promise<EncounterInst
     id: row.id,
     team_id: row.team_id,
     team_name: row.team_name,
+    target_team_name: row.target_team_name,
+    target_captain_name: captainName(row.cap_full, row.cap_user),
     encounter_number: row.encounter_number,
     status: row.status,
     choice: row.choice,
@@ -296,6 +342,8 @@ export async function resolve(instanceId: string, choice?: string): Promise<Enco
     id: inst.id,
     team_id: inst.team_id,
     team_name: teamRes.rows[0]?.name ?? null,
+    target_team_name: null,
+    target_captain_name: null,
     encounter_number: inst.encounter_number,
     status: 'resolved',
     choice: choice ?? null,

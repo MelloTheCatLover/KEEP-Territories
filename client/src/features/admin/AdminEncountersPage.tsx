@@ -168,6 +168,11 @@ export function AdminEncountersPage() {
                             </option>
                           ))}
                         </select>
+                        {row.target_captain_name && (
+                          <span className="text-2xs text-neutral-700">
+                            капитан: <span className="text-neutral-1000">{row.target_captain_name}</span>
+                          </span>
+                        )}
                       </label>
                     )}
                   </div>
@@ -210,6 +215,14 @@ function PendingCard({
       </div>
       <p className="text-sm text-neutral-900 mb-1">{ev.title}</p>
       <p className="text-xs text-neutral-600 mb-2 italic">{ev.description}</p>
+
+      {inst.target_captain_name && (
+        <p className="text-xs text-neutral-700 mb-2">
+          Речь о капитане{' '}
+          <span className="text-neutral-1000 font-medium">{inst.target_captain_name}</span>
+          {inst.target_team_name && <> (команда «{inst.target_team_name}»)</>}
+        </p>
+      )}
 
       {ev.relevant && (
         <p className="text-xs text-neutral-700 mb-2">
