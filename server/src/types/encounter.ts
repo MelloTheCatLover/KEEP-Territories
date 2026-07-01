@@ -49,6 +49,9 @@ export interface EncounterInstanceView {
   id: string;
   team_id: string;
   team_name: string | null;
+  /** For swap encounters: the bound team and its captain (the referenced person). */
+  target_team_name: string | null;
+  target_captain_name: string | null;
   encounter_number: number;
   status: 'pending' | 'resolved';
   choice: string | null;

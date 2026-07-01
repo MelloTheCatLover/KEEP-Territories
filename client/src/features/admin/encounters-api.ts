@@ -20,6 +20,8 @@ export interface EncounterInstance {
   id: string;
   team_id: string;
   team_name: string | null;
+  target_team_name: string | null;
+  target_captain_name: string | null;
   encounter_number: number;
   status: 'pending' | 'resolved';
   choice: string | null;
@@ -36,6 +38,8 @@ export interface EncounterPoolRow {
   active: boolean;
   description: string;
   target_team_id: string | null;
+  target_team_name: string | null;
+  target_captain_name: string | null;
   supports_target: boolean;
 }
 

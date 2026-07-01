@@ -363,6 +363,13 @@ function EncounterPanel({
       </div>
       <p className="text-sm text-neutral-1000">{ev.title}</p>
       <p className="text-xs text-neutral-700 italic">{ev.description}</p>
+      {inst.target_captain_name && (
+        <p className="text-xs text-neutral-700">
+          Речь о капитане{' '}
+          <span className="text-neutral-1000 font-medium">{inst.target_captain_name}</span>
+          {inst.target_team_name && <> (команда «{inst.target_team_name}»)</>}
+        </p>
+      )}
       {ev.relevant && (
         <p className="text-xs text-neutral-700">
           <span className="uppercase tracking-wider text-2xs">{ev.relevant.label}:</span>{' '}
