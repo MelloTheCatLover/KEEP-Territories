@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Crown, LogOut, Loader2, Palette, ShieldCheck, UserCog, Users } from 'lucide-react';
+import { AlertTriangle, Bomb, Crown, Hammer, LogOut, Loader2, Palette, ShieldCheck, Store, Ticket, UserCog, Users } from 'lucide-react';
 import { Button, Card, ErrorBanner, Input, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { useAuth } from '../auth/AuthContext';
 import { getSettings, type GameSetting } from '../admin/settings-api';
 import { getTeamStats, leaveTeam, setTeamIdentity, transferCaptain, upgradeStat } from './api';
-import type { StatName, TeamFullStats } from './types';
+import type { MerchantType, StatName, TeamFullStats } from './types';
 import { teamColors, TEAM_COLOR_ORDER, type TeamColorKey } from '../../design-system/design-tokens';
 import type { User } from '../auth/types';
 import { JoinOrCreateView } from './JoinOrCreateView';
@@ -24,6 +24,14 @@ const STAT_META: Record<StatName, { label: string; hint: string }> = {
 };
 
 const STAT_ORDER: StatName[] = ['strength', 'intelligence', 'endurance', 'leadership', 'luck'];
+
+const MERCHANT_META: Record<MerchantType, { label: string; Icon: typeof Hammer }> = {
+  master: { label: 'Мастер', Icon: Hammer },
+  saboteur: { label: 'Диверсант', Icon: Bomb },
+  trader: { label: 'Торговец', Icon: Store },
+};
+
+const MERCHANT_ORDER: MerchantType[] = ['master', 'saboteur', 'trader'];
 
 function computeLevelProgress(
   experience: number,
@@ -245,6 +253,8 @@ export function TeamPage() {
         </Button>
       </div>
 
+      <TokensSection tokens={data.purchase_tokens} />
+
       <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-display text-heading-sm text-neutral-1000">Характеристики</h2>
@@ -450,6 +460,41 @@ function TeamSetupCard({
         </form>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Purchase tokens looted from hidden merchant sectors. Merchants are a surprise,
+ * so the section stays invisible until the team owns at least one token.
+ */
+function TokensSection({ tokens }: { tokens: TeamFullStats['purchase_tokens'] }) {
+  const total = MERCHANT_ORDER.reduce((sum, kind) => sum + (tokens[kind] ?? 0), 0);
+  if (total === 0) return null;
+
+  return (
+    <section>
+      <div className="flex items-center gap-2 mb-3">
+        <Ticket className="w-5 h-5 text-brand-400" />
+        <h2 className="font-display text-heading-sm text-neutral-1000">Жетоны покупки</h2>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {MERCHANT_ORDER.map((kind) => {
+          const meta = MERCHANT_META[kind];
+          const count = tokens[kind] ?? 0;
+          return (
+            <Card key={kind}>
+              <div className="flex items-center gap-3">
+                <meta.Icon className="w-6 h-6 text-brand-400 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-display text-lg text-neutral-1000 truncate">{meta.label}</div>
+                  <div className="font-mono text-2xl text-neutral-1000">{count}</div>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

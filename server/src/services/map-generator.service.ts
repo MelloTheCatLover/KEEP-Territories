@@ -246,12 +246,48 @@ async function assignTasksAfterGeneration(client: PoolClient, seasonId: string):
   }
 }
 
+/** Merchant kinds and how many of each land on the medium ring per season. */
+const MERCHANT_DEAL: Array<'master' | 'saboteur' | 'trader'> = [
+  'master', 'master', 'saboteur', 'saboteur', 'trader', 'trader',
+];
+
+/**
+ * Sprinkle the 6 hidden merchants over random capturable medium sectors. No
+ * client-facing flag: capturing one mints a purchase token (see submission
+ * service). Silently no-ops if the medium ring somehow has fewer than 6 cells.
+ */
+async function assignMerchantsAfterGeneration(client: PoolClient, seasonId: string): Promise<void> {
+  const res = await client.query<{ id: string }>(
+    `SELECT s.id
+       FROM sectors s
+       JOIN difficulty_levels dl ON s.difficulty_id = dl.id
+      WHERE s.season_id = $1
+        AND dl.slug = 'medium'
+        AND s.is_special = false
+        AND s.is_home_base = false`,
+    [seasonId],
+  );
+  const picks = shuffle(res.rows.map((r) => r.id)).slice(0, MERCHANT_DEAL.length);
+  for (let i = 0; i < picks.length; i++) {
+    await client.query('UPDATE sectors SET merchant_type = $1 WHERE id = $2', [
+      MERCHANT_DEAL[i],
+      picks[i],
+    ]);
+  }
+}
+
 /** Delete this season's sectors and everything anchored to them, keeping teams. */
 async function clearSeasonSectors(client: PoolClient, seasonId: string): Promise<void> {
   const seasonSectors = `(SELECT id FROM sectors WHERE season_id = $1)`;
   await client.query(`DELETE FROM task_submissions WHERE sector_id IN ${seasonSectors}`, [seasonId]);
   await client.query(`DELETE FROM sector_captures WHERE sector_id IN ${seasonSectors}`, [seasonId]);
   await client.query(`DELETE FROM sector_tasks WHERE sector_id IN ${seasonSectors}`, [seasonId]);
+  // Purchase tokens are field progress — reset them with the map.
+  await client.query(
+    `DELETE FROM team_purchase_tokens
+      WHERE team_id IN (SELECT id FROM teams WHERE season_id = $1)`,
+    [seasonId],
+  );
   await client.query('DELETE FROM sectors WHERE season_id = $1', [seasonId]);
 }
 
@@ -344,6 +380,7 @@ export async function generateMap(): Promise<SectorPublic[]> {
     );
 
     await assignTasksAfterGeneration(client, seasonId);
+    await assignMerchantsAfterGeneration(client, seasonId);
     await repinTeams(client, seasonId, teamIds);
 
     await client.query('COMMIT');
