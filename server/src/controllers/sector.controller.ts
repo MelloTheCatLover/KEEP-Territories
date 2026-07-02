@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as sectorService from '../services/sector.service';
+import * as specialSectorService from '../services/special-sector.service';
 import * as audit from '../services/audit.service';
 import { CreateSectorDto } from '../types/sector';
 import { AppError } from '../types/errors';
@@ -36,6 +37,28 @@ export async function create(req: Request, res: Response, next: NextFunction): P
     const dto = validateSectorDto(req.body);
     const sector = await sectorService.create(dto);
     res.status(201).json(sector);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function captureSpecial(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const assignments = specialSectorService.parseAssignments(req.body?.assignments);
+    const result = await specialSectorService.captureSpecialSector(req.params.id, assignments);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'sector.special_capture',
+      entityType: 'sector',
+      entityId: req.params.id,
+      summary: `Админ провёл особый захват сектора (${result.awards.length} мест)`,
+      metadata: { sector_id: req.params.id, awards: result.awards },
+    });
+    res.status(200).json(result);
   } catch (error) {
     next(error);
   }

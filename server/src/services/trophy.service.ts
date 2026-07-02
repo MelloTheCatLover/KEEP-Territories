@@ -108,7 +108,7 @@ const TROPHY_DEFS: TrophyDef[] = [
   {
     key: 'champions',
     name: 'Чемпионы',
-    description: 'Особые события (в разработке)',
+    description: 'Очки за места в захватах особых секторов',
     private_value: false,
     type: 'value',
     metric: 'special_events',
@@ -126,8 +126,9 @@ const METRICS_QUERY = `
         SELECT SUM(dl.influence_reward)
           FROM sectors s
           JOIN difficulty_levels dl ON dl.id = s.difficulty_id
-         WHERE s.captured_by_team_id = t.id
+         WHERE s.captured_by_team_id = t.id AND s.is_special = false
       ), 0)
+      + COALESCE((SELECT SUM(influence) FROM special_sector_awards WHERE team_id = t.id), 0)
       - COALESCE((SELECT SUM(influence) FROM team_penalties WHERE team_id = t.id), 0)
       + COALESCE((SELECT influence_delta FROM team_adjustments WHERE team_id = t.id), 0)
     )::int AS influence,
@@ -138,8 +139,9 @@ const METRICS_QUERY = `
           FROM sector_captures sc
           JOIN sectors s ON sc.sector_id = s.id
           JOIN difficulty_levels dl ON dl.id = s.difficulty_id
-         WHERE sc.team_id = t.id
+         WHERE sc.team_id = t.id AND s.is_special = false
       ), 0)
+      + COALESCE((SELECT SUM(experience) FROM special_sector_awards WHERE team_id = t.id), 0)
       - COALESCE((SELECT SUM(experience) FROM team_penalties WHERE team_id = t.id), 0)
       + COALESCE((SELECT experience_delta FROM team_adjustments WHERE team_id = t.id), 0)
     )::int AS experience,
@@ -154,24 +156,40 @@ const METRICS_QUERY = `
        JOIN difficulty_levels dl ON dl.id = s.difficulty_id
        WHERE s.captured_by_team_id = t.id AND dl.slug = 'core'
     ) AS owns_core,
-    COALESCE((
-      SELECT COUNT(*) FROM task_submissions sub
-       WHERE sub.team_id = t.id
-         AND sub.status = 'approved'
-         AND sub.action_type IN ('capture', 'recapture')
-         AND COALESCE(sub.reviewed_at, sub.created_at) > COALESCE(
-           (SELECT MAX(created_at) FROM team_penalties
-              WHERE team_id = t.id AND reason = 'drop'),
-           '1970-01-01 00:00:00+00'::timestamptz
-         )
-    ), 0)::int AS streak,
+    (
+      COALESCE((
+        SELECT COUNT(*) FROM task_submissions sub
+         WHERE sub.team_id = t.id
+           AND sub.status = 'approved'
+           AND sub.action_type IN ('capture', 'recapture')
+           AND COALESCE(sub.reviewed_at, sub.created_at) > COALESCE(
+             (SELECT MAX(created_at) FROM team_penalties
+                WHERE team_id = t.id AND reason = 'drop'),
+             '1970-01-01 00:00:00+00'::timestamptz
+           )
+      ), 0)
+      -- 1st place in a special-sector event counts as a capture toward the streak.
+      + COALESCE((
+        SELECT COUNT(*) FROM special_sector_awards ssa
+         WHERE ssa.team_id = t.id
+           AND ssa.place = 1
+           AND ssa.created_at > COALESCE(
+             (SELECT MAX(created_at) FROM team_penalties
+                WHERE team_id = t.id AND reason = 'drop'),
+             '1970-01-01 00:00:00+00'::timestamptz
+           )
+      ), 0)
+    )::int AS streak,
     COALESCE((
       SELECT COUNT(*) FROM task_submissions
        WHERE team_id = t.id
          AND status = 'approved'
          AND action_type = 'recapture'
     ), 0)::int AS recaptures,
-    0::int AS special_events
+    COALESCE((
+      -- "Champions" points: better place = more points (1st→6 … 6th→1).
+      SELECT SUM(7 - ssa.place) FROM special_sector_awards ssa WHERE ssa.team_id = t.id
+    ), 0)::int AS special_events
   FROM teams t
   WHERE t.season_id = $1
   ORDER BY t.created_at ASC

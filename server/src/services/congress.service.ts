@@ -13,7 +13,8 @@ export async function getTeamInfluence(): Promise<CongressTeamInfluence[]> {
               COALESCE((SELECT SUM(dl.influence_reward)
                           FROM sectors s
                           JOIN difficulty_levels dl ON dl.id = s.difficulty_id
-                         WHERE s.captured_by_team_id = t.id), 0)
+                         WHERE s.captured_by_team_id = t.id AND s.is_special = false), 0)
+              + COALESCE((SELECT SUM(influence) FROM special_sector_awards WHERE team_id = t.id), 0)
               - COALESCE((SELECT SUM(influence) FROM team_penalties WHERE team_id = t.id), 0)
               + COALESCE((SELECT influence_delta FROM team_adjustments WHERE team_id = t.id), 0)
             )::int AS influence
