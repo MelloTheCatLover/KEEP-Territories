@@ -74,7 +74,10 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
   const diffBadge = DIFFICULTY_BADGE[s.difficulty.slug];
   const numberLabel = s.number != null ? formatSectorLabel(s.difficulty.slug, s.number) : '';
 
-  if (s.is_special) {
+  // Uncaptured special sector — blue. Once an admin runs the event, the 1st
+  // place owns it and it paints in that team's colour (handled below); the blue
+  // corner badge still marks it as a special sector.
+  if (s.is_special && !s.captured_by_team_id) {
     return {
       fill: specialSectorColor,
       fillOpacity: 1,
