@@ -2,6 +2,10 @@ import type { User } from '../auth/types';
 
 export type StatName = 'strength' | 'intelligence' | 'endurance' | 'leadership' | 'luck';
 
+export type MerchantType = 'master' | 'saboteur' | 'trader';
+
+export type PurchaseTokens = Record<MerchantType, number>;
+
 export type Team = {
   id: string;
   name: string;
@@ -29,6 +33,7 @@ export type TeamFullStats = {
   stats: TeamStats;
   members: User[];
   captured_sectors_count: number;
+  purchase_tokens: PurchaseTokens;
 };
 
 export type CreateTeamPayload = {

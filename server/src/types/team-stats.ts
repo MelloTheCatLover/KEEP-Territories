@@ -2,6 +2,11 @@ import { UserPublic } from './user';
 
 export type StatName = 'strength' | 'intelligence' | 'endurance' | 'leadership' | 'luck';
 
+export type MerchantType = 'master' | 'saboteur' | 'trader';
+
+/** Purchase tokens a team has looted from merchant sectors, counted per kind. */
+export type PurchaseTokens = Record<MerchantType, number>;
+
 export interface TeamStatUpgrade {
   id: string;
   team_id: string;
@@ -32,4 +37,5 @@ export interface TeamFullStats {
   };
   members: UserPublic[];
   captured_sectors_count: number;
+  purchase_tokens: PurchaseTokens;
 }

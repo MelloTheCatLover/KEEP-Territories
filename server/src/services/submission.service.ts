@@ -492,6 +492,17 @@ async function applyApprovedEffect(
         'INSERT INTO sector_captures (sector_id, team_id) VALUES ($1, $2)',
         [submission.sector_id, submission.team_id],
       );
+      // A hidden merchant on this sector mints a one-off purchase token for the
+      // team. UNIQUE(team_id, sector_id) makes recapture idempotent — no farming.
+      const merchantType = (sector as { merchant_type?: string | null }).merchant_type ?? null;
+      if (merchantType) {
+        await client.query(
+          `INSERT INTO team_purchase_tokens (team_id, sector_id, merchant_type)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (team_id, sector_id) DO NOTHING`,
+          [submission.team_id, submission.sector_id, merchantType],
+        );
+      }
       return;
     }
     case 'fortify': {

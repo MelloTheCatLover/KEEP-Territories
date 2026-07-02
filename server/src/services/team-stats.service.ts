@@ -1,5 +1,5 @@
 import { pool } from '../config/db';
-import { StatName, TeamStatUpgrade, UpgradeStatDto, TeamFullStats } from '../types/team-stats';
+import { StatName, TeamStatUpgrade, UpgradeStatDto, TeamFullStats, MerchantType, PurchaseTokens } from '../types/team-stats';
 import { Team } from '../types/team';
 import { UserPublic } from '../types/user';
 import { AppError } from '../types/errors';
@@ -88,6 +88,21 @@ export async function getUpgrades(teamId: string): Promise<Record<StatName, numb
   return upgrades;
 }
 
+export async function getPurchaseTokens(teamId: string): Promise<PurchaseTokens> {
+  const result = await pool.query<{ merchant_type: MerchantType; count: number }>(
+    `SELECT merchant_type, COUNT(*)::int AS count
+     FROM team_purchase_tokens
+     WHERE team_id = $1
+     GROUP BY merchant_type`,
+    [teamId]
+  );
+  const tokens: PurchaseTokens = { master: 0, saboteur: 0, trader: 0 };
+  for (const row of result.rows) {
+    tokens[row.merchant_type] = row.count;
+  }
+  return tokens;
+}
+
 export async function getUpgradeCount(teamId: string): Promise<number> {
   const result = await pool.query<{ count: number }>(
     'SELECT COUNT(*)::int as count FROM team_stat_upgrades WHERE team_id = $1',
@@ -137,7 +152,7 @@ export async function getFullStats(teamId: string): Promise<TeamFullStats> {
   }
   const team = teamResult.rows[0];
 
-  const [influence, experience, upgrades, upgradeCount, membersResult, capturedResult, upgradeDelta] =
+  const [influence, experience, upgrades, upgradeCount, membersResult, capturedResult, upgradeDelta, purchaseTokens] =
     await Promise.all([
       getInfluence(teamId),
       getExperience(teamId),
@@ -153,6 +168,7 @@ export async function getFullStats(teamId: string): Promise<TeamFullStats> {
         [teamId]
       ),
       getUpgradePointsDelta(teamId),
+      getPurchaseTokens(teamId),
     ]);
 
   const level = await calculateLevel(experience);
@@ -169,6 +185,7 @@ export async function getFullStats(teamId: string): Promise<TeamFullStats> {
     stats: upgrades,
     members: membersResult.rows,
     captured_sectors_count: capturedResult.rows[0].count,
+    purchase_tokens: purchaseTokens,
   };
 }
 
