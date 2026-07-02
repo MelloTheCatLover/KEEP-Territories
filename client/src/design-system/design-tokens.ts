@@ -62,8 +62,8 @@ export const difficultyColors = {
   core:   '#E11D48',
 } as const;
 
-/** Special-event sectors (blue, non-capturable). */
-export const specialSectorColor = '#3B82F6';
+/** Special-event sectors (dark grey until an admin runs the place-based event). */
+export const specialSectorColor = '#374151';
 
 export type DifficultyKey = keyof typeof difficultyColors;
 
