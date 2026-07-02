@@ -12,7 +12,8 @@ export async function getInfluence(teamId: string): Promise<number> {
        (SELECT COALESCE(SUM(dl.influence_reward), 0)
           FROM sectors s
           JOIN difficulty_levels dl ON s.difficulty_id = dl.id
-         WHERE s.captured_by_team_id = $1)
+         WHERE s.captured_by_team_id = $1 AND s.is_special = false)
+       + COALESCE((SELECT SUM(influence) FROM special_sector_awards WHERE team_id = $1), 0)
        - COALESCE((SELECT SUM(influence) FROM team_penalties WHERE team_id = $1), 0)
        + COALESCE((SELECT influence_delta FROM team_adjustments WHERE team_id = $1), 0)
      )::int AS influence`,
@@ -29,7 +30,8 @@ export async function getExperience(teamId: string): Promise<number> {
           FROM sector_captures sc
           JOIN sectors s ON sc.sector_id = s.id
           JOIN difficulty_levels dl ON dl.id = s.difficulty_id
-         WHERE sc.team_id = $1)
+         WHERE sc.team_id = $1 AND s.is_special = false)
+       + COALESCE((SELECT SUM(experience) FROM special_sector_awards WHERE team_id = $1), 0)
        - COALESCE((SELECT SUM(experience) FROM team_penalties WHERE team_id = $1), 0)
        + COALESCE((SELECT experience_delta FROM team_adjustments WHERE team_id = $1), 0)
      )::int AS experience`,

@@ -21,6 +21,9 @@ router.get('/', sectorController.getAll);
 router.get('/map', sectorController.getMap);
 router.get('/:id', validateParamId, sectorController.getById);
 
+// Special-sector event: admin enters final standings; rewards distribute by place.
+router.post('/:id/special-capture', requireAdmin, validateParamId, sectorController.captureSpecial);
+
 // Participants are observers: only admins drive the field. Reads stay open.
 router.post('/:sectorId/action/start', requireAdmin, submissionController.startAction);
 router.get('/:sectorId/submission/current', submissionController.getCurrentForSector);
