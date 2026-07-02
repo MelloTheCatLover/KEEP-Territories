@@ -6,6 +6,7 @@ import type { Sector } from './types';
 import { HexMap, type TeamInfo, MAP_HEX_SIZE, MAP_VIEWBOX_PADDING } from './HexMap';
 import { bbox } from './hex-utils';
 import { SectorActionModal } from './SectorActionModal';
+import { SpecialSectorModal } from './SpecialSectorModal';
 import { TeamSummaryCard } from './TeamSidePanel';
 import { ApiError } from '../../shared/api/client';
 import { getTeams, getTeam } from '../team/api';
@@ -31,6 +32,7 @@ export function MapPage() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [createFor, setCreateFor] = useState<Sector | null>(null);
   const [actionFor, setActionFor] = useState<Sector | null>(null);
+  const [specialFor, setSpecialFor] = useState<Sector | null>(null);
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -134,7 +136,12 @@ export function MapPage() {
 
   const handleClick = useCallback(
     (s: Sector) => {
-      if (s.is_special || isObserver) return;
+      if (isObserver) return;
+      // Special sectors: admins run a place-based event instead of a capture.
+      if (s.is_special) {
+        if (isAdmin) setSpecialFor(s);
+        return;
+      }
       if (canCreateTeam) {
         if (!s.is_home_base || s.home_team_id !== null) return;
         setCreateFor(s);
@@ -144,7 +151,7 @@ export function MapPage() {
         setActionFor(s);
       }
     },
-    [canCreateTeam, teamId, isObserver],
+    [canCreateTeam, teamId, isObserver, isAdmin],
   );
 
   const freeHomeCount = useMemo(() => {
@@ -330,7 +337,7 @@ export function MapPage() {
               <HexMap
                 sectors={state.sectors}
                 teamsById={state.teamsById}
-                onSectorClick={!isObserver && (canCreateTeam || teamId) ? handleClick : undefined}
+                onSectorClick={!isObserver && (canCreateTeam || teamId || isAdmin) ? handleClick : undefined}
                 highlightIds={highlightIds}
               />
             </div>
@@ -386,6 +393,18 @@ export function MapPage() {
           onNavigateToActive={(sectorId) => {
             setActionFor(null);
             navigate(`/sectors/${sectorId}`);
+          }}
+        />
+      )}
+
+      {specialFor && state.status === 'ready' && (
+        <SpecialSectorModal
+          sector={specialFor}
+          teams={teamOptions.map((t) => ({ id: t.id, name: t.name, color: t.color }))}
+          onCancel={() => setSpecialFor(null)}
+          onDone={async () => {
+            setSpecialFor(null);
+            await load();
           }}
         />
       )}

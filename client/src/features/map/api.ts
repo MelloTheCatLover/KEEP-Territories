@@ -35,6 +35,26 @@ export function getCurrentSubmission(
   return api.get<TaskSubmissionWithDetails | null>(`/sectors/${sectorId}/submission/current`);
 }
 
+export type SpecialPlaceAssignment = { team_id: string; place: number };
+export type SpecialCaptureResult = {
+  sector: Sector;
+  awards: Array<{ team_id: string; place: number; influence: number; experience: number }>;
+};
+
+/**
+ * Admin-only special-sector event: submit the final standings (places 1-6).
+ * Rewards distribute by place; 1st place paints the sector. Replaces any prior
+ * standings for this sector.
+ */
+export function captureSpecialSector(
+  sectorId: string,
+  assignments: SpecialPlaceAssignment[],
+): Promise<SpecialCaptureResult> {
+  return api.post<SpecialCaptureResult>(`/sectors/${sectorId}/special-capture`, {
+    assignments,
+  });
+}
+
 export type GenerateMapResponse = {
   sectors: Sector[];
   count: number;
