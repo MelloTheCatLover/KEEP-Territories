@@ -364,7 +364,7 @@ export function MapPage() {
         </div>
       )}
 
-      {state.status === 'ready' && <TrophySection />}
+      {isAdmin && state.status === 'ready' && <TrophySection />}
 
       {createFor && (
         <CreateTeamModal
