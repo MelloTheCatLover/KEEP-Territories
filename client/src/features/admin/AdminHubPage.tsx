@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { AlertCircle, Map, ClipboardList, BookOpen, Settings, Users, Trophy, Link2, CalendarRange, ListChecks, UsersRound, Shuffle, ScrollText, Landmark, Dices } from 'lucide-react';
+import { AlertCircle, Map, ClipboardList, BookOpen, Settings, Users, Trophy, Link2, CalendarRange, ListChecks, UsersRound, Shuffle, ScrollText, Landmark, Dices, MonitorPlay } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Card } from '../../shared/ui';
 
@@ -29,6 +29,20 @@ export function AdminHubPage() {
       <p className="text-sm text-neutral-700 mb-6">Управление игрой.</p>
 
       <div className="grid sm:grid-cols-2 gap-4">
+        <Link to="/admin/display" target="_blank" rel="noopener" className="block">
+          <Card className="hover:border-brand-500 transition-colors">
+            <div className="flex items-start gap-3">
+              <MonitorPlay className="w-6 h-6 text-brand-400 mt-0.5" />
+              <div>
+                <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Вывод</h2>
+                <p className="text-sm text-neutral-700">
+                  Карта на весь экран без хедера — для проектора. Обновляется сама каждые 5 секунд.
+                </p>
+              </div>
+            </div>
+          </Card>
+        </Link>
+
         <Link to="/admin/seasons" className="block">
           <Card className="hover:border-brand-500 transition-colors">
             <div className="flex items-start gap-3">
