@@ -23,6 +23,7 @@ type Props = {
   sector: Sector;
   allSectors: Sector[];
   userTeamId: string;
+  userStrength: number;
   userActiveSectorId: string | null;
   onCancel: () => void;
   onStarted: (submissionId: string) => void;
@@ -37,6 +38,17 @@ type AvailableAction = {
 };
 
 const MAX_FORTIFICATION = 3;
+
+/**
+ * Пробитие: сколько уровней укрепления сила позволяет пробить при перехвате.
+ * Зеркалит penetrationFromStrength на бэке (submission.service.ts).
+ */
+function penetrationFromStrength(strength: number): number {
+  if (strength >= 10) return 3;
+  if (strength >= 8) return 2;
+  if (strength >= 5) return 1;
+  return 0;
+}
 
 const NEIGHBOR_OFFSETS: ReadonlyArray<[number, number]> = [
   [1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1],
@@ -62,6 +74,7 @@ function computeAvailable(
   sector: Sector,
   all: Sector[],
   teamId: string,
+  strength: number,
 ): { actions: AvailableAction[]; reason: string | null } {
   if (sector.current_action_type !== null) {
     return { actions: [], reason: 'По сектору уже есть заявка на рассмотрении' };
@@ -124,14 +137,20 @@ function computeAvailable(
   }
 
   if (sector.status === 'captured' && sector.captured_by_team_id) {
-    const actions: AvailableAction[] = [
-      {
+    const penetration = penetrationFromStrength(strength);
+    const canPierce = sector.fortification_level <= penetration;
+    const actions: AvailableAction[] = [];
+    if (canPierce) {
+      actions.push({
         type: 'recapture',
         label: 'Перехватить',
-        description: 'Отобрать сектор у другой команды',
+        description:
+          sector.fortification_level > 0
+            ? `Пробить укрепление (ур. ${sector.fortification_level}) и отобрать сектор`
+            : 'Отобрать сектор у другой команды',
         icon: Swords,
-      },
-    ];
+      });
+    }
     if (sector.fortification_level > 0) {
       actions.push({
         type: 'remove_fortification',
@@ -140,7 +159,10 @@ function computeAvailable(
         icon: ShieldOff,
       });
     }
-    return { actions, reason: null };
+    const reason = canPierce
+      ? null
+      : `Сектор укреплён (уровень ${sector.fortification_level}). Пробитие вашей силы — ${penetration}. Сначала снимите укрепление.`;
+    return { actions, reason };
   }
 
   return { actions: [], reason: 'Действие сейчас недоступно' };
@@ -158,6 +180,7 @@ export function SectorActionModal({
   sector,
   allSectors,
   userTeamId,
+  userStrength,
   userActiveSectorId,
   onCancel,
   onStarted,
@@ -201,8 +224,8 @@ export function SectorActionModal({
     if (hasActiveElsewhere || isThisSectorActive) {
       return { actions: [] as AvailableAction[], reason: null };
     }
-    return computeAvailable(sector, allSectors, userTeamId);
-  }, [sector, allSectors, userTeamId, hasActiveElsewhere, isThisSectorActive]);
+    return computeAvailable(sector, allSectors, userTeamId, userStrength);
+  }, [sector, allSectors, userTeamId, userStrength, hasActiveElsewhere, isThisSectorActive]);
 
   const label = sector.is_home_base
     ? 'K'

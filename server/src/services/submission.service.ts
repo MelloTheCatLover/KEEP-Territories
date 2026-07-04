@@ -15,6 +15,28 @@ import * as seasonService from './season.service';
 
 const MAX_FORTIFICATION = 3;
 
+/**
+ * Пробитие (penetration): сколько уровней укрепления команда может пробить
+ * при перехвате, не снимая их вручную. Зависит от силы команды.
+ *   сила 0–4 → 0 · 5–7 → 1 · 8–9 → 2 · 10+ → 3
+ */
+function penetrationFromStrength(strength: number): number {
+  if (strength >= 10) return 3;
+  if (strength >= 8) return 2;
+  if (strength >= 5) return 1;
+  return 0;
+}
+
+async function getTeamStrength(client: PoolClient, teamId: string): Promise<number> {
+  const res = await client.query<{ count: number }>(
+    `SELECT COUNT(*)::int AS count
+       FROM team_stat_upgrades
+      WHERE team_id = $1 AND stat_name = 'strength'`,
+    [teamId],
+  );
+  return res.rows[0]?.count ?? 0;
+}
+
 const ACTION_TYPES: ReadonlyArray<SectorActionType> = [
   'capture',
   'fortify',
@@ -211,6 +233,21 @@ export async function startAction(
       const adjacent = await hasAdjacentOwnedSector(client, sector, teamId);
       if (!adjacent) {
         throw new AppError(400, 'Сектор не граничит с вашими — действие невозможно');
+      }
+    }
+
+    // Перехват укреплённого сектора: команда должна либо снять всё укрепление
+    // вручную, либо пробить его силой. Пробитие покрывает fortification_level
+    // до уровня, заданного силой (см. penetrationFromStrength).
+    if (actionType === 'recapture' && sector.fortification_level > 0) {
+      const strength = await getTeamStrength(client, teamId);
+      const penetration = penetrationFromStrength(strength);
+      if (sector.fortification_level > penetration) {
+        throw new AppError(
+          400,
+          `Сектор укреплён (уровень ${sector.fortification_level}). ` +
+            `Пробитие вашей силы — ${penetration}. Сначала снимите укрепление.`,
+        );
       }
     }
 
