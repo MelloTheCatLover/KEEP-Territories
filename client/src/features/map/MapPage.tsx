@@ -316,7 +316,7 @@ export function MapPage() {
         <div
           className={`grid gap-4 lg:items-stretch ${
             isAdmin
-              ? 'lg:grid-cols-[minmax(220px,250px)_minmax(0,1fr)_minmax(220px,250px)_minmax(260px,300px)]'
+              ? 'lg:grid-cols-[minmax(240px,290px)_minmax(0,1fr)_minmax(240px,290px)] xl:grid-cols-[minmax(220px,260px)_minmax(0,1fr)_minmax(220px,260px)_minmax(300px,360px)]'
               : 'lg:grid-cols-[minmax(260px,300px)_minmax(0,1fr)_minmax(260px,300px)]'
           }`}
         >
@@ -375,7 +375,7 @@ export function MapPage() {
           </div>
 
           {isAdmin && (
-            <div className="order-2 lg:order-4 flex flex-col">
+            <div className="order-2 flex flex-col lg:order-last lg:col-span-3 xl:order-4 xl:col-span-1">
               <AdminReviewQueue onActed={() => void fetchMap(true)} />
             </div>
           )}

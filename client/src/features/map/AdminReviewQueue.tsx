@@ -81,7 +81,7 @@ export function AdminReviewQueue({ refreshKey = 0, onActed }: Props) {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+      <div className="flex-1 overflow-y-auto p-2">
         {error && (
           <p className="text-xs text-danger-text px-1">{error}</p>
         )}
@@ -94,15 +94,21 @@ export function AdminReviewQueue({ refreshKey = 0, onActed }: Props) {
         {items !== null && items.length === 0 && (
           <p className="text-xs text-neutral-700 px-1 py-2">Заявок нет.</p>
         )}
-        {items?.map((item) => (
-          <QueueCard
-            key={item.id}
-            item={item}
-            busy={busyId === item.id}
-            onApprove={() => void act(item.id, 'approve')}
-            onReject={() => void act(item.id, 'reject')}
-          />
-        ))}
+        {items && items.length > 0 && (
+          // Cards flow across the available width — one column in the narrow
+          // side panel, several when the queue spans full width below the map.
+          <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))]">
+            {items.map((item) => (
+              <QueueCard
+                key={item.id}
+                item={item}
+                busy={busyId === item.id}
+                onApprove={() => void act(item.id, 'approve')}
+                onReject={() => void act(item.id, 'reject')}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -122,9 +128,9 @@ function QueueCard({
   const teamColor = item.team.color ?? 'var(--color-neutral-500)';
   return (
     <div className="bg-neutral-50 border border-neutral-400 rounded-sm p-2 space-y-1.5">
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
         <span
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs text-2xs font-mono"
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs text-2xs font-mono min-w-0 max-w-full"
           style={{
             backgroundColor: `${teamColor}22`,
             border: `1px solid ${teamColor}`,
@@ -132,10 +138,10 @@ function QueueCard({
           }}
         >
           <span
-            className="w-2 h-2 rounded-full inline-block"
+            className="w-2 h-2 rounded-full inline-block flex-shrink-0"
             style={{ backgroundColor: teamColor }}
           />
-          {item.team.name}
+          <span className="truncate">{item.team.name}</span>
         </span>
         <span className="text-2xs font-mono text-neutral-800">
           {formatSectorLabel(item.difficulty.slug, item.sector.number)}
