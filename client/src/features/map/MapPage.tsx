@@ -14,6 +14,7 @@ import type { TeamFullStats } from '../team/types';
 import { useAuth } from '../auth/AuthContext';
 import { CreateTeamModal } from '../team/CreateTeamModal';
 import { TrophySection } from '../trophies/TrophySection';
+import { AdminReviewQueue } from './AdminReviewQueue';
 
 type LoadState =
   | { status: 'loading' }
@@ -34,8 +35,10 @@ export function MapPage() {
   const [actionFor, setActionFor] = useState<Sector | null>(null);
   const [specialFor, setSpecialFor] = useState<Sector | null>(null);
 
-  const load = useCallback(async () => {
-    setState({ status: 'loading' });
+  const fetchMap = useCallback(async (silent: boolean) => {
+    // Silent refresh (e.g. after a queue decision) keeps the current map on
+    // screen instead of flashing the loading state.
+    if (!silent) setState({ status: 'loading' });
     try {
       const [sectors, teams] = await Promise.all([getSectorsMap(), getTeams()]);
       if (sectors.length === 0) {
@@ -50,11 +53,14 @@ export function MapPage() {
       const fullTeams = await Promise.all(sorted.map((t) => getTeam(t.id)));
       setState({ status: 'ready', sectors, teamsById, fullTeams });
     } catch (err) {
+      if (silent) return;
       const message =
         err instanceof ApiError ? err.message : 'Не удалось загрузить карту';
       setState({ status: 'error', message });
     }
   }, []);
+
+  const load = useCallback(() => fetchMap(false), [fetchMap]);
 
   useEffect(() => {
     void load();
@@ -307,7 +313,13 @@ export function MapPage() {
       )}
 
       {state.status === 'ready' && mapLayout && (
-        <div className="grid gap-4 lg:items-stretch lg:grid-cols-[minmax(260px,300px)_minmax(0,1fr)_minmax(260px,300px)]">
+        <div
+          className={`grid gap-4 lg:items-stretch ${
+            isAdmin
+              ? 'lg:grid-cols-[minmax(220px,250px)_minmax(0,1fr)_minmax(220px,250px)_minmax(260px,300px)]'
+              : 'lg:grid-cols-[minmax(260px,300px)_minmax(0,1fr)_minmax(260px,300px)]'
+          }`}
+        >
           <div className="hidden gap-3 lg:order-1 lg:flex lg:flex-col lg:justify-center">
             {LEFT_SLOTS.map((key) => {
               const entry = mapLayout.slots[key];
@@ -361,6 +373,12 @@ export function MapPage() {
               );
             })}
           </div>
+
+          {isAdmin && (
+            <div className="order-2 lg:order-4 flex flex-col">
+              <AdminReviewQueue onActed={() => void fetchMap(true)} />
+            </div>
+          )}
         </div>
       )}
 
