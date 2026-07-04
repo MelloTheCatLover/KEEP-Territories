@@ -156,30 +156,33 @@ const METRICS_QUERY = `
        JOIN difficulty_levels dl ON dl.id = s.difficulty_id
        WHERE s.captured_by_team_id = t.id AND dl.slug = 'core'
     ) AS owns_core,
-    (
-      COALESCE((
-        SELECT COUNT(*) FROM task_submissions sub
-         WHERE sub.team_id = t.id
-           AND sub.status = 'approved'
-           AND sub.action_type IN ('capture', 'recapture')
-           AND COALESCE(sub.reviewed_at, sub.created_at) > COALESCE(
-             (SELECT MAX(created_at) FROM team_penalties
-                WHERE team_id = t.id AND reason = 'drop'),
-             '1970-01-01 00:00:00+00'::timestamptz
-           )
-      ), 0)
-      -- 1st place in a special-sector event counts as a capture toward the streak.
-      + COALESCE((
-        SELECT COUNT(*) FROM special_sector_awards ssa
-         WHERE ssa.team_id = t.id
-           AND ssa.place = 1
-           AND ssa.created_at > COALESCE(
-             (SELECT MAX(created_at) FROM team_penalties
-                WHERE team_id = t.id AND reason = 'drop'),
-             '1970-01-01 00:00:00+00'::timestamptz
-           )
-      ), 0)
-    )::int AS streak,
+    -- Стрик = самый длинный ряд одобренных захватов за сезон. Дропы делят
+    -- таймлайн на сегменты (seg = число дропов до события); дроп фиксирует
+    -- прошлый максимум и начинает новый сегмент, а не обнуляет достижение.
+    -- 1-е место в спец-событии засчитывается как захват.
+    COALESCE((
+      SELECT MAX(seg_count) FROM (
+        SELECT COUNT(*) AS seg_count
+        FROM (
+          SELECT (
+            SELECT COUNT(*) FROM team_penalties p
+             WHERE p.team_id = t.id AND p.reason = 'drop' AND p.created_at < ev.ts
+          ) AS seg
+          FROM (
+            SELECT COALESCE(sub.reviewed_at, sub.created_at) AS ts
+              FROM task_submissions sub
+             WHERE sub.team_id = t.id
+               AND sub.status = 'approved'
+               AND sub.action_type IN ('capture', 'recapture')
+            UNION ALL
+            SELECT ssa.created_at AS ts
+              FROM special_sector_awards ssa
+             WHERE ssa.team_id = t.id AND ssa.place = 1
+          ) ev
+        ) tagged
+        GROUP BY seg
+      ) segs
+    ), 0)::int AS streak,
     COALESCE((
       SELECT COUNT(*) FROM task_submissions
        WHERE team_id = t.id
