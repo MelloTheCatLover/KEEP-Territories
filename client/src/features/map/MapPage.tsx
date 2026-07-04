@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Loader2, MapPin, Users } from 'lucide-react';
 import { getSectorsMap } from './api';
 import type { Sector } from './types';
-import { HexMap, type TeamInfo, MAP_HEX_SIZE, MAP_VIEWBOX_PADDING } from './HexMap';
-import { bbox } from './hex-utils';
+import { HexMap, type TeamInfo } from './HexMap';
+import { computeMapLayout, LEFT_SLOTS, RIGHT_SLOTS } from './map-layout';
 import { SectorActionModal } from './SectorActionModal';
 import { SpecialSectorModal } from './SpecialSectorModal';
 import { TeamSummaryCard } from './TeamSidePanel';
@@ -194,44 +194,13 @@ export function MapPage() {
     return state.fullTeams.reduce((m, t) => Math.max(m, t.stats.leadership), 0);
   }, [state]);
 
-  type SlotKey = 'tl' | 'tr' | 'l' | 'r' | 'bl' | 'br';
-
-  const mapLayout = useMemo(() => {
-    if (state.status !== 'ready' || state.sectors.length === 0) {
-      return null;
-    }
-    const { minX, minY, maxX, maxY } = bbox(state.sectors, MAP_HEX_SIZE);
-    const vbW = maxX - minX + MAP_VIEWBOX_PADDING * 2;
-    const vbH = maxY - minY + MAP_VIEWBOX_PADDING * 2;
-
-    const slots: Partial<Record<SlotKey, { team: TeamFullStats; index: number }>> = {};
-    const homeBaseByTeam = new Map<string, { q: number; r: number }>();
-    state.sectors.forEach((s) => {
-      if (s.is_home_base && s.home_team_id) {
-        homeBaseByTeam.set(s.home_team_id, { q: s.q, r: s.r });
-      }
-    });
-    state.fullTeams.forEach((team) => {
-      const hb = homeBaseByTeam.get(team.id);
-      if (!hb) return;
-      const hx = Math.sqrt(3) * hb.q + (Math.sqrt(3) / 2) * hb.r;
-      const hy = 1.5 * hb.r;
-      let key: SlotKey;
-      if (Math.abs(hy) < 0.001) {
-        key = hx < 0 ? 'l' : 'r';
-      } else if (hy < 0) {
-        key = hx < 0 ? 'tl' : 'tr';
-      } else {
-        key = hx < 0 ? 'bl' : 'br';
-      }
-      const index = state.teamsById[team.id]?.index ?? 0;
-      if (!slots[key]) slots[key] = { team, index };
-    });
-    return { vbW, vbH, slots };
-  }, [state]);
-
-  const LEFT_SLOTS: SlotKey[] = ['tl', 'l', 'bl'];
-  const RIGHT_SLOTS: SlotKey[] = ['tr', 'r', 'br'];
+  const mapLayout = useMemo(
+    () =>
+      state.status === 'ready'
+        ? computeMapLayout(state.sectors, state.fullTeams, state.teamsById)
+        : null,
+    [state],
+  );
 
   return (
     <div className="max-w-[1500px] mx-auto px-3 sm:px-4">
