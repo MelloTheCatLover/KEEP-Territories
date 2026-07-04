@@ -515,13 +515,17 @@ async function applyApprovedEffect(
   switch (submission.action_type) {
     case 'capture':
     case 'recapture': {
+      // Захваченный сектор всегда достаётся новому владельцу без укрепления —
+      // укрепление чужой команды не наследуется. Чтобы поднять уровень,
+      // команда должна сама выполнить fortify.
       await client.query(
         `UPDATE sectors SET
            status = 'captured',
            captured_by_team_id = $1,
            capturing_by_team_id = NULL,
            capture_started_at = NULL,
-           current_action_type = NULL
+           current_action_type = NULL,
+           fortification_level = 0
          WHERE id = $2`,
         [submission.team_id, submission.sector_id],
       );
