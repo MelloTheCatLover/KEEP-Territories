@@ -739,8 +739,6 @@ export async function dropPending(
   try {
     await client.query('BEGIN');
 
-    const teamId = await getUserTeamId(client, userId);
-
     const subRes = await client.query<TaskSubmission>(
       'SELECT * FROM task_submissions WHERE id = $1 FOR UPDATE',
       [submissionId],
@@ -749,9 +747,22 @@ export async function dropPending(
       throw new AppError(404, 'Submission not found');
     }
     const submission = subRes.rows[0];
-    if (submission.team_id !== teamId) {
+
+    // Админ дропает сектора за любую команду; обычный игрок — только свои.
+    // В обоих случаях штраф ложится на команду-автора заявки.
+    const userRes = await client.query<{ team_id: string | null; role: string }>(
+      'SELECT team_id, role FROM users WHERE id = $1',
+      [userId],
+    );
+    if (userRes.rows.length === 0) {
+      throw new AppError(404, 'User not found');
+    }
+    const { team_id: userTeamId, role } = userRes.rows[0];
+    if (role !== 'admin' && submission.team_id !== userTeamId) {
       throw new AppError(403, 'Это задание не вашей команды');
     }
+    const teamId = submission.team_id;
+
     if (submission.status !== 'pending') {
       throw new AppError(409, 'Заявка уже закрыта');
     }
