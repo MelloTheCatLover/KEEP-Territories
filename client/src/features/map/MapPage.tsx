@@ -384,6 +384,9 @@ export function MapPage() {
           sector={actionFor}
           allSectors={state.sectors}
           userTeamId={teamId}
+          userStrength={
+            state.fullTeams.find((t) => t.id === teamId)?.stats.strength ?? 0
+          }
           userActiveSectorId={userActiveSectorId}
           onCancel={() => setActionFor(null)}
           onStarted={(submissionId) => {
