@@ -125,6 +125,25 @@ export async function getMap(req: Request, res: Response, next: NextFunction): P
   }
 }
 
+export async function getTimelapse(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const raw = req.query.season_id;
+    let seasonId: string | undefined;
+    if (typeof raw === 'string' && raw.length > 0) {
+      if (!UUID_REGEX.test(raw)) throw new AppError(400, 'Invalid season_id');
+      seasonId = raw;
+    }
+    const data = await sectorService.getTimelapse(seasonId);
+    res.status(200).json(data);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function listSectorTasks(
   req: Request<{ id: string }>,
   res: Response,

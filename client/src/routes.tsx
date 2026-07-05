@@ -20,6 +20,7 @@ import { AdminAuditPage } from './features/admin/AdminAuditPage';
 import { AdminCongressPage } from './features/admin/AdminCongressPage';
 import { AdminEncountersPage } from './features/admin/AdminEncountersPage';
 import { AdminDisplayPage } from './features/admin/AdminDisplayPage';
+import { TimelapsePage } from './features/admin/TimelapsePage';
 import { LawsPage } from './features/laws/LawsPage';
 import { TeamsOverviewPage } from './features/leaderboard/TeamsOverviewPage';
 import { SeasonsPage } from './features/seasons/SeasonsPage';
@@ -76,6 +77,15 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <AdminDisplayPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Full-screen replay of the season's map history. No app header.
+    path: '/admin/timelapse',
+    element: (
+      <ProtectedRoute>
+        <TimelapsePage />
       </ProtectedRoute>
     ),
   },
