@@ -19,6 +19,7 @@ router.post('/', requireAdmin, sectorController.create);
 router.post('/bulk', requireAdmin, sectorController.createBulk);
 router.get('/', sectorController.getAll);
 router.get('/map', sectorController.getMap);
+router.get('/timelapse', requireAdmin, sectorController.getTimelapse);
 router.get('/:id', validateParamId, sectorController.getById);
 
 // Special-sector event: admin enters final standings; rewards distribute by place.

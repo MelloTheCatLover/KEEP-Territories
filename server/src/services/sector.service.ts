@@ -159,6 +159,69 @@ export async function createBulk(sectors: CreateSectorDto[]): Promise<SectorPubl
   return getAll();
 }
 
+export interface TimelapseSector {
+  id: string;
+  q: number;
+  r: number;
+  number: number | null;
+  difficulty_slug: DifficultySlug;
+  is_home_base: boolean;
+}
+
+export interface TimelapseTeam {
+  id: string;
+  name: string;
+  color: string | null;
+}
+
+export interface TimelapseEvent {
+  sector_id: string;
+  team_id: string;
+  at: string;
+}
+
+export interface TimelapseData {
+  sectors: TimelapseSector[];
+  teams: TimelapseTeam[];
+  events: TimelapseEvent[];
+}
+
+/**
+ * Everything needed to replay how the board changed over a season: the map
+ * shape, the teams, and the ordered ownership stream (every capture, recapture
+ * and home-base claim from `sector_captures`). The client reconstructs the
+ * board at any point by applying events up to a playhead.
+ */
+export async function getTimelapse(seasonId?: string): Promise<TimelapseData> {
+  const sid = seasonId ?? (await getActiveSeasonId());
+  const [sectorsRes, teamsRes, eventsRes] = await Promise.all([
+    pool.query<TimelapseSector>(
+      `SELECT s.id, s.q, s.r, s.number, dl.slug AS difficulty_slug, s.is_home_base
+         FROM sectors s
+         JOIN difficulty_levels dl ON dl.id = s.difficulty_id
+        WHERE s.season_id = $1`,
+      [sid],
+    ),
+    pool.query<TimelapseTeam>(
+      'SELECT id, name, color FROM teams WHERE season_id = $1',
+      [sid],
+    ),
+    pool.query<TimelapseEvent>(
+      `SELECT sc.sector_id, sc.team_id, sc.captured_at AS at
+         FROM sector_captures sc
+         JOIN sectors s ON s.id = sc.sector_id
+        WHERE s.season_id = $1
+        ORDER BY sc.captured_at ASC, sc.id ASC`,
+      [sid],
+    ),
+  ]);
+  return {
+    sectors: sectorsRes.rows,
+    teams: teamsRes.rows,
+    events: eventsRes.rows,
+  };
+}
+
 export interface SectorTaskRow {
   task_id: string;
   title: string;
