@@ -85,16 +85,36 @@ export function TrophySection({ refreshKey = 0 }: Props) {
   return (
     <section className="mt-6 space-y-3">
       <h2 className="font-display text-heading-sm text-neutral-1000">Кубки</h2>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {trophies.map((trophy) => (
-          <TrophyCard key={trophy.key} trophy={trophy} />
-        ))}
-      </div>
+      <TrophyGrid trophies={trophies} />
     </section>
   );
 }
 
-function TrophyCard({ trophy }: { trophy: TrophyRanking }) {
+/** Presentational grid of trophy cards — shared by the live admin view and the
+ * read-only season archive. Highlighting a champion team is done by the caller. */
+export function TrophyGrid({
+  trophies,
+  highlightTeamId = null,
+}: {
+  trophies: TrophyRanking[];
+  highlightTeamId?: string | null;
+}) {
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {trophies.map((trophy) => (
+        <TrophyCard key={trophy.key} trophy={trophy} highlightTeamId={highlightTeamId} />
+      ))}
+    </div>
+  );
+}
+
+function TrophyCard({
+  trophy,
+  highlightTeamId = null,
+}: {
+  trophy: TrophyRanking;
+  highlightTeamId?: string | null;
+}) {
   const Icon = TROPHY_ICON[trophy.key];
   const winners = trophy.entries.filter((e) => e.place === 1);
   const colors = winners
@@ -102,10 +122,16 @@ function TrophyCard({ trophy }: { trophy: TrophyRanking }) {
     .filter((c): c is NonNullable<typeof c> => c !== null);
 
   const fillStyle = buildFillStyle(colors);
+  const heldByChampion =
+    highlightTeamId !== null && winners.some((w) => w.team_id === highlightTeamId);
 
   return (
     <div
-      className="relative border border-neutral-400 overflow-hidden h-36 flex items-end"
+      className={`relative border overflow-hidden h-36 flex items-end ${
+        heldByChampion
+          ? 'border-warning ring-2 ring-warning'
+          : 'border-neutral-400'
+      }`}
       style={fillStyle}
       title={trophy.description}
     >

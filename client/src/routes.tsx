@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
 import { LoginPage } from './features/auth/LoginPage';
 import { ProfilePage } from './features/auth/ProfilePage';
 import { MapPage } from './features/map/MapPage';
@@ -89,8 +89,22 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
+  {
+    // Public read-only replay of an archived season, for any authenticated child.
+    path: '/seasons/:id/timelapse',
+    element: (
+      <ProtectedRoute>
+        <SeasonTimelapsePage />
+      </ProtectedRoute>
+    ),
+  },
   { path: '*', element: <NotFound /> },
 ]);
+
+function SeasonTimelapsePage() {
+  const { id } = useParams<{ id: string }>();
+  return <TimelapsePage seasonId={id} />;
+}
 
 function NotFound() {
   return (

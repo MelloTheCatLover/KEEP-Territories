@@ -337,6 +337,34 @@ export async function computeOverall(seasonId: string): Promise<OverallEntry[]> 
   return buildOverall(teams, trophies);
 }
 
+/**
+ * Trophies for an arbitrary season, no viewer context. Used by the public season
+ * archive: once a season is archived the game is over, so every value is revealed
+ * (including the normally-private streak/recapture counts). For a still-active or
+ * draft season the private values stay hidden.
+ */
+export async function getSeasonTrophies(seasonId: string): Promise<TrophiesResponse> {
+  const seasonRes = await pool.query<{ status: string }>(
+    'SELECT status FROM seasons WHERE id = $1',
+    [seasonId],
+  );
+  if (seasonRes.rows.length === 0) {
+    throw new AppError(404, 'Сезон не найден');
+  }
+  const showAllValues = seasonRes.rows[0].status === 'archived';
+
+  const teams = await loadTeamMetrics(seasonId);
+  if (teams.length === 0) {
+    return { trophies: [], overall: [] };
+  }
+
+  const trophies = TROPHY_DEFS.map((def) =>
+    buildTrophy(def, teams, null, showAllValues),
+  );
+  const overall = buildOverall(teams, trophies);
+  return { trophies, overall };
+}
+
 export async function getTrophies(userId: string): Promise<TrophiesResponse> {
   const userRes = await pool.query<{ team_id: string | null; role: 'admin' | 'student' }>(
     'SELECT team_id, role FROM users WHERE id = $1',
