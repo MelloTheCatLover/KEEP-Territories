@@ -26,6 +26,8 @@ router.use(authenticate);
 
 router.post('/', validateCreateTeam, teamController.create);
 router.get('/', teamController.getAll);
+router.get('/unassigned', requireAdmin, teamController.listUnassigned);
+router.get('/roster', requireAdmin, teamController.listRoster);
 router.post('/leave', teamController.leave);
 router.post('/transfer', requireTeamRole('captain'), teamController.transferCaptain);
 router.patch('/mine', requireTeamRole('captain'), teamController.setIdentity);
@@ -34,6 +36,7 @@ router.post('/:id/join', validateParamId, teamController.join);
 
 router.patch('/:id', requireAdmin, validateParamId, teamController.adminUpdate);
 router.delete('/:id', requireAdmin, validateParamId, teamController.adminDelete);
+router.post('/:id/members', requireAdmin, validateParamId, teamController.adminAssignMember);
 router.delete('/:id/members/:userId', requireAdmin, validateKickParams, teamController.adminKick);
 
 export default router;

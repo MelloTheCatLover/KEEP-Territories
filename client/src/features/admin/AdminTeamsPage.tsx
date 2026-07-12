@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, Loader2, Pencil, Sliders, Trash2, UserMinus, X, RefreshCw } from 'lucide-react';
+import { AlertCircle, Loader2, Pencil, Sliders, Trash2, UserMinus, UserPlus, X, RefreshCw } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner, Input, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { getTeams, getTeam } from '../team/api';
 import {
+  adminAssignMember,
   adminDeleteTeam,
   adminKickMember,
   adminSetTeamResources,
   adminSetTeamStats,
   adminUpdateTeam,
+  getUnassignedMembers,
+  getRoster,
+  type UnassignedMember,
+  type RosterMember,
 } from './teams-api';
 import type { StatName, Team, TeamFullStats } from '../team/types';
 import { teamColors, TEAM_COLOR_ORDER } from '../../design-system/design-tokens';
@@ -17,36 +22,17 @@ import { teamColors, TEAM_COLOR_ORDER } from '../../design-system/design-tokens'
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; teams: TeamFullStats[] };
+  | {
+      status: 'ready';
+      teams: TeamFullStats[];
+      unassigned: UnassignedMember[];
+      roster: RosterMember[];
+    };
 
+/** Admin route wrapper — guards access, then renders the shared manager. */
 export function AdminTeamsPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
-
-  const [state, setState] = useState<LoadState>({ status: 'loading' });
-  const [editing, setEditing] = useState<TeamFullStats | null>(null);
-  const [deleting, setDeleting] = useState<TeamFullStats | null>(null);
-  const [tuning, setTuning] = useState<TeamFullStats | null>(null);
-
-  const load = useCallback(async () => {
-    setState({ status: 'loading' });
-    try {
-      const list = await getTeams();
-      const full = await Promise.all(list.map((t: Team) => getTeam(t.id)));
-      setState({ status: 'ready', teams: full });
-    } catch (err) {
-      setState({
-        status: 'error',
-        message: err instanceof ApiError ? err.message : 'Не удалось загрузить команды',
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isAdmin) void load();
-  }, [isAdmin, load]);
-
-  if (!isAdmin) {
+  if (user?.role !== 'admin') {
     return (
       <div className="max-w-2xl mx-auto px-4">
         <Card>
@@ -61,13 +47,48 @@ export function AdminTeamsPage() {
       </div>
     );
   }
+  return <TeamsManager />;
+}
+
+/**
+ * Full admin team + roster management. Shown both at /admin/teams and on the
+ * /team page for admins (who never join a team themselves).
+ */
+export function TeamsManager() {
+  const [state, setState] = useState<LoadState>({ status: 'loading' });
+  const [editing, setEditing] = useState<TeamFullStats | null>(null);
+  const [deleting, setDeleting] = useState<TeamFullStats | null>(null);
+  const [tuning, setTuning] = useState<TeamFullStats | null>(null);
+  const [addingTo, setAddingTo] = useState<TeamFullStats | null>(null);
+
+  const load = useCallback(async () => {
+    setState({ status: 'loading' });
+    try {
+      const [list, unassigned, roster] = await Promise.all([
+        getTeams(),
+        getUnassignedMembers(),
+        getRoster(),
+      ]);
+      const full = await Promise.all(list.map((t: Team) => getTeam(t.id)));
+      setState({ status: 'ready', teams: full, unassigned, roster });
+    } catch (err) {
+      setState({
+        status: 'error',
+        message: err instanceof ApiError ? err.message : 'Не удалось загрузить команды',
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   return (
     <div className="max-w-5xl mx-auto px-4 space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Команды</h1>
-          <p className="text-sm text-neutral-700">Полное управление командами.</p>
+          <p className="text-sm text-neutral-700">Управление командами и их составами.</p>
         </div>
         <Button variant="secondary" onClick={() => void load()} disabled={state.status === 'loading'}>
           <span className="flex items-center gap-2">
@@ -89,15 +110,25 @@ export function AdminTeamsPage() {
         </Card>
       )}
 
+      {state.status === 'ready' && (
+        <UnassignedCard
+          members={state.unassigned}
+          teams={state.teams}
+          onChanged={() => void load()}
+        />
+      )}
+
       {state.status === 'ready' && state.teams.length > 0 && (
         <div className="grid gap-3">
           {state.teams.map((t) => (
             <TeamRow
               key={t.id}
               team={t}
+              allTeams={state.teams}
               onEdit={() => setEditing(t)}
               onTune={() => setTuning(t)}
               onDelete={() => setDeleting(t)}
+              onAdd={() => setAddingTo(t)}
               onKicked={() => void load()}
             />
           ))}
@@ -143,25 +174,54 @@ export function AdminTeamsPage() {
           }}
         />
       )}
+
+      {addingTo && state.status === 'ready' && (
+        <AddMemberModal
+          team={addingTo}
+          roster={state.roster}
+          onCancel={() => setAddingTo(null)}
+          onAdded={async () => {
+            setAddingTo(null);
+            await load();
+          }}
+        />
+      )}
     </div>
   );
 }
 
 function TeamRow({
   team,
+  allTeams,
   onEdit,
   onTune,
   onDelete,
+  onAdd,
   onKicked,
 }: {
   team: TeamFullStats;
+  allTeams: TeamFullStats[];
   onEdit: () => void;
   onTune: () => void;
   onDelete: () => void;
+  onAdd: () => void;
   onKicked: () => void;
 }) {
   const [kickBusy, setKickBusy] = useState<string | null>(null);
   const [kickError, setKickError] = useState<string | null>(null);
+  const otherTeams = allTeams.filter((t) => t.id !== team.id);
+
+  async function handleMove(userId: string, targetTeamId: string) {
+    setKickBusy(userId);
+    setKickError(null);
+    try {
+      await adminAssignMember(targetTeamId, userId);
+      onKicked();
+    } catch (err) {
+      setKickError(err instanceof ApiError ? err.message : 'Не удалось перевести');
+      setKickBusy(null);
+    }
+  }
 
   async function handleKick(userId: string) {
     setKickBusy(userId);
@@ -226,7 +286,21 @@ function TeamRow({
       )}
 
       <div className="border-t border-neutral-400 pt-3">
-        <p className="text-xs text-neutral-700 mb-2">Участники ({team.members.length})</p>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <p className="text-xs text-neutral-700">Участники ({team.members.length})</p>
+          <button
+            type="button"
+            onClick={onAdd}
+            className="text-xs text-brand-300 hover:text-brand-200 flex items-center gap-1"
+            title="Добавить участника из списка"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            Добавить из списка
+          </button>
+        </div>
+        {team.members.length === 0 && (
+          <p className="text-xs text-neutral-700 italic mb-1">Пока никого нет.</p>
+        )}
         <ul className="space-y-1">
           {team.members.map((m) => (
             <li
@@ -239,25 +313,248 @@ function TeamRow({
                   <span className="ml-2 text-xs text-brand-300 font-display">Капитан</span>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => void handleKick(m.id)}
-                disabled={kickBusy !== null}
-                className="text-xs text-danger-text hover:text-danger flex items-center gap-1 disabled:opacity-50"
-                title="Исключить из команды"
-              >
-                {kickBusy === m.id ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <UserMinus className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {otherTeams.length > 0 && (
+                  <TeamPickerSelect
+                    teams={otherTeams}
+                    disabled={kickBusy !== null}
+                    placeholder="Перевести в…"
+                    onPick={(targetId) => void handleMove(m.id, targetId)}
+                  />
                 )}
-                Исключить
-              </button>
+                <button
+                  type="button"
+                  onClick={() => void handleKick(m.id)}
+                  disabled={kickBusy !== null}
+                  className="text-xs text-danger-text hover:text-danger flex items-center gap-1 disabled:opacity-50"
+                  title="Исключить из команды"
+                >
+                  {kickBusy === m.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <UserMinus className="w-3.5 h-3.5" />
+                  )}
+                  Исключить
+                </button>
+              </div>
             </li>
           ))}
         </ul>
       </div>
     </Card>
+  );
+}
+
+/** A one-shot team chooser: fires onPick then resets to the placeholder. */
+function TeamPickerSelect({
+  teams,
+  disabled,
+  placeholder,
+  onPick,
+}: {
+  teams: TeamFullStats[];
+  disabled?: boolean;
+  placeholder: string;
+  onPick: (teamId: string) => void;
+}) {
+  return (
+    <select
+      value=""
+      disabled={disabled}
+      onChange={(e) => {
+        const id = e.target.value;
+        if (id) onPick(id);
+        e.target.value = '';
+      }}
+      className="text-xs bg-neutral-100 border border-neutral-400 rounded-sm px-2 py-1 text-neutral-1000 disabled:opacity-50 max-w-[10rem]"
+    >
+      <option value="">{placeholder}</option>
+      {teams.map((t) => (
+        <option key={t.id} value={t.id}>
+          {t.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Enrolled kids not in any team (e.g. after a kick) — placeable into a team. */
+function UnassignedCard({
+  members,
+  teams,
+  onChanged,
+}: {
+  members: UnassignedMember[];
+  teams: TeamFullStats[];
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (members.length === 0) return null;
+
+  async function handleAssign(userId: string, teamId: string) {
+    setBusy(userId);
+    setError(null);
+    try {
+      await adminAssignMember(teamId, userId);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось добавить в команду');
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Card>
+      <div className="flex items-center gap-2 mb-2">
+        <UserPlus className="w-4 h-4 text-brand-400" />
+        <h2 className="font-display text-heading-sm text-neutral-1000">Без команды ({members.length})</h2>
+      </div>
+      <p className="text-xs text-neutral-700 mb-3">
+        Участники сезона без команды. Выберите команду, чтобы добавить.
+      </p>
+      {error && (
+        <div className="mb-2">
+          <ErrorBanner message={error} />
+        </div>
+      )}
+      {teams.length === 0 ? (
+        <p className="text-sm text-neutral-700">Сначала создайте команду.</p>
+      ) : (
+        <ul className="space-y-1">
+          {members.map((m) => (
+            <li
+              key={m.id}
+              className="flex items-center justify-between gap-3 bg-neutral-200 border border-neutral-400 rounded-sm px-3 py-1.5"
+            >
+              <div className="text-sm text-neutral-1000 truncate">
+                {m.full_name ?? m.username}
+                {busy === m.id && <Loader2 className="inline w-3.5 h-3.5 animate-spin ml-2" />}
+              </div>
+              <TeamPickerSelect
+                teams={teams}
+                disabled={busy !== null}
+                placeholder="В команду…"
+                onPick={(teamId) => void handleAssign(m.id, teamId)}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/** Pick a child from the season roster and add/move them into `team`. */
+function AddMemberModal({
+  team,
+  roster,
+  onCancel,
+  onAdded,
+}: {
+  team: TeamFullStats;
+  roster: RosterMember[];
+  onCancel: () => void;
+  onAdded: () => Promise<void>;
+}) {
+  const [query, setQuery] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const q = query.trim().toLowerCase();
+  const candidates = roster
+    .filter((r) => r.team_id !== team.id)
+    .filter((r) => q === '' || (r.full_name ?? '').toLowerCase().includes(q))
+    // Placeable first (has account & no team), then others; alphabetical within.
+    .sort((a, b) => {
+      const rank = (r: RosterMember) => (r.has_account ? (r.team_id ? 1 : 0) : 2);
+      return rank(a) - rank(b) || (a.full_name ?? '').localeCompare(b.full_name ?? '', 'ru');
+    });
+
+  async function handleAdd(r: RosterMember) {
+    if (!r.user_id) return;
+    setBusy(r.child_id);
+    setError(null);
+    try {
+      await adminAssignMember(team.id, r.user_id);
+      await onAdded();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось добавить');
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'var(--state-overlay-backdrop)' }}
+      onClick={busy ? undefined : onCancel}
+    >
+      <div
+        className="bg-neutral-100 border border-neutral-400 rounded-sm p-5 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-3 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-display text-heading-sm text-neutral-1000">
+            В команду «{team.name}»
+          </h2>
+          <button type="button" onClick={onCancel} className="text-neutral-700 hover:text-neutral-1000" title="Закрыть">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {error && <ErrorBanner message={error} />}
+
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Поиск по имени..."
+          autoFocus
+        />
+
+        {candidates.length === 0 ? (
+          <p className="text-sm text-neutral-700">Никого не найдено.</p>
+        ) : (
+          <ul className="space-y-1">
+            {candidates.map((r) => {
+              const inTeam = r.team_id !== null;
+              return (
+                <li
+                  key={r.child_id}
+                  className="flex items-center justify-between gap-3 bg-neutral-200 border border-neutral-400 rounded-sm px-3 py-1.5"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm text-neutral-1000 truncate">{r.full_name ?? '—'}</div>
+                    <div className="text-2xs text-neutral-700 truncate">
+                      {!r.has_account
+                        ? 'нет аккаунта'
+                        : inTeam
+                          ? `в команде «${r.team_name}»`
+                          : 'без команды'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleAdd(r)}
+                    disabled={!r.has_account || busy !== null}
+                    className="text-xs text-brand-300 hover:text-brand-200 flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+                    title={!r.has_account ? 'Сначала выдайте аккаунт' : inTeam ? 'Перевести сюда' : 'Добавить'}
+                  >
+                    {busy === r.child_id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <UserPlus className="w-3.5 h-3.5" />
+                    )}
+                    {inTeam ? 'Перевести' : 'Добавить'}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 }
 

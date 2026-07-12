@@ -190,6 +190,57 @@ export async function adminDelete(
   }
 }
 
+export async function listUnassigned(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    res.status(200).json(await teamService.listUnassigned());
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function listRoster(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    res.status(200).json(await teamService.listRoster());
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function adminAssignMember(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const userId = (req.body ?? {}).user_id;
+    if (typeof userId !== 'string') {
+      res.status(400).json({ error: 'user_id обязателен' });
+      return;
+    }
+    const result = await teamService.adminAssignMember(req.params.id, userId);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      teamId: req.params.id,
+      action: 'team.assign',
+      entityType: 'team',
+      entityId: req.params.id,
+      summary: `Админ перевёл участника в команду «${result.name}»`,
+      metadata: { assigned_user_id: userId },
+    });
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function adminKick(
   req: Request<{ id: string; userId: string }>,
   res: Response,
