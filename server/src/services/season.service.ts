@@ -188,6 +188,44 @@ export async function activate(id: string): Promise<SeasonWithLists> {
   return getById(id);
 }
 
+/**
+ * End the active season and move it to the read-only archive without promoting a
+ * successor. Players' team membership is cleared so nobody can influence the map
+ * anymore; the map, teams and trophies stay as a browsable archive.
+ */
+export async function archive(id: string): Promise<SeasonWithLists> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const res = await client.query<{ status: string }>(
+      'SELECT status FROM seasons WHERE id = $1 FOR UPDATE',
+      [id],
+    );
+    if (res.rows.length === 0) {
+      throw new AppError(404, 'Сезон не найден');
+    }
+    if (res.rows[0].status !== 'active') {
+      throw new AppError(400, 'В архив можно отправить только активный сезон');
+    }
+
+    await client.query(
+      `UPDATE users SET team_id = NULL, team_role = NULL
+        WHERE team_id IN (SELECT id FROM teams WHERE season_id = $1)`,
+      [id],
+    );
+    await client.query(`UPDATE seasons SET status = 'archived' WHERE id = $1`, [id]);
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  return getById(id);
+}
+
 export async function remove(id: string): Promise<void> {
   const client = await pool.connect();
   try {

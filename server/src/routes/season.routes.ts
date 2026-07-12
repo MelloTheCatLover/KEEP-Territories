@@ -12,11 +12,17 @@ router.use(authenticate);
 // stay admin-only.
 router.get('/', seasonController.list);
 
+// Public archive views: any authenticated user (even non-participants) can browse
+// a season's trophies and ownership timelapse.
+router.get('/:id/trophies', validateParamId, seasonController.getTrophies);
+router.get('/:id/timelapse', validateParamId, seasonController.getTimelapse);
+
 router.post('/', requireAdmin, seasonController.create);
 router.get('/:id', requireAdmin, validateParamId, seasonController.getById);
 router.patch('/:id', requireAdmin, validateParamId, seasonController.update);
 router.put('/:id/lists', requireAdmin, validateParamId, seasonController.setLists);
 router.post('/:id/activate', requireAdmin, validateParamId, seasonController.activate);
+router.post('/:id/archive', requireAdmin, validateParamId, seasonController.archive);
 router.delete('/:id', requireAdmin, validateParamId, seasonController.remove);
 
 export default router;

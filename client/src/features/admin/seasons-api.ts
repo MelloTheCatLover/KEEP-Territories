@@ -28,6 +28,10 @@ export function activateSeason(id: string): Promise<Season> {
   return api.post<Season>(`/seasons/${id}/activate`);
 }
 
+export function archiveSeason(id: string): Promise<Season> {
+  return api.post<Season>(`/seasons/${id}/archive`);
+}
+
 export function deleteSeason(id: string): Promise<void> {
   return api.delete<void>(`/seasons/${id}`);
 }

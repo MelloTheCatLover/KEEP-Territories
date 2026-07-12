@@ -9,6 +9,7 @@ import type { MerchantType, StatName, TeamFullStats } from './types';
 import { teamColors, TEAM_COLOR_ORDER, type TeamColorKey } from '../../design-system/design-tokens';
 import type { User } from '../auth/types';
 import { JoinOrCreateView } from './JoinOrCreateView';
+import { TeamsManager } from '../admin/AdminTeamsPage';
 
 type LoadState =
   | { status: 'loading' }
@@ -151,6 +152,12 @@ export function TeamPage() {
     if (state.status !== 'ready') return null;
     return computeLevelProgress(state.data.experience, state.settings);
   }, [state]);
+
+  // Admins never belong to a team — they manage teams and rosters instead of
+  // seeing the join/create flow.
+  if (user?.role === 'admin') {
+    return <TeamsManager />;
+  }
 
   if (!teamId) {
     return <JoinOrCreateView />;

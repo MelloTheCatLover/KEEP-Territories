@@ -4,6 +4,7 @@ import { Loader2, Pause, Play, RotateCcw } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { HexMap, type TeamInfo } from '../map/HexMap';
 import type { Sector } from '../map/types';
+import { getSeasonTimelapse } from '../seasons/api';
 import { getTimelapse, type TimelapseData } from './timelapse-api';
 
 /** Playback speeds, in events applied per second. */
@@ -16,9 +17,15 @@ type LoadState =
   | { status: 'empty' }
   | { status: 'ready'; data: TimelapseData };
 
-export function TimelapsePage() {
+/**
+ * Full-screen ownership replay. Two modes:
+ * - admin (no `seasonId`): the live/active season, gated to admins;
+ * - archive (`seasonId` given): any authenticated user can replay a past season.
+ */
+export function TimelapsePage({ seasonId }: { seasonId?: string } = {}) {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const archiveMode = seasonId !== undefined;
+  const allowed = archiveMode || user?.role === 'admin';
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [playhead, setPlayhead] = useState(0); // number of events applied
   const [playing, setPlaying] = useState(false);
@@ -26,8 +33,8 @@ export function TimelapsePage() {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (!isAdmin) return;
-    getTimelapse()
+    if (!allowed) return;
+    (seasonId !== undefined ? getSeasonTimelapse(seasonId) : getTimelapse())
       .then((data) => {
         if (data.sectors.length === 0) {
           setState({ status: 'empty' });
@@ -38,7 +45,7 @@ export function TimelapsePage() {
         setPlaying(data.events.length > 0);
       })
       .catch(() => setState({ status: 'error', message: 'Не удалось загрузить таймлапс' }));
-  }, [isAdmin]);
+  }, [allowed, seasonId]);
 
   const total = state.status === 'ready' ? state.data.events.length : 0;
 
@@ -120,7 +127,10 @@ export function TimelapsePage() {
       ? state.data.events[playhead - 1].at
       : null;
 
-  if (!isAdmin) {
+  const backTo = archiveMode ? `/seasons/${seasonId}` : '/map';
+  const backLabel = archiveMode ? 'К смене' : 'На карту';
+
+  if (!allowed) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center text-neutral-700">
         Доступно только администраторам.
@@ -133,6 +143,13 @@ export function TimelapsePage() {
 
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900 flex flex-col">
+      {archiveMode && (
+        <div className="px-4 py-2 border-b border-neutral-300 bg-neutral-100">
+          <Link to={backTo} className="inline-flex items-center gap-1.5 text-sm text-brand-500 hover:text-brand-400">
+            ← {backLabel}
+          </Link>
+        </div>
+      )}
       {state.status === 'loading' && (
         <div className="flex-1 flex items-center justify-center gap-3 text-neutral-700">
           <Loader2 className="w-6 h-6 animate-spin text-brand-500" />

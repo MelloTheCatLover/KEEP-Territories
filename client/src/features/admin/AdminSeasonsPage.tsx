@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, Plus, Play, RefreshCw, Trash2 } from 'lucide-react';
+import { AlertCircle, Archive, CheckCircle2, Loader2, Plus, Play, RefreshCw, Trash2 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner, Input, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -8,6 +8,7 @@ import {
   createSeason,
   setSeasonLists,
   activateSeason,
+  archiveSeason,
   deleteSeason,
   type Season,
   type SeasonStatus,
@@ -98,6 +99,27 @@ export function AdminSeasonsPage() {
       await refresh();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Ошибка активации');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleArchive(season: Season) {
+    if (
+      !confirm(
+        `Завершить смену «${season.name}» и отправить в архив? Участники его команд ` +
+          `будут отвязаны, а карта останется доступной только для просмотра.`,
+      )
+    )
+      return;
+    setBusyId(season.id);
+    setActionError(null);
+    try {
+      await archiveSeason(season.id);
+      setFlash(`Смена «${season.name}» отправлена в архив`);
+      await refresh();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Ошибка архивации');
     } finally {
       setBusyId(null);
     }
@@ -195,6 +217,11 @@ export function AdminSeasonsPage() {
                     <span className={`text-xs px-2 py-0.5 rounded-sm border ${meta.cls}`}>{meta.label}</span>
                   </div>
                   <div className="flex gap-2">
+                    {season.status === 'active' && (
+                      <Button variant="secondary" onClick={() => void handleArchive(season)} disabled={busy}>
+                        <span className="flex items-center gap-1.5"><Archive className="w-4 h-4" />Завершить в архив</span>
+                      </Button>
+                    )}
                     {season.status !== 'active' && (
                       <Button variant="primary" onClick={() => void handleActivate(season)} disabled={busy}>
                         <span className="flex items-center gap-1.5"><Play className="w-4 h-4" />Активировать</span>

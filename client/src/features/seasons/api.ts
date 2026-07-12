@@ -1,6 +1,8 @@
 import { api } from '../../shared/api/client';
 import type { Sector } from '../map/types';
 import type { Team } from '../team/types';
+import type { TrophiesResponse } from '../trophies/types';
+import type { TimelapseData } from '../admin/timelapse-api';
 
 export type SeasonStatus = 'draft' | 'active' | 'archived';
 
@@ -24,4 +26,12 @@ export function getSeasonMap(seasonId: string): Promise<Sector[]> {
 
 export function getSeasonTeams(seasonId: string): Promise<Team[]> {
   return api.get<Team[]>(`/teams?season_id=${encodeURIComponent(seasonId)}`);
+}
+
+export function getSeasonTrophies(seasonId: string): Promise<TrophiesResponse> {
+  return api.get<TrophiesResponse>(`/seasons/${encodeURIComponent(seasonId)}/trophies`);
+}
+
+export function getSeasonTimelapse(seasonId: string): Promise<TimelapseData> {
+  return api.get<TimelapseData>(`/seasons/${encodeURIComponent(seasonId)}/timelapse`);
 }

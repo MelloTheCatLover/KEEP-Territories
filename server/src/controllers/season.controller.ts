@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as seasonService from '../services/season.service';
+import * as sectorService from '../services/sector.service';
+import * as trophyService from '../services/trophy.service';
 import * as audit from '../services/audit.service';
 
 export async function list(_req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -88,6 +90,39 @@ export async function activate(req: Request<{ id: string }>, res: Response, next
       summary: `Активирован сезон «${season.name}»`,
     });
     res.json(season);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function archive(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const season = await seasonService.archive(req.params.id);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'season.archive',
+      entityType: 'season',
+      entityId: season.id,
+      seasonId: season.id,
+      summary: `Сезон «${season.name}» завершён и отправлен в архив`,
+    });
+    res.json(season);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getTrophies(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.json(await trophyService.getSeasonTrophies(req.params.id));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getTimelapse(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.json(await sectorService.getTimelapse(req.params.id));
   } catch (error) {
     next(error);
   }

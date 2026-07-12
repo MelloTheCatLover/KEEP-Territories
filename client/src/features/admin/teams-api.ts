@@ -21,6 +21,30 @@ export function adminKickMember(
   );
 }
 
+export type UnassignedMember = { id: string; username: string; full_name: string | null };
+
+export function getUnassignedMembers(): Promise<UnassignedMember[]> {
+  return api.get<UnassignedMember[]>('/teams/unassigned');
+}
+
+export type RosterMember = {
+  child_id: string;
+  full_name: string | null;
+  user_id: string | null;
+  has_account: boolean;
+  team_id: string | null;
+  team_name: string | null;
+};
+
+export function getRoster(): Promise<RosterMember[]> {
+  return api.get<RosterMember[]>('/teams/roster');
+}
+
+/** Move a player into a team from any other team, or from no team (post-kick). */
+export function adminAssignMember(teamId: string, userId: string): Promise<TeamFullStats> {
+  return api.post<TeamFullStats>(`/teams/${teamId}/members`, { user_id: userId });
+}
+
 export function adminSetTeamResources(
   teamId: string,
   payload: { influence?: number; experience?: number; upgrade_points?: number },

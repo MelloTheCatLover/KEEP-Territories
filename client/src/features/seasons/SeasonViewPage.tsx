@@ -1,17 +1,37 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, Play } from 'lucide-react';
+import { ArrowLeft, Crown, Film, Loader2, Play } from 'lucide-react';
 import { Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { HexMap, type TeamInfo, MAP_HEX_SIZE, MAP_VIEWBOX_PADDING } from '../map/HexMap';
 import { bbox } from '../map/hex-utils';
 import type { Sector } from '../map/types';
-import { getSeasons, getSeasonMap, getSeasonTeams, type Season } from './api';
+import { TrophyGrid } from '../trophies/TrophySection';
+import type { TrophiesResponse } from '../trophies/types';
+import {
+  getSeasons,
+  getSeasonMap,
+  getSeasonTeams,
+  getSeasonTrophies,
+  type Season,
+} from './api';
 
 type State =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; season: Season; sectors: Sector[]; teamsById: Record<string, TeamInfo> };
+  | {
+      status: 'ready';
+      season: Season;
+      sectors: Sector[];
+      teamsById: Record<string, TeamInfo>;
+      trophies: TrophiesResponse;
+    };
+
+/** Overall place-1 teams — the season champions (usually one, more if tied). */
+function championIds(trophies: TrophiesResponse): Set<string> {
+  const winners = trophies.overall.filter((o) => o.place === 1);
+  return new Set(winners.map((w) => w.team_id));
+}
 
 export function SeasonViewPage() {
   const { id } = useParams<{ id: string }>();
@@ -21,10 +41,11 @@ export function SeasonViewPage() {
     if (!id) return;
     setState({ status: 'loading' });
     try {
-      const [seasons, sectors, teams] = await Promise.all([
+      const [seasons, sectors, teams, trophies] = await Promise.all([
         getSeasons(),
         getSeasonMap(id),
         getSeasonTeams(id),
+        getSeasonTrophies(id),
       ]);
       const season = seasons.find((s) => s.id === id);
       if (!season) {
@@ -36,7 +57,7 @@ export function SeasonViewPage() {
       sorted.forEach((t, i) => {
         teamsById[t.id] = { id: t.id, name: t.name, index: i, color: t.color };
       });
-      setState({ status: 'ready', season, sectors, teamsById });
+      setState({ status: 'ready', season, sectors, teamsById, trophies });
     } catch (err) {
       setState({
         status: 'error',
@@ -66,53 +87,132 @@ export function SeasonViewPage() {
       {state.status === 'error' && <ErrorBanner message={state.message} />}
 
       {state.status === 'ready' && (
-        <>
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <h1 className="font-display text-heading-md text-neutral-1000 mb-1">
-                {state.season.name}
-              </h1>
-              <p className="text-sm text-neutral-700">
-                {state.season.status === 'active'
-                  ? 'Активная смена — режим только для просмотра. Для игры перейдите на карту.'
-                  : 'Архив смены — только просмотр.'}
-              </p>
-            </div>
-            {state.season.status === 'active' && (
-              <Link
-                to="/map"
-                className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-sm bg-brand-700 text-neutral-1000 hover:bg-brand-600 transition-colors"
-              >
-                <Play className="w-4 h-4" />
-                Играть
-              </Link>
-            )}
-          </div>
-
-          {state.sectors.length === 0 ? (
-            <Card>
-              <p className="text-sm text-neutral-700">У этой смены ещё нет карты.</p>
-            </Card>
-          ) : (
-            <SeasonMap sectors={state.sectors} teamsById={state.teamsById} />
-          )}
-
-          {Object.keys(state.teamsById).length > 0 && (
-            <div className="flex flex-wrap gap-3">
-              {Object.values(state.teamsById).map((t) => (
-                <div key={t.id} className="flex items-center gap-2 text-sm text-neutral-900">
-                  <span
-                    className="w-3.5 h-3.5 rounded-full border border-glass"
-                    style={{ backgroundColor: t.color ?? 'var(--color-neutral-400)' }}
-                    aria-hidden
-                  />
-                  {t.name}
-                </div>
-              ))}
-            </div>
-          )}
-        </>
+        <ReadyView season={state.season} sectors={state.sectors} teamsById={state.teamsById} trophies={state.trophies} />
       )}
+    </div>
+  );
+}
+
+function ReadyView({
+  season,
+  sectors,
+  teamsById,
+  trophies,
+}: {
+  season: Season;
+  sectors: Sector[];
+  teamsById: Record<string, TeamInfo>;
+  trophies: TrophiesResponse;
+}) {
+  const isArchived = season.status === 'archived';
+  const champions = championIds(trophies);
+  const championTeams = Object.values(teamsById).filter((t) => champions.has(t.id));
+  const singleChampionId = championTeams.length === 1 ? championTeams[0].id : null;
+  const hasTimelapse = sectors.length > 0;
+
+  return (
+    <>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="font-display text-heading-md text-neutral-1000 mb-1">{season.name}</h1>
+          <p className="text-sm text-neutral-700">
+            {season.status === 'active'
+              ? 'Активная смена — режим только для просмотра. Для игры перейдите на карту.'
+              : 'Архив смены — только просмотр.'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {hasTimelapse && (
+            <Link
+              to={`/seasons/${season.id}/timelapse`}
+              className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-sm border border-neutral-400 text-neutral-900 hover:border-brand-500 transition-colors"
+            >
+              <Film className="w-4 h-4" />
+              Таймлапс
+            </Link>
+          )}
+          {season.status === 'active' && (
+            <Link
+              to="/map"
+              className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-sm bg-brand-700 text-neutral-1000 hover:bg-brand-600 transition-colors"
+            >
+              <Play className="w-4 h-4" />
+              Играть
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {isArchived && championTeams.length > 0 && (
+        <ChampionBanner teams={championTeams} />
+      )}
+
+      {sectors.length === 0 ? (
+        <Card>
+          <p className="text-sm text-neutral-700">У этой смены ещё нет карты.</p>
+        </Card>
+      ) : (
+        <SeasonMap sectors={sectors} teamsById={teamsById} />
+      )}
+
+      {Object.keys(teamsById).length > 0 && (
+        <div className="flex flex-wrap gap-3">
+          {Object.values(teamsById).map((t) => {
+            const isChampion = champions.has(t.id);
+            return (
+              <div
+                key={t.id}
+                className={`flex items-center gap-2 text-sm ${
+                  isChampion
+                    ? 'text-neutral-1000 font-semibold px-2 py-0.5 rounded-sm bg-warning-bg border border-warning/50'
+                    : 'text-neutral-900'
+                }`}
+              >
+                <span
+                  className="w-3.5 h-3.5 rounded-full border border-glass"
+                  style={{ backgroundColor: t.color ?? 'var(--color-neutral-400)' }}
+                  aria-hidden
+                />
+                {t.name}
+                {isChampion && <Crown className="w-3.5 h-3.5 text-warning" aria-label="Победитель" />}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {trophies.trophies.length > 0 && (
+        <section className="space-y-3 pt-2">
+          <h2 className="font-display text-heading-sm text-neutral-1000">Кубки</h2>
+          <TrophyGrid trophies={trophies.trophies} highlightTeamId={singleChampionId} />
+        </section>
+      )}
+    </>
+  );
+}
+
+function ChampionBanner({ teams }: { teams: TeamInfo[] }) {
+  const many = teams.length > 1;
+  return (
+    <div className="flex items-center gap-3 rounded-sm border border-warning/50 bg-warning-bg px-4 py-3">
+      <Crown className="w-6 h-6 text-warning flex-shrink-0" />
+      <div className="min-w-0">
+        <div className="text-xs uppercase tracking-wide text-warning-text/80">
+          {many ? 'Победители смены' : 'Победитель смены'}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
+          {teams.map((t) => (
+            <span key={t.id} className="flex items-center gap-1.5 font-display text-heading-sm text-neutral-1000">
+              <span
+                className="w-3.5 h-3.5 rounded-full border border-glass"
+                style={{ backgroundColor: t.color ?? 'var(--color-neutral-400)' }}
+                aria-hidden
+              />
+              {t.name}
+            </span>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

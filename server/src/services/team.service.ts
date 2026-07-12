@@ -487,6 +487,156 @@ export async function adminDelete(teamId: string): Promise<void> {
   }
 }
 
+/** Point the child's distribution assignment at `teamId` (NULL to unassign). */
+async function setParticipantTeam(
+  client: PoolClient,
+  seasonId: string,
+  userId: string,
+  teamId: string | null,
+): Promise<void> {
+  await client.query(
+    `UPDATE season_participants sp SET team_id = $1
+       FROM children c
+      WHERE c.id = sp.child_id AND c.user_id = $2 AND sp.season_id = $3`,
+    [teamId, userId, seasonId],
+  );
+}
+
+/** Clear the child's distribution assignment for the team's season. */
+async function clearParticipantTeam(
+  client: PoolClient,
+  teamId: string,
+  userId: string,
+): Promise<void> {
+  const seasonRes = await client.query<{ season_id: string }>(
+    'SELECT season_id FROM teams WHERE id = $1',
+    [teamId],
+  );
+  if (seasonRes.rows.length === 0) return;
+  await setParticipantTeam(client, seasonRes.rows[0].season_id, userId, null);
+}
+
+/**
+ * Move a player into `targetTeamId` from any other team (or from no team, e.g.
+ * after a kick). Keeps the distribution snapshot in sync, promotes a replacement
+ * captain if a captain leaves a team that still has members, and makes the moved
+ * player captain of the target only when it currently has none.
+ */
+export async function adminAssignMember(targetTeamId: string, userId: string): Promise<TeamFullStats> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const user = await client.query<{ team_id: string | null; team_role: 'captain' | 'member' | null; role: string }>(
+      'SELECT team_id, team_role, role FROM users WHERE id = $1 FOR UPDATE',
+      [userId],
+    );
+    if (user.rows.length === 0) {
+      throw new AppError(404, 'User not found');
+    }
+    if (user.rows[0].role === 'admin') {
+      throw new AppError(400, 'Администратор не состоит в командах');
+    }
+    const { team_id: sourceTeamId, team_role: sourceRole } = user.rows[0];
+    if (sourceTeamId === targetTeamId) {
+      throw new AppError(400, 'Участник уже в этой команде');
+    }
+
+    const target = await client.query<{ season_id: string }>(
+      'SELECT season_id FROM teams WHERE id = $1 FOR UPDATE',
+      [targetTeamId],
+    );
+    if (target.rows.length === 0) {
+      throw new AppError(404, 'Целевая команда не найдена');
+    }
+    const seasonId = target.rows[0].season_id;
+
+    // If a captain leaves a team that still has other members, promote the
+    // longest-standing remaining member so the source team keeps a captain.
+    if (sourceTeamId && sourceRole === 'captain') {
+      const heir = await client.query<{ id: string }>(
+        `SELECT id FROM users WHERE team_id = $1 AND id <> $2
+          ORDER BY created_at ASC LIMIT 1`,
+        [sourceTeamId, userId],
+      );
+      if (heir.rows.length > 0) {
+        await client.query(`UPDATE users SET team_role = 'captain' WHERE id = $1`, [heir.rows[0].id]);
+      }
+    }
+
+    const hasCaptain = await client.query(
+      `SELECT 1 FROM users WHERE team_id = $1 AND team_role = 'captain' LIMIT 1`,
+      [targetTeamId],
+    );
+    const newRole = hasCaptain.rows.length === 0 ? 'captain' : 'member';
+
+    await client.query(
+      `UPDATE users SET team_id = $1, team_role = $2 WHERE id = $3`,
+      [targetTeamId, newRole, userId],
+    );
+    await setParticipantTeam(client, seasonId, userId, targetTeamId);
+
+    await client.query('COMMIT');
+    return teamStatsService.getFullStats(targetTeamId);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export interface RosterMember {
+  child_id: string;
+  full_name: string | null;
+  user_id: string | null;
+  has_account: boolean;
+  team_id: string | null;
+  team_name: string | null;
+}
+
+/**
+ * Full roster of the active season: every enrolled child with their account (if
+ * any) and current team. Powers the admin "add from list" picker — kids with no
+ * account can't be playable members yet, so the caller disables them.
+ */
+export async function listRoster(seasonId?: string): Promise<RosterMember[]> {
+  const sid = seasonId ?? (await getActiveSeasonId());
+  const res = await pool.query<RosterMember>(
+    `SELECT c.id AS child_id, c.full_name, c.user_id,
+            (c.user_id IS NOT NULL) AS has_account,
+            u.team_id, t.name AS team_name
+       FROM children c
+       JOIN list_members lm ON lm.child_id = c.id
+       JOIN season_lists sl ON sl.list_id = lm.list_id
+       LEFT JOIN users u ON u.id = c.user_id AND u.role <> 'admin'
+       LEFT JOIN teams t ON t.id = u.team_id AND t.season_id = $1
+      WHERE sl.season_id = $1
+      GROUP BY c.id, c.full_name, c.user_id, u.team_id, t.name
+      ORDER BY c.full_name ASC`,
+    [sid],
+  );
+  return res.rows;
+}
+
+/** Enrolled account-holders of the active season who are not in any team. */
+export async function listUnassigned(
+  seasonId?: string,
+): Promise<Array<{ id: string; username: string; full_name: string | null }>> {
+  const sid = seasonId ?? (await getActiveSeasonId());
+  const res = await pool.query<{ id: string; username: string; full_name: string | null }>(
+    `SELECT DISTINCT u.id, u.username, c.full_name
+       FROM users u
+       JOIN children c ON c.user_id = u.id
+       JOIN list_members lm ON lm.child_id = c.id
+       JOIN season_lists sl ON sl.list_id = lm.list_id
+      WHERE sl.season_id = $1 AND u.team_id IS NULL AND u.role <> 'admin'
+      ORDER BY c.full_name ASC`,
+    [sid],
+  );
+  return res.rows;
+}
+
 export async function adminKickMember(teamId: string, userId: string): Promise<TeamFullStats | null> {
   const client = await pool.connect();
   try {
@@ -516,6 +666,9 @@ export async function adminKickMember(teamId: string, userId: string): Promise<T
       'UPDATE users SET team_id = NULL, team_role = NULL WHERE id = $1',
       [userId],
     );
+    // Keep the distribution snapshot in sync so the kicked child shows up as
+    // unassigned and can be placed into another team.
+    await clearParticipantTeam(client, teamId, userId);
 
     if (membersCount === 1) {
       await client.query('DELETE FROM task_submissions WHERE team_id = $1', [teamId]);
