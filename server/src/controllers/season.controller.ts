@@ -1,8 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
+import { pool } from '../config/db';
 import * as seasonService from '../services/season.service';
 import * as sectorService from '../services/sector.service';
 import * as trophyService from '../services/trophy.service';
 import * as audit from '../services/audit.service';
+
+async function isAdmin(userId: string): Promise<boolean> {
+  const res = await pool.query<{ role: string }>('SELECT role FROM users WHERE id = $1', [userId]);
+  return res.rows[0]?.role === 'admin';
+}
 
 export async function list(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -123,6 +129,44 @@ export async function getTrophies(req: Request<{ id: string }>, res: Response, n
 export async function getTimelapse(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
   try {
     res.json(await sectorService.getTimelapse(req.params.id));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getFinals(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const finals = await seasonService.getFinals(req.params.id);
+    // Finals reveal the normally-hidden trophy values. Before archiving, that is
+    // for the admin's eyes only; once archived, anyone may replay the ceremony.
+    if (finals.status !== 'archived' && !(await isAdmin(req.user!.userId))) {
+      res.status(403).json({ error: 'Итоги смены доступны после архивации' });
+      return;
+    }
+    res.json(finals);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function setMvp(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const childId = (req.body ?? {}).child_id;
+    if (childId !== null && typeof childId !== 'string') {
+      res.status(400).json({ error: 'child_id должен быть строкой или null' });
+      return;
+    }
+    const season = await seasonService.setMvp(req.params.id, childId);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'season.set_mvp',
+      entityType: 'season',
+      entityId: season.id,
+      seasonId: season.id,
+      summary: childId ? 'Назначен MVP смены' : 'MVP смены снят',
+      metadata: { mvp_child_id: childId },
+    });
+    res.json(season);
   } catch (error) {
     next(error);
   }

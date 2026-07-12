@@ -343,6 +343,20 @@ export async function computeOverall(seasonId: string): Promise<OverallEntry[]> 
  * (including the normally-private streak/recapture counts). For a still-active or
  * draft season the private values stay hidden.
  */
+/** Trophies for a season with an explicit reveal flag (no viewer context). */
+export async function computeSeasonTrophies(
+  seasonId: string,
+  revealAll: boolean,
+): Promise<TrophiesResponse> {
+  const teams = await loadTeamMetrics(seasonId);
+  if (teams.length === 0) {
+    return { trophies: [], overall: [] };
+  }
+  const trophies = TROPHY_DEFS.map((def) => buildTrophy(def, teams, null, revealAll));
+  const overall = buildOverall(teams, trophies);
+  return { trophies, overall };
+}
+
 export async function getSeasonTrophies(seasonId: string): Promise<TrophiesResponse> {
   const seasonRes = await pool.query<{ status: string }>(
     'SELECT status FROM seasons WHERE id = $1',
@@ -351,18 +365,7 @@ export async function getSeasonTrophies(seasonId: string): Promise<TrophiesRespo
   if (seasonRes.rows.length === 0) {
     throw new AppError(404, 'Сезон не найден');
   }
-  const showAllValues = seasonRes.rows[0].status === 'archived';
-
-  const teams = await loadTeamMetrics(seasonId);
-  if (teams.length === 0) {
-    return { trophies: [], overall: [] };
-  }
-
-  const trophies = TROPHY_DEFS.map((def) =>
-    buildTrophy(def, teams, null, showAllValues),
-  );
-  const overall = buildOverall(teams, trophies);
-  return { trophies, overall };
+  return computeSeasonTrophies(seasonId, seasonRes.rows[0].status === 'archived');
 }
 
 export async function getTrophies(userId: string): Promise<TrophiesResponse> {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Crown, Film, Loader2, Play } from 'lucide-react';
+import { ArrowLeft, Crown, Film, Loader2, Play, Sparkles } from 'lucide-react';
 import { Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { HexMap, type TeamInfo, MAP_HEX_SIZE, MAP_VIEWBOX_PADDING } from '../map/HexMap';
@@ -122,6 +122,15 @@ function ReadyView({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {isArchived && (
+            <Link
+              to={`/seasons/${season.id}/finals`}
+              className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-sm bg-brand-700 text-neutral-1000 hover:bg-brand-600 transition-colors"
+            >
+              <Sparkles className="w-4 h-4" />
+              Итоги смены
+            </Link>
+          )}
           {hasTimelapse && (
             <Link
               to={`/seasons/${season.id}/timelapse`}
