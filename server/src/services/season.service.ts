@@ -6,7 +6,10 @@ import {
   SeasonWithLists,
   CreateSeasonDto,
   UpdateSeasonDto,
+  SeasonFinals,
+  FinalsMvp,
 } from '../types/season';
+import { computeSeasonTrophies } from './trophy.service';
 
 type Queryable = Pick<PoolClient, 'query'>;
 
@@ -27,7 +30,7 @@ export async function getActiveSeasonId(client?: Queryable): Promise<string> {
 }
 
 const SEASON_WITH_LISTS = `
-  SELECT s.id, s.name, s.starts_at, s.ends_at, s.status, s.created_at,
+  SELECT s.id, s.name, s.starts_at, s.ends_at, s.status, s.created_at, s.mvp_child_id,
          COALESCE(
            ARRAY_AGG(sl.list_id) FILTER (WHERE sl.list_id IS NOT NULL),
            '{}'
@@ -224,6 +227,95 @@ export async function archive(id: string): Promise<SeasonWithLists> {
     client.release();
   }
   return getById(id);
+}
+
+/** Set (or clear) the season MVP — a child enrolled in one of its lists. */
+export async function setMvp(id: string, childId: string | null): Promise<SeasonWithLists> {
+  const season = await pool.query<{ id: string }>('SELECT id FROM seasons WHERE id = $1', [id]);
+  if (season.rows.length === 0) {
+    throw new AppError(404, 'Сезон не найден');
+  }
+  if (childId) {
+    const enrolled = await pool.query(
+      `SELECT 1
+         FROM children c
+         JOIN list_members lm ON lm.child_id = c.id
+         JOIN season_lists sl ON sl.list_id = lm.list_id
+        WHERE c.id = $1 AND sl.season_id = $2
+        LIMIT 1`,
+      [childId, id],
+    );
+    if (enrolled.rows.length === 0) {
+      throw new AppError(400, 'Этот ребёнок не участвует в смене');
+    }
+  }
+  await pool.query('UPDATE seasons SET mvp_child_id = $1 WHERE id = $2', [childId, id]);
+  return getById(id);
+}
+
+/**
+ * Everything the season-finals presentation needs in one call: trophies (winners
+ * revealed), overall standings, the champion team(s) and the MVP. Read-only, so
+ * the admin can rehearse it repeatedly before archiving.
+ */
+export async function getFinals(id: string): Promise<SeasonFinals> {
+  const seasonRes = await pool.query<{ name: string; status: Season['status']; mvp_child_id: string | null }>(
+    'SELECT name, status, mvp_child_id FROM seasons WHERE id = $1',
+    [id],
+  );
+  if (seasonRes.rows.length === 0) {
+    throw new AppError(404, 'Сезон не найден');
+  }
+  const { name, status, mvp_child_id } = seasonRes.rows[0];
+
+  const { trophies, overall } = await computeSeasonTrophies(id, true);
+  const champions = overall
+    .filter((o) => o.place === 1)
+    .map((o) => ({
+      team_id: o.team_id,
+      team_name: o.team_name,
+      team_color: o.team_color,
+      trophies_won: o.trophies_won,
+    }));
+
+  let mvp: FinalsMvp | null = null;
+  if (mvp_child_id) {
+    // Resolve the team via season_participants so it survives archiving (which
+    // clears users.team_id).
+    const mvpRes = await pool.query<{
+      full_name: string;
+      team_id: string | null;
+      team_name: string | null;
+      team_color: string | null;
+    }>(
+      `SELECT c.full_name, sp.team_id, t.name AS team_name, t.color AS team_color
+         FROM children c
+         LEFT JOIN season_participants sp ON sp.child_id = c.id AND sp.season_id = $2
+         LEFT JOIN teams t ON t.id = sp.team_id
+        WHERE c.id = $1`,
+      [mvp_child_id, id],
+    );
+    if (mvpRes.rows.length > 0) {
+      const r = mvpRes.rows[0];
+      mvp = {
+        child_id: mvp_child_id,
+        full_name: r.full_name,
+        team_id: r.team_id,
+        team_name: r.team_name,
+        team_color: r.team_color,
+      };
+    }
+  }
+
+  return {
+    season_id: id,
+    season_name: name,
+    status,
+    trophies,
+    overall,
+    champions,
+    mvp,
+  };
 }
 
 export async function remove(id: string): Promise<void> {

@@ -7,10 +7,37 @@ export interface Season {
   ends_at: string | null;
   status: SeasonStatus;
   created_at: string;
+  mvp_child_id: string | null;
 }
 
 export interface SeasonWithLists extends Season {
   list_ids: string[];
+}
+
+export interface FinalsMvp {
+  child_id: string;
+  full_name: string;
+  team_id: string | null;
+  team_name: string | null;
+  team_color: string | null;
+}
+
+export interface FinalsChampion {
+  team_id: string;
+  team_name: string;
+  team_color: string | null;
+  trophies_won: number;
+}
+
+export interface SeasonFinals {
+  season_id: string;
+  season_name: string;
+  status: SeasonStatus;
+  // Trophies in presentation order, each with its place-1 winner(s) revealed.
+  trophies: import('./trophy').TrophyRanking[];
+  overall: import('./trophy').OverallEntry[];
+  champions: FinalsChampion[];
+  mvp: FinalsMvp | null;
 }
 
 export interface CreateSeasonDto {

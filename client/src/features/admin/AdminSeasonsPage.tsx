@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { AlertCircle, Archive, CheckCircle2, Loader2, Plus, Play, RefreshCw, Trash2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { AlertCircle, Archive, CheckCircle2, Loader2, Plus, Play, RefreshCw, Sparkles, Star, Trash2 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner, Input, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -9,10 +10,12 @@ import {
   setSeasonLists,
   activateSeason,
   archiveSeason,
+  setSeasonMvp,
   deleteSeason,
   type Season,
   type SeasonStatus,
 } from './seasons-api';
+import { getRoster, type RosterMember } from './teams-api';
 import { getLists, type ChildrenList } from './children-lists-api';
 
 const STATUS_META: Record<SeasonStatus, { label: string; cls: string }> = {
@@ -27,6 +30,7 @@ export function AdminSeasonsPage() {
 
   const [seasons, setSeasons] = useState<Season[] | null>(null);
   const [lists, setLists] = useState<ChildrenList[]>([]);
+  const [roster, setRoster] = useState<RosterMember[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -41,10 +45,26 @@ export function AdminSeasonsPage() {
       const [s, l] = await Promise.all([getSeasons(), getLists()]);
       setSeasons(s);
       setLists(l);
+      // Roster (for the MVP picker) needs an active season; ignore if absent.
+      const roster = await getRoster().catch(() => [] as RosterMember[]);
+      setRoster(roster);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : 'Не удалось загрузить сезоны');
     }
   }, []);
+
+  async function handleSetMvp(season: Season, childId: string | null) {
+    setBusyId(season.id);
+    setActionError(null);
+    try {
+      await setSeasonMvp(season.id, childId);
+      await refresh();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Не удалось назначить MVP');
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   useEffect(() => {
     if (isAdmin) void refresh();
@@ -218,6 +238,15 @@ export function AdminSeasonsPage() {
                   </div>
                   <div className="flex gap-2">
                     {season.status === 'active' && (
+                      <Link
+                        to={`/seasons/${season.id}/finals`}
+                        className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-sm bg-brand-700 text-neutral-1000 hover:bg-brand-600 transition-colors"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        Провести итоги
+                      </Link>
+                    )}
+                    {season.status === 'active' && (
                       <Button variant="secondary" onClick={() => void handleArchive(season)} disabled={busy}>
                         <span className="flex items-center gap-1.5"><Archive className="w-4 h-4" />Завершить в архив</span>
                       </Button>
@@ -269,6 +298,35 @@ export function AdminSeasonsPage() {
                     </div>
                   )}
                 </div>
+
+                {season.status === 'active' && (
+                  <div className="mt-3 pt-3 border-t border-neutral-400">
+                    <div className="flex items-center gap-2 text-sm text-neutral-700 mb-2">
+                      <Star className="w-4 h-4 text-warning" />
+                      MVP смены (объявляется на итогах):
+                    </div>
+                    {roster.length === 0 ? (
+                      <p className="text-sm text-neutral-700">
+                        Ростер пуст — сначала привяжите списки и подготовьте распределение.
+                      </p>
+                    ) : (
+                      <select
+                        value={season.mvp_child_id ?? ''}
+                        disabled={busy}
+                        onChange={(e) => void handleSetMvp(season, e.target.value || null)}
+                        className="text-sm bg-neutral-100 border border-neutral-400 rounded-sm px-3 py-2 text-neutral-1000 disabled:opacity-50 w-full max-w-sm"
+                      >
+                        <option value="">— не выбран —</option>
+                        {roster.map((r) => (
+                          <option key={r.child_id} value={r.child_id}>
+                            {r.full_name ?? '—'}
+                            {r.team_name ? ` · ${r.team_name}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
               </Card>
             );
           })}

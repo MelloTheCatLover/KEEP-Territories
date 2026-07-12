@@ -25,6 +25,7 @@ import { LawsPage } from './features/laws/LawsPage';
 import { TeamsOverviewPage } from './features/leaderboard/TeamsOverviewPage';
 import { SeasonsPage } from './features/seasons/SeasonsPage';
 import { SeasonViewPage } from './features/seasons/SeasonViewPage';
+import { FinalsPage } from './features/seasons/FinalsPage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
 import { GuestRoute } from './features/auth/GuestRoute';
 import { AppLayout } from './shared/ui/AppLayout';
@@ -95,6 +96,16 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <SeasonTimelapsePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Full-screen season-finals ceremony. Admin can rehearse before archiving;
+    // after archive anyone may replay it (access enforced server-side).
+    path: '/seasons/:id/finals',
+    element: (
+      <ProtectedRoute>
+        <FinalsPage />
       </ProtectedRoute>
     ),
   },

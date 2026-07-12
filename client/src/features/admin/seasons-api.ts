@@ -9,6 +9,7 @@ export type Season = {
   ends_at: string | null;
   status: SeasonStatus;
   created_at: string;
+  mvp_child_id: string | null;
   list_ids: string[];
 };
 
@@ -30,6 +31,10 @@ export function activateSeason(id: string): Promise<Season> {
 
 export function archiveSeason(id: string): Promise<Season> {
   return api.post<Season>(`/seasons/${id}/archive`);
+}
+
+export function setSeasonMvp(id: string, childId: string | null): Promise<Season> {
+  return api.put<Season>(`/seasons/${id}/mvp`, { child_id: childId });
 }
 
 export function deleteSeason(id: string): Promise<void> {
