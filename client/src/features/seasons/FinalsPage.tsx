@@ -79,17 +79,11 @@ export function FinalsPage() {
   const step = steps[index];
   const isCup = step?.kind === 'cup';
 
-  // Reset the two-phase reveal whenever the slide changes.
+  // Reset the two-phase reveal whenever the slide changes. Nothing auto-advances
+  // or auto-reveals — every transition is driven by the buttons/keys.
   useEffect(() => {
     setRevealed(false);
   }, [index]);
-
-  // A cup slide auto-announces its winner after a beat, for drama.
-  useEffect(() => {
-    if (!isCup || revealed) return;
-    const t = setTimeout(() => setRevealed(true), 1400);
-    return () => clearTimeout(t);
-  }, [isCup, revealed, index]);
 
   const goNext = useCallback(() => {
     if (isCup && !revealed) {
@@ -399,8 +393,10 @@ function FinalsStyles() {
         padding: 4vh 5vw;
       }
       .fin-center { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 18px; max-width: 900px; }
-      .fin-timelapse { position: absolute; inset: 0; }
-      .fin-timelapse > div { min-height: 100%; }
+      .fin-timelapse { position: absolute; inset: 0; overflow: hidden; }
+      /* The embedded standalone timelapse is min-h-screen; pin it to the stage
+         height and let its flex layout shrink the map so nothing overflows. */
+      .fin-timelapse > div { height: 100%; min-height: 0; }
 
       .fin-kicker { font-size: clamp(14px, 2.2vw, 20px); letter-spacing: .32em; text-transform: uppercase; color: #8ea0c8; }
       .fin-title { font-size: clamp(40px, 9vw, 108px); font-weight: 800; line-height: 1; letter-spacing: -.02em;
