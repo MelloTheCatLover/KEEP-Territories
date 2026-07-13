@@ -134,6 +134,14 @@ export async function getTimelapse(req: Request<{ id: string }>, res: Response, 
   }
 }
 
+export async function getRosters(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.json(await seasonService.getRosters(req.params.id));
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getFinals(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
   try {
     const finals = await seasonService.getFinals(req.params.id);

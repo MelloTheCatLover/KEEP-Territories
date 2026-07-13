@@ -65,3 +65,20 @@ export function getSeasonTimelapse(seasonId: string): Promise<TimelapseData> {
 export function getSeasonFinals(seasonId: string): Promise<SeasonFinals> {
   return api.get<SeasonFinals>(`/seasons/${encodeURIComponent(seasonId)}/finals`);
 }
+
+export type SeasonRosterMember = {
+  child_id: string;
+  full_name: string;
+  user_id: string | null;
+};
+
+export type SeasonRoster = {
+  team_id: string;
+  team_name: string;
+  team_color: string | null;
+  members: SeasonRosterMember[];
+};
+
+export function getSeasonRosters(seasonId: string): Promise<SeasonRoster[]> {
+  return api.get<SeasonRoster[]>(`/seasons/${encodeURIComponent(seasonId)}/rosters`);
+}

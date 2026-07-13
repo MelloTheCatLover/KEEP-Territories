@@ -14,6 +14,19 @@ export interface SeasonWithLists extends Season {
   list_ids: string[];
 }
 
+export interface SeasonRosterMember {
+  child_id: string;
+  full_name: string;
+  user_id: string | null;
+}
+
+export interface SeasonRoster {
+  team_id: string;
+  team_name: string;
+  team_color: string | null;
+  members: SeasonRosterMember[];
+}
+
 export interface FinalsMvp {
   child_id: string;
   full_name: string;

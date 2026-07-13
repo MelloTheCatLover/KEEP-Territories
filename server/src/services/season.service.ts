@@ -8,6 +8,7 @@ import {
   UpdateSeasonDto,
   SeasonFinals,
   FinalsMvp,
+  SeasonRoster,
 } from '../types/season';
 import { computeSeasonTrophies } from './trophy.service';
 
@@ -227,6 +228,46 @@ export async function archive(id: string): Promise<SeasonWithLists> {
     client.release();
   }
   return getById(id);
+}
+
+/**
+ * Team rosters of a season — who was on which team. Read from season_participants
+ * (not users.team_id, which archival wipes), so it stays correct after a season
+ * moves to the archive.
+ */
+export async function getRosters(id: string): Promise<SeasonRoster[]> {
+  const season = await pool.query<{ id: string }>('SELECT id FROM seasons WHERE id = $1', [id]);
+  if (season.rows.length === 0) {
+    throw new AppError(404, 'Сезон не найден');
+  }
+  const res = await pool.query<{
+    team_id: string;
+    team_name: string;
+    team_color: string | null;
+    child_id: string;
+    full_name: string;
+    user_id: string | null;
+  }>(
+    `SELECT t.id AS team_id, t.name AS team_name, t.color AS team_color,
+            c.id AS child_id, c.full_name, c.user_id
+       FROM season_participants sp
+       JOIN teams t ON t.id = sp.team_id
+       JOIN children c ON c.id = sp.child_id
+      WHERE sp.season_id = $1 AND sp.team_id IS NOT NULL
+      ORDER BY t.created_at ASC, sp.assigned_seq ASC NULLS LAST, c.full_name ASC`,
+    [id],
+  );
+
+  const byTeam = new Map<string, SeasonRoster>();
+  for (const r of res.rows) {
+    let team = byTeam.get(r.team_id);
+    if (!team) {
+      team = { team_id: r.team_id, team_name: r.team_name, team_color: r.team_color, members: [] };
+      byTeam.set(r.team_id, team);
+    }
+    team.members.push({ child_id: r.child_id, full_name: r.full_name, user_id: r.user_id });
+  }
+  return Array.from(byTeam.values());
 }
 
 /** Set (or clear) the season MVP — a child enrolled in one of its lists. */

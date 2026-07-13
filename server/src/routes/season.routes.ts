@@ -16,6 +16,7 @@ router.get('/', seasonController.list);
 // a season's trophies and ownership timelapse.
 router.get('/:id/trophies', validateParamId, seasonController.getTrophies);
 router.get('/:id/timelapse', validateParamId, seasonController.getTimelapse);
+router.get('/:id/rosters', validateParamId, seasonController.getRosters);
 router.get('/:id/finals', validateParamId, seasonController.getFinals);
 
 router.post('/', requireAdmin, seasonController.create);
