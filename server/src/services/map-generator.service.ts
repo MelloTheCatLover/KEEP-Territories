@@ -13,13 +13,14 @@ import { getActiveSeasonId } from './season.service';
  *   r0 core · r1 hard · r2 medium/special · r3 medium (easy corners)
  *   r4 easy, 6 home bases at the corners
  *
- * ring8 — radius 5, 91 sectors:
- *   r0 core · r1 hard · r2 medium/special · r3 medium
- *   r4 easy + 8 home bases every 3rd cell · r5 easy backyard
+ * ring8 — radius 4, 61 sectors:
+ *   r0 core · r1 hard · r2 medium/special
+ *   r3 medium with an easy "gate" in front of each base
+ *   r4 easy + 8 home bases every 3rd cell
  *
- * In ring8 the bases sit one ring in from the edge, so each team has an easy
- * "backyard" behind it; ring 4 has 24 cells, so 8 bases land exactly every
- * 3 cells — the hex distance between neighbouring bases is 3 everywhere.
+ * Ring 4 has 24 cells, so 8 bases land exactly every 3 cells — the hex
+ * distance between neighbouring bases is 3 everywhere. Each base gets exactly
+ * one easy ring-3 neighbour (its gate), so all teams open inward equally.
  */
 export const MAP_PRESET_IDS = ['classic6', 'ring8'] as const;
 export type MapPresetId = (typeof MAP_PRESET_IDS)[number];
@@ -111,11 +112,37 @@ function buildClassic6Cells(): PresetCell[] {
   return cells;
 }
 
-/** ring8: radius-5 hexagon, 8 home bases evenly on ring 4, easy ring 5 behind. */
+const AXIAL_NEIGHBORS: ReadonlyArray<{ q: number; r: number }> = [
+  { q: 1, r: 0 },
+  { q: -1, r: 0 },
+  { q: 0, r: 1 },
+  { q: 0, r: -1 },
+  { q: 1, r: -1 },
+  { q: -1, r: 1 },
+];
+
+/** One easy ring-3 "gate" per base: its first neighbour on ring 3. */
+function ring8GateCoords(): Set<string> {
+  const gates = new Set<string>();
+  for (const base of RING8_HOME_COORDS) {
+    for (const d of AXIAL_NEIGHBORS) {
+      const q = base.q + d.q;
+      const r = base.r + d.r;
+      if (getRing(q, r) === 3) {
+        gates.add(`${q},${r}`);
+        break;
+      }
+    }
+  }
+  return gates;
+}
+
+/** ring8: radius-4 hexagon, 8 home bases evenly on the outer ring. */
 function buildRing8Cells(): PresetCell[] {
-  const radius = 5;
+  const radius = 4;
   const corners = cornerSets(radius);
   const homeSet = new Set(RING8_HOME_COORDS.map((c) => `${c.q},${c.r}`));
+  const gateSet = ring8GateCoords();
 
   const cells: PresetCell[] = [];
   for (const { q, r } of generateHexCoordinates(radius)) {
@@ -130,13 +157,11 @@ function buildRing8Cells(): PresetCell[] {
       // corners → medium, edges → special-event (blue, non-capturable)
       cells.push({ q, r, slug: 'medium', isHome: false, isSpecial: !isCorner });
     } else if (ring === 3) {
-      cells.push({ q, r, slug: 'medium', isHome: false, isSpecial: false });
-    } else if (ring === 4) {
-      // 8 home bases evenly along the ring, easy in between
-      cells.push({ q, r, slug: 'easy', isHome: homeSet.has(`${q},${r}`), isSpecial: false });
+      // an easy gate in front of each base, medium in between
+      cells.push({ q, r, slug: gateSet.has(`${q},${r}`) ? 'easy' : 'medium', isHome: false, isSpecial: false });
     } else {
-      // ring 5: easy backyard behind the bases
-      cells.push({ q, r, slug: 'easy', isHome: false, isSpecial: false });
+      // ring 4: 8 home bases evenly along the ring, easy in between
+      cells.push({ q, r, slug: 'easy', isHome: homeSet.has(`${q},${r}`), isSpecial: false });
     }
   }
   return cells;
@@ -162,8 +187,8 @@ export const MAP_PRESETS: Record<MapPresetId, MapPresetInfo & { build: () => Pre
   ring8: {
     id: 'ring8',
     title: 'Кольцо · 8 команд',
-    description: 'Радиус 5, 91 сектор. Базы равномерно на кольце 4, за ними тыл.',
-    radius: 5,
+    description: 'Радиус 4, 61 сектор. Базы равномерно по внешнему кольцу, у каждой — лёгкий проход внутрь.',
+    radius: 4,
     teams: 8,
     build: buildRing8Cells,
   },
