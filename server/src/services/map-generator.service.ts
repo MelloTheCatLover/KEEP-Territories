@@ -6,28 +6,28 @@ import { DifficultyLevel, DifficultySlug } from '../types/difficulty';
 import { getActiveSeasonId } from './season.service';
 
 /**
- * Fixed camp map preset. Radius 5 → 6 rings (incl. core), 91 sectors:
+ * Fixed camp map presets. Two canonical worlds, both with the 6 special-event
+ * sectors alternating on ring 2:
  *
- *   r0  core            — 1
- *   r1  hard            — 6
- *   r2  medium / special alternating (corners medium, edges special-blue) — 12
- *   r3  medium          — 18
- *   r4  easy, 8 home bases every 3rd cell — 24
- *   r5  easy            — 30
+ * classic6 — radius 4, 61 sectors:
+ *   r0 core · r1 hard · r2 medium/special · r3 medium (easy corners)
+ *   r4 easy, 6 home bases at the corners
  *
- * Home bases sit one ring in from the edge so each team has an easy "backyard"
- * behind it. Ring 4 has 24 cells, so 8 bases land exactly every 3 cells — the
- * hex distance between neighbouring bases is 3 everywhere.
+ * ring8 — radius 5, 91 sectors:
+ *   r0 core · r1 hard · r2 medium/special · r3 medium
+ *   r4 easy + 8 home bases every 3rd cell · r5 easy backyard
  *
- * The ring layout, difficulties, special sectors and home-base positions are
- * not configurable — this is the single canonical world for a season.
+ * In ring8 the bases sit one ring in from the edge, so each team has an easy
+ * "backyard" behind it; ring 4 has 24 cells, so 8 bases land exactly every
+ * 3 cells — the hex distance between neighbouring bases is 3 everywhere.
  */
-export const PRESET_RADIUS = 5;
+export const MAP_PRESET_IDS = ['classic6', 'ring8'] as const;
+export type MapPresetId = (typeof MAP_PRESET_IDS)[number];
 
-export const HOME_BASE_RING = 4;
+export const DEFAULT_PRESET: MapPresetId = 'ring8';
 
-/** 8 home bases: every 3rd cell of the 24-cell ring 4, starting at (4, 0). */
-export const HOME_BASE_COORDS: ReadonlyArray<{ q: number; r: number }> = [
+/** ring8: every 3rd cell of the 24-cell ring 4, starting at (4, 0). */
+const RING8_HOME_COORDS: ReadonlyArray<{ q: number; r: number }> = [
   { q: 4, r: 0 },
   { q: 4, r: -3 },
   { q: 2, r: -4 },
@@ -67,7 +67,7 @@ export function cornerCoordsForRadius(radius: number): Array<{ q: number; r: num
   ];
 }
 
-interface PresetCell {
+export interface PresetCell {
   q: number;
   r: number;
   slug: DifficultySlug;
@@ -75,21 +75,52 @@ interface PresetCell {
   isSpecial: boolean;
 }
 
-/** Build the fixed preset cells with their difficulty / home / special roles. */
-export function buildPresetCells(): PresetCell[] {
-  const cornerSetByRing = new Map<number, Set<string>>();
-  for (let ring = 1; ring <= PRESET_RADIUS; ring++) {
-    cornerSetByRing.set(
-      ring,
-      new Set(cornerCoordsForRadius(ring).map((c) => `${c.q},${c.r}`)),
-    );
+function cornerSets(radius: number): Map<number, Set<string>> {
+  const byRing = new Map<number, Set<string>>();
+  for (let ring = 1; ring <= radius; ring++) {
+    byRing.set(ring, new Set(cornerCoordsForRadius(ring).map((c) => `${c.q},${c.r}`)));
   }
-  const homeSet = new Set(HOME_BASE_COORDS.map((c) => `${c.q},${c.r}`));
+  return byRing;
+}
+
+/** classic6: radius-4 hexagon, 6 home bases at the outer corners. */
+function buildClassic6Cells(): PresetCell[] {
+  const radius = 4;
+  const corners = cornerSets(radius);
 
   const cells: PresetCell[] = [];
-  for (const { q, r } of generateHexCoordinates(PRESET_RADIUS)) {
+  for (const { q, r } of generateHexCoordinates(radius)) {
     const ring = getRing(q, r);
-    const isCorner = cornerSetByRing.get(ring)?.has(`${q},${r}`) ?? false;
+    const isCorner = corners.get(ring)?.has(`${q},${r}`) ?? false;
+
+    if (ring === 0) {
+      cells.push({ q, r, slug: 'core', isHome: false, isSpecial: false });
+    } else if (ring === 1) {
+      cells.push({ q, r, slug: 'hard', isHome: false, isSpecial: false });
+    } else if (ring === 2) {
+      // corners → medium, edges → special-event (blue, non-capturable)
+      cells.push({ q, r, slug: 'medium', isHome: false, isSpecial: !isCorner });
+    } else if (ring === 3) {
+      // corners → easy, edges → medium
+      cells.push({ q, r, slug: isCorner ? 'easy' : 'medium', isHome: false, isSpecial: false });
+    } else {
+      // ring 4: corners → home bases, edges → easy
+      cells.push({ q, r, slug: 'easy', isHome: isCorner, isSpecial: false });
+    }
+  }
+  return cells;
+}
+
+/** ring8: radius-5 hexagon, 8 home bases evenly on ring 4, easy ring 5 behind. */
+function buildRing8Cells(): PresetCell[] {
+  const radius = 5;
+  const corners = cornerSets(radius);
+  const homeSet = new Set(RING8_HOME_COORDS.map((c) => `${c.q},${c.r}`));
+
+  const cells: PresetCell[] = [];
+  for (const { q, r } of generateHexCoordinates(radius)) {
+    const ring = getRing(q, r);
+    const isCorner = corners.get(ring)?.has(`${q},${r}`) ?? false;
 
     if (ring === 0) {
       cells.push({ q, r, slug: 'core', isHome: false, isSpecial: false });
@@ -100,8 +131,8 @@ export function buildPresetCells(): PresetCell[] {
       cells.push({ q, r, slug: 'medium', isHome: false, isSpecial: !isCorner });
     } else if (ring === 3) {
       cells.push({ q, r, slug: 'medium', isHome: false, isSpecial: false });
-    } else if (ring === HOME_BASE_RING) {
-      // ring 4: 8 home bases evenly along the ring, easy in between
+    } else if (ring === 4) {
+      // 8 home bases evenly along the ring, easy in between
       cells.push({ q, r, slug: 'easy', isHome: homeSet.has(`${q},${r}`), isSpecial: false });
     } else {
       // ring 5: easy backyard behind the bases
@@ -109,6 +140,42 @@ export function buildPresetCells(): PresetCell[] {
     }
   }
   return cells;
+}
+
+export interface MapPresetInfo {
+  id: MapPresetId;
+  title: string;
+  description: string;
+  radius: number;
+  teams: number;
+}
+
+export const MAP_PRESETS: Record<MapPresetId, MapPresetInfo & { build: () => PresetCell[] }> = {
+  classic6: {
+    id: 'classic6',
+    title: 'Классика · 6 команд',
+    description: 'Радиус 4, 61 сектор. Базы в углах внешнего кольца.',
+    radius: 4,
+    teams: 6,
+    build: buildClassic6Cells,
+  },
+  ring8: {
+    id: 'ring8',
+    title: 'Кольцо · 8 команд',
+    description: 'Радиус 5, 91 сектор. Базы равномерно на кольце 4, за ними тыл.',
+    radius: 5,
+    teams: 8,
+    build: buildRing8Cells,
+  },
+};
+
+/** Build the fixed preset cells with their difficulty / home / special roles. */
+export function buildPresetCells(preset: MapPresetId = DEFAULT_PRESET): PresetCell[] {
+  return MAP_PRESETS[preset].build();
+}
+
+export function isMapPresetId(v: unknown): v is MapPresetId {
+  return typeof v === 'string' && (MAP_PRESET_IDS as readonly string[]).includes(v);
 }
 
 interface DiffIdMap {
@@ -350,9 +417,9 @@ async function repinTeams(client: PoolClient, seasonId: string, teamIds: string[
  * children distribution (`season_participants`, `users.team_id`) are preserved:
  * teams are re-anchored to new home bases, only field progress is reset.
  */
-export async function generateMap(): Promise<SectorPublic[]> {
+export async function generateMap(preset: MapPresetId = DEFAULT_PRESET): Promise<SectorPublic[]> {
   const seasonId = await getActiveSeasonId();
-  const cells = buildPresetCells();
+  const cells = buildPresetCells(preset);
 
   const client = await pool.connect();
   try {

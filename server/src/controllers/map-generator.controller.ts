@@ -8,15 +8,37 @@ export async function generateMap(
   next: NextFunction
 ): Promise<void> {
   try {
-    const result = await mapGeneratorService.generateMap();
+    const raw = req.body?.preset ?? mapGeneratorService.DEFAULT_PRESET;
+    if (!mapGeneratorService.isMapPresetId(raw)) {
+      res.status(400).json({ error: `Неизвестный пресет карты: ${String(raw)}` });
+      return;
+    }
+    const result = await mapGeneratorService.generateMap(raw);
     await audit.record({
       actorUserId: req.user!.userId,
       action: 'map.generate',
       entityType: 'map',
-      summary: `Админ сгенерировал карту (${result.length} секторов)`,
-      metadata: { count: result.length },
+      summary: `Админ сгенерировал карту «${mapGeneratorService.MAP_PRESETS[raw].title}» (${result.length} секторов)`,
+      metadata: { count: result.length, preset: raw },
     });
     res.status(201).json({ sectors: result, count: result.length });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Both fixed presets with their cells — the admin picks one and previews it. */
+export async function listPresets(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const presets = mapGeneratorService.MAP_PRESET_IDS.map((id) => {
+      const { build, ...info } = mapGeneratorService.MAP_PRESETS[id];
+      return { ...info, cells: build() };
+    });
+    res.status(200).json({ presets, default: mapGeneratorService.DEFAULT_PRESET });
   } catch (err) {
     next(err);
   }

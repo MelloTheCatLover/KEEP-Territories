@@ -1,22 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Loader2, RefreshCw, Trash2, Hammer, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
-import { deleteAllSectors, generateMap, getAdminMapStatus, getSectorsMap } from '../map/api';
+import {
+  deleteAllSectors,
+  generateMap,
+  getAdminMapStatus,
+  getMapPresets,
+  getSectorsMap,
+  type MapPreset,
+  type MapPresetCell,
+} from '../map/api';
+import { axialToPixel, hexPoints, bbox } from '../map/hex-utils';
+import { difficultyColors } from '../../design-system/design-tokens';
 import { AccessDenied, AdminPageHeader } from './AdminShell';
-
-// Fixed preset (radius 5) — must mirror buildPresetCells on the server.
-const PRESET_RINGS: Array<{ label: string; detail: string }> = [
-  { label: 'Ядро', detail: '1 сектор · core' },
-  { label: 'Кольцо 1', detail: '6 секторов · сложные' },
-  { label: 'Кольцо 2', detail: '12 секторов · средние через один с особыми (тёмно-серые)' },
-  { label: 'Кольцо 3', detail: '18 секторов · средние' },
-  { label: 'Кольцо 4', detail: '24 сектора · лёгкие, 8 домашних баз через каждые 3 клетки' },
-  { label: 'Кольцо 5', detail: '30 секторов · лёгкие, тыл за базами' },
-];
-const PRESET_TOTAL = 91;
-const PRESET_HOME_BASES = 8;
 
 type State =
   | { status: 'loading' }
@@ -28,6 +26,8 @@ export function AdminMapPage() {
   const isAdmin = user?.role === 'admin';
 
   const [state, setState] = useState<State>({ status: 'loading' });
+  const [presets, setPresets] = useState<MapPreset[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState<'generate' | 'delete' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -49,12 +49,25 @@ export function AdminMapPage() {
     if (isAdmin) void refresh();
   }, [isAdmin, refresh]);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+    getMapPresets()
+      .then((res) => {
+        setPresets(res.presets);
+        setSelected((cur) => cur ?? res.default);
+      })
+      .catch(() => setActionError('Не удалось загрузить пресеты карты'));
+  }, [isAdmin]);
+
+  const preset = presets.find((p) => p.id === selected) ?? null;
+
   async function handleGenerate() {
+    if (!preset) return;
     setBusy('generate');
     setActionError(null);
     setFlash(null);
     try {
-      const result = await generateMap();
+      const result = await generateMap(preset.id);
       setFlash(`Карта собрана: ${result.count} секторов. Команды и распределение сохранены.`);
       await refresh();
     } catch (err) {
@@ -91,40 +104,39 @@ export function AdminMapPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 space-y-6">
-      <AdminPageHeader title="Генерация карты" />
-
-      <Card>
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Состояние</h2>
-            {state.status === 'loading' && (
-              <p className="text-sm text-neutral-700 flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-brand-500" />
-                Проверка...
-              </p>
-            )}
-            {state.status === 'error' && (
-              <p className="text-sm text-danger-text">{state.message}</p>
-            )}
-            {state.status === 'ready' && (
-              <>
-                <p className="text-sm text-neutral-900">
-                  Секторов: <span className="font-mono text-neutral-1000">{state.count}</span>
-                  {exists ? ' — карта создана' : ' — карта не создана'}
-                </p>
-                <p className="text-sm text-neutral-900">
-                  Команд: <span className="font-mono text-neutral-1000">{state.teamsCount}</span>
-                </p>
-              </>
-            )}
-          </div>
+      <AdminPageHeader
+        title="Генерация карты"
+        actions={
           <Button variant="secondary" onClick={() => void refresh()} disabled={state.status === 'loading'}>
             <span className="flex items-center gap-2">
               <RefreshCw className="w-4 h-4" />
               Обновить
             </span>
           </Button>
-        </div>
+        }
+      />
+
+      <Card>
+        {state.status === 'loading' && (
+          <p className="text-sm text-neutral-700 flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-brand-500" />
+            Проверка...
+          </p>
+        )}
+        {state.status === 'error' && (
+          <p className="text-sm text-danger-text">{state.message}</p>
+        )}
+        {state.status === 'ready' && (
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-neutral-900">
+            <span>
+              Секторов: <span className="font-mono text-neutral-1000">{state.count}</span>
+              {exists ? '' : ' — карта не создана'}
+            </span>
+            <span>
+              Команд: <span className="font-mono text-neutral-1000">{state.teamsCount}</span>
+            </span>
+          </div>
+        )}
       </Card>
 
       {flash && (
@@ -134,37 +146,45 @@ export function AdminMapPage() {
       )}
       {actionError && <ErrorBanner message={actionError} />}
 
-      <Card>
-        <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Раскладка</h2>
-        <p className="text-sm text-neutral-700 mb-3">
-          Шесть колец от ядра наружу. Тёмно-серые сектора особых событий обычным
-          захватом недоступны. 8 домашних баз стоят равномерно на кольце 4 — у
-          каждой команды есть тыл из лёгких секторов.
-        </p>
-        <div className="space-y-2">
-          {PRESET_RINGS.map((ring) => (
-            <div
-              key={ring.label}
-              className="flex items-center gap-3 px-3 py-2 rounded-sm bg-neutral-200 border border-neutral-400"
-            >
-              <span className="font-mono text-xs text-neutral-700 w-16">{ring.label}</span>
-              <span className="text-sm text-neutral-900">{ring.detail}</span>
-            </div>
-          ))}
-        </div>
-        <p className="text-xs text-neutral-700 mt-3">
-          Итого: <span className="font-mono text-neutral-1000">{PRESET_TOTAL}</span> секторов,{' '}
-          <span className="font-mono text-neutral-1000">{PRESET_HOME_BASES}</span> домашних
-        </p>
-      </Card>
+      {presets.length > 0 && (
+        <Card>
+          <h2 className="font-display text-heading-sm text-neutral-1000 mb-3">Пресет</h2>
+          <div className="grid sm:grid-cols-2 gap-2 mb-4">
+            {presets.map((p) => {
+              const active = p.id === selected;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setSelected(p.id)}
+                  className={`text-left px-4 py-3 rounded-sm border transition-colors ${
+                    active
+                      ? 'border-brand-500 bg-brand-900/30'
+                      : 'border-neutral-400 bg-neutral-200 hover:border-neutral-600'
+                  }`}
+                >
+                  <div className="text-sm font-medium text-neutral-1000">{p.title}</div>
+                  <div className="text-xs text-neutral-700 mt-0.5">{p.description}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          {preset && (
+            <>
+              <PresetPreview cells={preset.cells} />
+              <PresetLegend cells={preset.cells} />
+            </>
+          )}
+        </Card>
+      )}
 
       <Card>
-        <h2 className="font-display text-heading-sm text-neutral-1000 mb-3">Действия</h2>
         <div className="flex flex-wrap gap-3">
           <Button
             variant="primary"
             onClick={() => void handleGenerate()}
-            disabled={busy !== null}
+            disabled={busy !== null || !preset}
             isLoading={busy === 'generate'}
           >
             <span className="flex items-center gap-2">
@@ -253,6 +273,89 @@ export function AdminMapPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const PREVIEW_HEX = 10;
+const SPECIAL_FILL = 'var(--color-neutral-400)';
+const HOME_FILL = 'var(--color-neutral-100)';
+
+/** Miniature of the preset: difficulty colours, dark specials, K on the bases. */
+function PresetPreview({ cells }: { cells: MapPresetCell[] }) {
+  const { minX, minY, maxX, maxY } = useMemo(() => bbox(cells, PREVIEW_HEX), [cells]);
+  const pad = 4;
+  const vb = `${minX - pad} ${minY - pad} ${maxX - minX + pad * 2} ${maxY - minY + pad * 2}`;
+
+  return (
+    <svg viewBox={vb} className="w-full max-w-md mx-auto block" role="img" aria-label="Схема пресета">
+      {cells.map((c) => {
+        const { x, y } = axialToPixel(c.q, c.r, PREVIEW_HEX);
+        const fill = c.isSpecial
+          ? SPECIAL_FILL
+          : c.isHome
+            ? HOME_FILL
+            : difficultyColors[c.slug];
+        return (
+          <g key={`${c.q},${c.r}`}>
+            <polygon
+              points={hexPoints(x, y, PREVIEW_HEX - 0.6)}
+              fill={fill}
+              stroke={c.isHome ? 'var(--color-neutral-1000)' : 'var(--color-neutral-50)'}
+              strokeWidth={c.isHome ? 1.2 : 0.6}
+              opacity={c.isSpecial ? 1 : 0.9}
+            />
+            {c.isHome && (
+              <text
+                x={x}
+                y={y + 3.2}
+                textAnchor="middle"
+                fontSize={9}
+                fontWeight={700}
+                fill="var(--color-neutral-1000)"
+              >
+                K
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function PresetLegend({ cells }: { cells: MapPresetCell[] }) {
+  const counts = useMemo(() => {
+    const c = { easy: 0, medium: 0, hard: 0, core: 0, special: 0, home: 0 };
+    for (const cell of cells) {
+      if (cell.isHome) c.home += 1;
+      else if (cell.isSpecial) c.special += 1;
+      else c[cell.slug] += 1;
+    }
+    return c;
+  }, [cells]);
+
+  const items: Array<{ label: string; count: number; fill: string }> = [
+    { label: 'Лёгкие', count: counts.easy, fill: difficultyColors.easy },
+    { label: 'Средние', count: counts.medium, fill: difficultyColors.medium },
+    { label: 'Сложные', count: counts.hard, fill: difficultyColors.hard },
+    { label: 'Ядро', count: counts.core, fill: difficultyColors.core },
+    { label: 'Особые', count: counts.special, fill: SPECIAL_FILL },
+    { label: 'Базы', count: counts.home, fill: HOME_FILL },
+  ];
+
+  return (
+    <div className="flex flex-wrap gap-x-4 gap-y-1.5 justify-center mt-3">
+      {items.map((i) => (
+        <span key={i.label} className="inline-flex items-center gap-1.5 text-xs text-neutral-800">
+          <span
+            aria-hidden
+            className="w-3 h-3 rounded-xs inline-block border border-neutral-500"
+            style={{ backgroundColor: i.fill }}
+          />
+          {i.label} <span className="font-mono text-neutral-1000">{i.count}</span>
+        </span>
+      ))}
     </div>
   );
 }

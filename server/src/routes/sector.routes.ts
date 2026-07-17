@@ -13,6 +13,7 @@ router.use(authenticate);
 router.post('/generate-map', requireAdmin, mapGeneratorController.generateMap);
 router.delete('/all', requireAdmin, mapGeneratorController.deleteAll);
 router.get('/admin/status', requireAdmin, mapGeneratorController.getStatus);
+router.get('/admin/presets', requireAdmin, mapGeneratorController.listPresets);
 router.get('/admin/task-bindings', requireAdmin, sectorController.getBindings);
 
 router.post('/', requireAdmin, sectorController.create);

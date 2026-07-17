@@ -1,5 +1,5 @@
 import { api } from '../../shared/api/client';
-import type { ActionType, Sector } from './types';
+import type { ActionType, DifficultySlug, Sector } from './types';
 import type { TaskSubmissionWithDetails } from '../admin/submissions-api';
 import type { EncounterInstance } from '../admin/encounters-api';
 
@@ -60,12 +60,33 @@ export type GenerateMapResponse = {
   count: number;
 };
 
+export type MapPresetCell = {
+  q: number;
+  r: number;
+  slug: DifficultySlug;
+  isHome: boolean;
+  isSpecial: boolean;
+};
+
+export type MapPreset = {
+  id: string;
+  title: string;
+  description: string;
+  radius: number;
+  teams: number;
+  cells: MapPresetCell[];
+};
+
+export function getMapPresets(): Promise<{ presets: MapPreset[]; default: string }> {
+  return api.get<{ presets: MapPreset[]; default: string }>('/sectors/admin/presets');
+}
+
 /**
- * (Re)generate the season map from the fixed preset. Existing teams and the
+ * (Re)generate the season map from the chosen preset. Existing teams and the
  * children distribution survive — they are re-anchored to new home bases.
  */
-export function generateMap(): Promise<GenerateMapResponse> {
-  return api.post<GenerateMapResponse>('/sectors/generate-map');
+export function generateMap(preset: string): Promise<GenerateMapResponse> {
+  return api.post<GenerateMapResponse>('/sectors/generate-map', { preset });
 }
 
 export function deleteAllSectors(): Promise<{ deleted_count: number; deleted_teams_count: number }> {
