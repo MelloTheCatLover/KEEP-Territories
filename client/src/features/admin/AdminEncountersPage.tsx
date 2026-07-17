@@ -175,6 +175,12 @@ export function AdminEncountersPage() {
                         )}
                       </label>
                     )}
+                    {row.supports_target && (
+                      <p className="text-2xs text-neutral-500 italic mt-1">
+                        Игрокам: «Если в вашей команде есть{' '}
+                        {row.target_captain_name ?? 'загаданный игрок'}, то _____.»
+                      </p>
+                    )}
                   </div>
                   <button
                     type="button"

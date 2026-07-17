@@ -74,6 +74,17 @@ export function describe(number: number): string {
   return DESCRIPTIONS[number] ?? 'Разрешается вручную (правило 2-й фазы)';
 }
 
+/**
+ * Player-facing narrative for the swap encounters (16, 20-24): a fill-in-the-
+ * blank question naming the bound team's captain, e.g. «Если в вашей команде
+ * есть Шестак Алиса, то _____.». Falls back to a neutral placeholder when no
+ * captain is bound yet.
+ */
+export function swapQuestion(name: string | null | undefined): string {
+  const who = name && name.trim() ? name.trim() : 'загаданный игрок';
+  return `Если в вашей команде есть ${who}, то _____.`;
+}
+
 function statOf(team: TeamSnapshot, s: StatName): { label: string; value: number } {
   return { label: STAT_RU[s], value: team.stats[s] };
 }
@@ -119,6 +130,7 @@ export function evaluate(
   team: TeamSnapshot,
   choice?: string,
   targetTeamId?: string | null,
+  targetName?: string | null,
 ): EncounterEval {
   const base = { number, title, description: describe(number) };
 
@@ -126,6 +138,9 @@ export function evaluate(
     const isTarget = !!targetTeamId && team.id === targetTeamId;
     return {
       ...base,
+      // Question format naming the bound captain — the effect stays hidden in
+      // the blank until the admin resolves it.
+      title: swapQuestion(targetName),
       relevant: null,
       choice: null,
       resolution: isTarget

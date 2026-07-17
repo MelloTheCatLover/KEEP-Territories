@@ -171,7 +171,14 @@ export async function listPending(): Promise<EncounterInstanceView[]> {
   const views: EncounterInstanceView[] = [];
   for (const row of res.rows) {
     const snap = await snapshot(row.team_id);
-    const ev = evaluate(row.encounter_number, row.title, snap, undefined, row.target_team_id);
+    const ev = evaluate(
+      row.encounter_number,
+      row.title,
+      snap,
+      undefined,
+      row.target_team_id,
+      captainName(row.cap_full, row.cap_user),
+    );
     views.push({
       id: row.id,
       team_id: row.team_id,
@@ -224,7 +231,14 @@ export async function getInstanceView(instanceId: string): Promise<EncounterInst
   if (res.rows.length === 0) return null;
   const row = res.rows[0];
   const snap = await snapshot(row.team_id);
-  const ev = evaluate(row.encounter_number, row.title, snap, undefined, row.target_team_id);
+  const ev = evaluate(
+    row.encounter_number,
+    row.title,
+    snap,
+    undefined,
+    row.target_team_id,
+    captainName(row.cap_full, row.cap_user),
+  );
   return {
     id: row.id,
     team_id: row.team_id,
@@ -306,11 +320,15 @@ export async function resolve(instanceId: string, choice?: string): Promise<Enco
     title: string;
     season_id: string | null;
     target_team_id: string | null;
+    cap_full: string | null;
+    cap_user: string | null;
   }>(
     `SELECT ei.id, ei.team_id, ei.encounter_number, ei.status, ei.season_id,
-            re.title, re.target_team_id
+            re.title, re.target_team_id,
+            cap.full_name AS cap_full, cap.username AS cap_user
        FROM encounter_instances ei
        JOIN random_encounters re ON re.number = ei.encounter_number
+       LEFT JOIN users cap ON cap.team_id = re.target_team_id AND cap.team_role = 'captain'
       WHERE ei.id = $1`,
     [instanceId],
   );
@@ -319,7 +337,14 @@ export async function resolve(instanceId: string, choice?: string): Promise<Enco
   if (inst.status !== 'pending') throw new AppError(409, 'Встреча уже разрешена');
 
   const snap = await snapshot(inst.team_id);
-  const ev = evaluate(inst.encounter_number, inst.title, snap, choice, inst.target_team_id);
+  const ev = evaluate(
+    inst.encounter_number,
+    inst.title,
+    snap,
+    choice,
+    inst.target_team_id,
+    captainName(inst.cap_full, inst.cap_user),
+  );
 
   if (ev.choice !== null) {
     throw new AppError(400, 'Требуется выбор игрока');
