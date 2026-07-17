@@ -41,9 +41,10 @@ const DIFF_LABEL: Record<DifficultySlug, string> = {
 
 const FILTER_ORDER: DifficultySlug[] = ['easy', 'medium', 'hard', 'core'];
 
+// Mirrors the generation norms: easy 6, medium 5; hard carries the whole pool.
 const MIN_TASKS_PER_SECTOR: Record<DifficultySlug, number> = {
-  easy: 3,
-  medium: 3,
+  easy: 6,
+  medium: 5,
   hard: 1,
   core: 0,
 };
