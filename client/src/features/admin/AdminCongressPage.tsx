@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Check, Loader2, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react';
+import { Check, Loader2, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -14,6 +14,7 @@ import {
   type CongressTeam,
   type LawStatus,
 } from './congress-api';
+import { AccessDenied, AdminPageHeader } from './AdminShell';
 
 const VOTES_KEY = 'congress_total_votes';
 
@@ -170,28 +171,11 @@ export function AdminCongressPage() {
     }
   }
 
-  if (!isAdmin) {
-    return (
-      <div className="max-w-2xl mx-auto px-4">
-        <Card>
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-            <div>
-              <h1 className="font-display text-heading-sm text-neutral-1000 mb-1">Доступ запрещён</h1>
-              <p className="text-sm text-neutral-700">Эта страница доступна только администраторам.</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  if (!isAdmin) return <AccessDenied />;
 
   return (
     <div className="max-w-4xl mx-auto px-4">
-      <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Съезды</h1>
-      <p className="text-sm text-neutral-700 mb-5">
-        Влияние команд, распределение голосов в жетоны и законы съезда.
-      </p>
+      <AdminPageHeader title="Съезды" />
 
       {error && <ErrorBanner message={error} />}
 

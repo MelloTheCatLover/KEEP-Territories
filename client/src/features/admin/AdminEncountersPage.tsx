@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, Dices, Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError, api } from '../../shared/api/client';
@@ -12,6 +12,7 @@ import {
   type EncounterInstance,
   type EncounterPoolRow,
 } from './encounters-api';
+import { AccessDenied, AdminPageHeader } from './AdminShell';
 
 interface TeamOption {
   id: string;
@@ -86,37 +87,19 @@ export function AdminEncountersPage() {
     }
   }
 
-  if (!isAdmin) {
-    return (
-      <div className="max-w-2xl mx-auto px-4">
-        <Card>
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-            <div>
-              <h1 className="font-display text-heading-sm text-neutral-1000 mb-1">Доступ запрещён</h1>
-              <p className="text-sm text-neutral-700">Эта страница доступна только администраторам.</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  if (!isAdmin) return <AccessDenied />;
 
   return (
     <div className="max-w-3xl mx-auto px-4">
-      <div className="flex items-center justify-between gap-3 mb-1">
-        <div className="flex items-center gap-3">
-          <Dices className="w-6 h-6 text-brand-400" />
-          <h1 className="font-display text-heading-md text-neutral-1000">Случайные встречи</h1>
-        </div>
-        <Button type="button" variant="secondary" onClick={load} disabled={loading}>
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Обновить
-        </Button>
-      </div>
-      <p className="text-sm text-neutral-700 mb-5">
-        Выпадают при начале захвата сектора. Разреши встречу — эффект применится к команде.
-      </p>
+      <AdminPageHeader
+        title="Случайные встречи"
+        actions={
+          <Button type="button" variant="secondary" onClick={load} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Обновить
+          </Button>
+        }
+      />
 
       {error && <ErrorBanner message={error} />}
 

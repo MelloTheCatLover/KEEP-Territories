@@ -4,7 +4,6 @@ import { ProfilePage } from './features/auth/ProfilePage';
 import { MapPage } from './features/map/MapPage';
 import { SectorPage } from './features/map/SectorPage';
 import { TeamPage } from './features/team/TeamPage';
-import { AdminSubmissionsPage } from './features/admin/AdminSubmissionsPage';
 import { AdminMapPage } from './features/admin/AdminMapPage';
 import { AdminTasksPage } from './features/admin/AdminTasksPage';
 import { AdminSettingsPage } from './features/admin/AdminSettingsPage';
@@ -60,7 +59,6 @@ export const router = createBrowserRouter([
       { path: '/admin/tasks', element: <AdminTasksPage /> },
       { path: '/admin/settings', element: <AdminSettingsPage /> },
       { path: '/admin/teams', element: <AdminTeamsPage /> },
-      { path: '/admin/submissions', element: <AdminSubmissionsPage /> },
       { path: '/admin/trophies', element: <AdminTrophiesPage /> },
       { path: '/admin/sector-tasks', element: <AdminSectorTasksPage /> },
       { path: '/admin/seasons', element: <AdminSeasonsPage /> },

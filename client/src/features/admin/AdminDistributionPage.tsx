@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertCircle, Loader2, Play, RefreshCw, RotateCcw, Sparkles, Users,
+  Loader2, Play, RefreshCw, RotateCcw, Sparkles, Users,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner, Label } from '../../shared/ui';
@@ -12,6 +12,7 @@ import {
   CATEGORY_ORDER, CATEGORY_LABEL,
   type DistributionState, type ParticipantCategory, type SpinAssignment, type SpinResult,
 } from './distribution-api';
+import { AccessDenied, AdminPageHeader } from './AdminShell';
 
 export function AdminDistributionPage() {
   const { user } = useAuth();
@@ -131,37 +132,20 @@ export function AdminDistributionPage() {
     }
   }
 
-  if (!isAdmin) {
-    return (
-      <div className="max-w-2xl mx-auto px-4">
-        <Card>
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-            <div>
-              <h1 className="font-display text-heading-sm text-neutral-1000 mb-1">Доступ запрещён</h1>
-              <p className="text-sm text-neutral-700">Эта страница доступна только администраторам.</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  if (!isAdmin) return <AccessDenied />;
 
   const noMap = state !== null && state.home_base_count === 0;
 
   return (
     <div className="max-w-4xl mx-auto px-4 space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-        <div>
-          <h1 className="font-display text-heading-sm sm:text-heading-md text-neutral-1000 mb-1">Распределение команд</h1>
-          <p className="text-sm text-neutral-700">
-            Старт сезона: дели участников по категориям и раскидывай по командам колесом.
-          </p>
-        </div>
-        <Button variant="secondary" onClick={() => void refresh()}>
-          <span className="flex items-center gap-2"><RefreshCw className="w-4 h-4" />Обновить</span>
-        </Button>
-      </div>
+      <AdminPageHeader
+        title="Распределение команд"
+        actions={
+          <Button variant="secondary" onClick={() => void refresh()}>
+            <span className="flex items-center gap-2"><RefreshCw className="w-4 h-4" />Обновить</span>
+          </Button>
+        }
+      />
 
       {loadError && <ErrorBanner message={loadError} />}
       {actionError && <ErrorBanner message={actionError} />}

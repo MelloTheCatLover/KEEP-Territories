@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  AlertCircle,
   AlertTriangle,
   CheckCircle2,
   Loader2,
@@ -15,6 +14,7 @@ import {
   type GameSetting,
   type GameSettingKey,
 } from './settings-api';
+import { AccessDenied, AdminPageHeader } from './AdminShell';
 
 type LoadState =
   | { status: 'loading' }
@@ -124,48 +124,25 @@ export function AdminSettingsPage() {
     }
   }
 
-  if (!isAdmin) {
-    return (
-      <div className="max-w-2xl mx-auto px-4">
-        <Card>
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-            <div>
-              <h1 className="font-display text-heading-sm text-neutral-1000 mb-1">
-                Доступ запрещён
-              </h1>
-              <p className="text-sm text-neutral-700">
-                Эта страница доступна только администраторам.
-              </p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  if (!isAdmin) return <AccessDenied />;
 
   return (
     <div className="max-w-3xl mx-auto px-4 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-heading-md text-neutral-1000 mb-1">
-            Админ — настройки
-          </h1>
-          <p className="text-sm text-neutral-700">
-            Глобальные параметры игры. Изменения применяются мгновенно.
-          </p>
-        </div>
-        <Button
-          variant="secondary"
-          onClick={() => void refresh()}
-          disabled={state.status === 'loading'}
-        >
-          <span className="flex items-center gap-2">
-            <RefreshCw className="w-4 h-4" />
-            Обновить
-          </span>
-        </Button>
-      </div>
+      <AdminPageHeader
+        title="Настройки"
+        actions={
+          <Button
+            variant="secondary"
+            onClick={() => void refresh()}
+            disabled={state.status === 'loading'}
+          >
+            <span className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" />
+              Обновить
+            </span>
+          </Button>
+        }
+      />
 
       {flash && (
         <div className="bg-success-bg text-success-text text-sm px-3 py-2 rounded-sm border border-success/40 flex items-center gap-2">

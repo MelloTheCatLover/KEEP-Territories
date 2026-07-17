@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, Loader2, RefreshCw, ScrollText } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { api, ApiError } from '../../shared/api/client';
 import { getAuditLog, type AuditLogEntry } from './audit-api';
+import { AccessDenied, AdminPageHeader } from './AdminShell';
 
 const PAGE_SIZE = 50;
 
@@ -98,32 +99,14 @@ export function AdminAuditPage() {
       .catch(() => setTeams([]));
   }, [isAdmin]);
 
-  if (!isAdmin) {
-    return (
-      <div className="max-w-2xl mx-auto px-4">
-        <Card>
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-            <div>
-              <h1 className="font-display text-heading-sm text-neutral-1000 mb-1">Доступ запрещён</h1>
-              <p className="text-sm text-neutral-700">Эта страница доступна только администраторам.</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  if (!isAdmin) return <AccessDenied />;
 
   const page = Math.floor(offset / PAGE_SIZE) + 1;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="max-w-5xl mx-auto px-4">
-      <div className="flex items-center gap-3 mb-1">
-        <ScrollText className="w-6 h-6 text-brand-400" />
-        <h1 className="font-display text-heading-md text-neutral-1000">Журнал действий</h1>
-      </div>
-      <p className="text-sm text-neutral-700 mb-5">Полная история действий с картой и командами.</p>
+      <AdminPageHeader title="Журнал действий" />
 
       <div className="flex flex-wrap items-end gap-3 mb-4">
         <label className="flex flex-col gap-1">

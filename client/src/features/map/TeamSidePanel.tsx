@@ -12,6 +12,8 @@ type SummaryProps = {
   statsLayout?: 'grid' | 'list';
   /** Team currently leading on leadership — gets a small crown beside its name. */
   isLeadershipLeader?: boolean;
+  /** Admin only: makes the whole card clickable to open team management. */
+  onManage?: () => void;
 };
 
 const GOLD = '#F5C518';
@@ -32,6 +34,7 @@ export function TeamSummaryCard({
   className = '',
   statsLayout = 'grid',
   isLeadershipLeader = false,
+  onManage,
 }: SummaryProps) {
   const palette = resolveTeamPalette(team.color, index);
   const accent = palette.base;
@@ -47,12 +50,28 @@ export function TeamSummaryCard({
 
   return (
     <div
-      className={`relative border rounded-md bg-glass-medium backdrop-blur-glass p-3 sm:p-4 ${className}`}
+      className={`relative border rounded-md bg-glass-medium backdrop-blur-glass p-3 sm:p-4 ${
+        onManage ? 'cursor-pointer hover:brightness-110 transition-[filter]' : ''
+      } ${className}`}
       style={{
         borderColor: accent,
         backgroundImage: `linear-gradient(135deg, ${wash}, transparent 70%)`,
         boxShadow: shadows.length ? shadows.join(', ') : undefined,
       }}
+      role={onManage ? 'button' : undefined}
+      tabIndex={onManage ? 0 : undefined}
+      onClick={onManage}
+      onKeyDown={
+        onManage
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onManage();
+              }
+            }
+          : undefined
+      }
+      title={onManage ? 'Управлять командой' : undefined}
     >
       <div className="flex items-center gap-2 min-w-0 pb-3 mb-3 border-b border-neutral-300">
         <span

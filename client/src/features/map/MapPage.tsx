@@ -15,6 +15,7 @@ import { useAuth } from '../auth/AuthContext';
 import { CreateTeamModal } from '../team/CreateTeamModal';
 import { TrophySection } from '../trophies/TrophySection';
 import { AdminReviewQueue } from './AdminReviewQueue';
+import { TeamManageModal } from '../admin/team-modals';
 
 type LoadState =
   | { status: 'loading' }
@@ -34,6 +35,7 @@ export function MapPage() {
   const [createFor, setCreateFor] = useState<Sector | null>(null);
   const [actionFor, setActionFor] = useState<Sector | null>(null);
   const [specialFor, setSpecialFor] = useState<Sector | null>(null);
+  const [manageTeamId, setManageTeamId] = useState<string | null>(null);
 
   const fetchMap = useCallback(async (silent: boolean) => {
     // Silent refresh (e.g. after a queue decision) keeps the current map on
@@ -205,13 +207,7 @@ export function MapPage() {
   return (
     <div className="max-w-[1500px] mx-auto px-3 sm:px-4">
       <div className="flex items-start justify-between gap-3 mb-4">
-        <div>
-          <h1 className="font-display text-heading-sm sm:text-heading-md text-neutral-1000 mb-1">Карта</h1>
-          <p className="text-sm text-neutral-700">
-            Гексагональное поле
-            {state.status === 'ready' ? ` — ${state.sectors.length} секторов.` : '.'}
-          </p>
-        </div>
+        <h1 className="font-display text-heading-sm sm:text-heading-md text-neutral-1000">Карта</h1>
         <Link
           to="/teams"
           className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-400 text-sm font-medium text-neutral-900 hover:bg-neutral-200 hover:text-neutral-1000 transition-colors"
@@ -243,11 +239,6 @@ export function MapPage() {
               style={{ backgroundColor: state.teamsById[actingTeamId].color ?? undefined }}
             />
           )}
-          <span className="text-xs text-neutral-700">
-            {actingTeamId
-              ? 'Кликните по сектору, чтобы крутить колесо за эту команду.'
-              : 'Выберите команду, чтобы действовать на карте.'}
-          </span>
         </div>
       )}
 
@@ -303,6 +294,7 @@ export function MapPage() {
                   isLeadershipLeader={
                     maxLeadership > 0 && entry.team.stats.leadership === maxLeadership
                   }
+                  onManage={isAdmin ? () => setManageTeamId(entry.team.id) : undefined}
                 />
               );
             })}
@@ -338,6 +330,7 @@ export function MapPage() {
                   isLeadershipLeader={
                     maxLeadership > 0 && entry.team.stats.leadership === maxLeadership
                   }
+                  onManage={isAdmin ? () => setManageTeamId(entry.team.id) : undefined}
                 />
               );
             })}
@@ -384,6 +377,14 @@ export function MapPage() {
             setActionFor(null);
             navigate(`/sectors/${sectorId}`);
           }}
+        />
+      )}
+
+      {manageTeamId && (
+        <TeamManageModal
+          teamId={manageTeamId}
+          onClose={() => setManageTeamId(null)}
+          onChanged={() => void fetchMap(true)}
         />
       )}
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Download, KeyRound, Loader2, Search, Trash2 } from 'lucide-react';
+import { Download, KeyRound, Loader2, Search, Trash2 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -7,6 +7,7 @@ import {
   getDashboard, deleteChild, issueAllAccounts,
   type ChildDashboardRow, type IssuedAccountFull,
 } from './children-lists-api';
+import { AccessDenied, AdminPageHeader } from './AdminShell';
 
 export function AdminChildrenDashboardPage() {
   const { user } = useAuth();
@@ -79,44 +80,27 @@ export function AdminChildrenDashboardPage() {
     );
   }, [rows, query]);
 
-  if (!isAdmin) {
-    return (
-      <div className="max-w-2xl mx-auto px-4">
-        <Card>
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-            <div>
-              <h1 className="font-display text-heading-sm text-neutral-1000 mb-1">Доступ запрещён</h1>
-              <p className="text-sm text-neutral-700">Эта страница доступна только администраторам.</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  if (!isAdmin) return <AccessDenied />;
 
   return (
     <div className="max-w-5xl mx-auto px-4 space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-        <div>
-          <h1 className="font-display text-heading-sm sm:text-heading-md text-neutral-1000 mb-1">Все дети</h1>
-          <p className="text-sm text-neutral-700">
-            Общая база: коды, аккаунты и смены, в которых ребёнок участвовал.
-          </p>
-        </div>
-        <Button
-          variant="primary"
-          onClick={() => void handleIssueAll()}
-          isLoading={issuing}
-          disabled={noAccountCount === 0}
-          title={noAccountCount === 0 ? 'У всех детей уже есть аккаунты' : undefined}
-        >
-          <span className="flex items-center gap-2">
-            <KeyRound className="w-4 h-4" />
-            Создать аккаунты всем без аккаунта{noAccountCount > 0 ? ` (${noAccountCount})` : ''}
-          </span>
-        </Button>
-      </div>
+      <AdminPageHeader
+        title="Все дети"
+        actions={
+          <Button
+            variant="primary"
+            onClick={() => void handleIssueAll()}
+            isLoading={issuing}
+            disabled={noAccountCount === 0}
+            title={noAccountCount === 0 ? 'У всех детей уже есть аккаунты' : undefined}
+          >
+            <span className="flex items-center gap-2">
+              <KeyRound className="w-4 h-4" />
+              Аккаунты всем{noAccountCount > 0 ? ` (${noAccountCount})` : ''}
+            </span>
+          </Button>
+        }
+      />
 
       {error && <ErrorBanner message={error} />}
 

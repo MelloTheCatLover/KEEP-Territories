@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { deleteAllSectors, generateMap, getAdminMapStatus, getSectorsMap } from '../map/api';
+import { AccessDenied, AdminPageHeader } from './AdminShell';
 
 // Fixed preset (radius 4) — must mirror buildPresetCells on the server.
 const PRESET_RINGS: Array<{ label: string; detail: string }> = [
@@ -82,31 +83,14 @@ export function AdminMapPage() {
     }
   }
 
-  if (!isAdmin) {
-    return (
-      <div className="max-w-2xl mx-auto px-4">
-        <Card>
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-            <div>
-              <h1 className="font-display text-heading-sm text-neutral-1000 mb-1">Доступ запрещён</h1>
-              <p className="text-sm text-neutral-700">Эта страница доступна только администраторам.</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  if (!isAdmin) return <AccessDenied />;
 
   const exists = state.status === 'ready' && state.count > 0;
   const teamsCount = state.status === 'ready' ? state.teamsCount : 0;
 
   return (
     <div className="max-w-3xl mx-auto px-4 space-y-6">
-      <div>
-        <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Админ — карта</h1>
-        <p className="text-sm text-neutral-700">Генерация и удаление игрового поля.</p>
-      </div>
+      <AdminPageHeader title="Генерация карты" />
 
       <Card>
         <div className="flex items-center justify-between gap-4">

@@ -1,7 +1,5 @@
 import { useEffect, useState, type ComponentType } from 'react';
-import { Link } from 'react-router-dom';
 import {
-  ArrowLeft,
   Crown,
   Gem,
   Sparkles,
@@ -11,7 +9,6 @@ import {
   Swords,
   Trophy,
   Loader2,
-  AlertCircle,
 } from 'lucide-react';
 import { Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -24,6 +21,7 @@ import type {
   TrophyRanking,
 } from '../trophies/types';
 import { teamPaletteFromColor } from '../../design-system/design-tokens';
+import { AccessDenied, AdminPageHeader } from './AdminShell';
 
 type State =
   | { status: 'loading' }
@@ -86,43 +84,11 @@ export function AdminTrophiesPage() {
     };
   }, [isAdmin]);
 
-  if (!isAdmin) {
-    return (
-      <div className="max-w-2xl mx-auto px-4">
-        <Card>
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-            <div>
-              <h1 className="font-display text-heading-sm text-neutral-1000 mb-1">
-                Доступ запрещён
-              </h1>
-              <p className="text-sm text-neutral-700">
-                Эта страница доступна только администраторам.
-              </p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  if (!isAdmin) return <AccessDenied />;
 
   return (
     <div className="max-w-5xl mx-auto px-4 space-y-6">
-      <Link
-        to="/admin"
-        className="inline-flex items-center gap-1 text-sm text-neutral-700 hover:text-neutral-1000"
-      >
-        <ArrowLeft className="w-4 h-4" />К админ-панели
-      </Link>
-
-      <div>
-        <h1 className="font-display text-heading-md text-neutral-1000 mb-1">
-          Кубки
-        </h1>
-        <p className="text-sm text-neutral-700">
-          Места всех команд по каждому кубку и принципы расчёта.
-        </p>
-      </div>
+      <AdminPageHeader title="Кубки" />
 
       {state.status === 'loading' && (
         <div className="flex items-center gap-2 text-sm text-neutral-700">

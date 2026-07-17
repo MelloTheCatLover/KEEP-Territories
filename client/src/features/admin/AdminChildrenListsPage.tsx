@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
-  AlertCircle, Download, KeyRound, Loader2, Plus, RefreshCw, RotateCcw, Trash2,
+  Download, KeyRound, Loader2, Plus, RefreshCw, RotateCcw, Trash2,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -11,6 +11,7 @@ import {
   getMembers, bulkAdd, removeMember, issueAccount, resetPassword,
   type ChildrenList, type ListMember, type AddChildResult,
 } from './children-lists-api';
+import { AccessDenied, AdminPageHeader } from './AdminShell';
 
 type Issued = { login: string; password: string; full_name: string; reset?: boolean };
 
@@ -165,21 +166,7 @@ export function AdminChildrenListsPage() {
     }
   }
 
-  if (!isAdmin) {
-    return (
-      <div className="max-w-2xl mx-auto px-4">
-        <Card>
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-            <div>
-              <h1 className="font-display text-heading-sm text-neutral-1000 mb-1">Доступ запрещён</h1>
-              <p className="text-sm text-neutral-700">Эта страница доступна только администраторам.</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  if (!isAdmin) return <AccessDenied />;
 
   const selected = lists?.find((l) => l.id === selectedId) ?? null;
   const matchedCount = addResults?.filter((r) => r.matched).length ?? 0;
@@ -187,18 +174,22 @@ export function AdminChildrenListsPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Списки детей</h1>
-          <p className="text-sm text-neutral-700">
-            Загрузи ФИО списком. Уже знакомые дети переиспользуются (с их аккаунтом).{' '}
-            <Link to="/admin/children" className="text-brand-400 hover:text-brand-300">Все дети →</Link>
-          </p>
-        </div>
-        <Button variant="secondary" onClick={() => void refresh()}>
-          <span className="flex items-center gap-2"><RefreshCw className="w-4 h-4" />Обновить</span>
-        </Button>
-      </div>
+      <AdminPageHeader
+        title="Списки детей"
+        actions={
+          <>
+            <Link
+              to="/admin/children"
+              className="text-sm text-brand-400 hover:text-brand-300"
+            >
+              Все дети →
+            </Link>
+            <Button variant="secondary" onClick={() => void refresh()}>
+              <span className="flex items-center gap-2"><RefreshCw className="w-4 h-4" />Обновить</span>
+            </Button>
+          </>
+        }
+      />
 
       {loadError && <ErrorBanner message={loadError} />}
       {actionError && <ErrorBanner message={actionError} />}

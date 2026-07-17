@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
-  AlertCircle,
-  ArrowLeft,
   Loader2,
   Plus,
   RefreshCw,
   Trash2,
   X,
 } from 'lucide-react';
-import { Button, Card, ErrorBanner } from '../../shared/ui';
+import { Button, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { useAuth } from '../auth/AuthContext';
 import { getSectorsMap } from '../map/api';
@@ -23,6 +20,7 @@ import {
   type Binding,
   type SectorTaskRow,
 } from './sector-tasks-api';
+import { AccessDenied, AdminPageHeader } from './AdminShell';
 
 type State =
   | { status: 'loading' }
@@ -85,45 +83,14 @@ export function AdminSectorTasksPage() {
     return m;
   }, [state]);
 
-  if (!isAdmin) {
-    return (
-      <div className="max-w-2xl mx-auto px-4">
-        <Card>
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-            <div>
-              <h1 className="font-display text-heading-sm text-neutral-1000 mb-1">
-                Доступ запрещён
-              </h1>
-              <p className="text-sm text-neutral-700">
-                Эта страница доступна только администраторам.
-              </p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  if (!isAdmin) return <AccessDenied />;
 
   return (
     <div className="max-w-5xl mx-auto px-4 space-y-4">
-      <Link
-        to="/admin"
-        className="inline-flex items-center gap-1 text-sm text-neutral-700 hover:text-neutral-1000"
-      >
-        <ArrowLeft className="w-4 h-4" />К админ-панели
-      </Link>
-
-      <div className="flex items-end justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="font-display text-heading-md text-neutral-1000 mb-1">
-            Задания по секторам
-          </h1>
-          <p className="text-sm text-neutral-700">
-            Привязка заданий к секторам. Сложности сектора и задания должны совпадать.
-          </p>
-        </div>
-        <Button
+      <AdminPageHeader
+        title="Привязка заданий"
+        actions={
+          <Button
           variant="secondary"
           onClick={() => void load()}
           disabled={state.status === 'loading'}
@@ -132,8 +99,9 @@ export function AdminSectorTasksPage() {
             <RefreshCw className="w-4 h-4" />
             Обновить
           </span>
-        </Button>
-      </div>
+          </Button>
+        }
+      />
 
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-2xs uppercase tracking-wider text-neutral-700">

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, Archive, CheckCircle2, Loader2, Plus, Play, RefreshCw, Sparkles, Star, Trash2 } from 'lucide-react';
+import { Archive, CheckCircle2, Loader2, Plus, Play, RefreshCw, Sparkles, Star, Trash2 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner, Input, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -17,6 +17,7 @@ import {
 } from './seasons-api';
 import { getRoster, type RosterMember } from './teams-api';
 import { getLists, type ChildrenList } from './children-lists-api';
+import { AccessDenied, AdminPageHeader } from './AdminShell';
 
 const STATUS_META: Record<SeasonStatus, { label: string; cls: string }> = {
   active: { label: 'активный', cls: 'bg-success-bg text-success-text border-success/40' },
@@ -160,35 +161,18 @@ export function AdminSeasonsPage() {
     }
   }
 
-  if (!isAdmin) {
-    return (
-      <div className="max-w-2xl mx-auto px-4">
-        <Card>
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-            <div>
-              <h1 className="font-display text-heading-sm text-neutral-1000 mb-1">Доступ запрещён</h1>
-              <p className="text-sm text-neutral-700">Эта страница доступна только администраторам.</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  if (!isAdmin) return <AccessDenied />;
 
   return (
     <div className="max-w-4xl mx-auto px-4 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-heading-md text-neutral-1000 mb-1">Сезоны смен</h1>
-          <p className="text-sm text-neutral-700">
-            У каждого сезона своя карта и команды. Активен один сезон; остальные — архив только для просмотра.
-          </p>
-        </div>
-        <Button variant="secondary" onClick={() => void refresh()}>
-          <span className="flex items-center gap-2"><RefreshCw className="w-4 h-4" />Обновить</span>
-        </Button>
-      </div>
+      <AdminPageHeader
+        title="Сезоны"
+        actions={
+          <Button variant="secondary" onClick={() => void refresh()}>
+            <span className="flex items-center gap-2"><RefreshCw className="w-4 h-4" />Обновить</span>
+          </Button>
+        }
+      />
 
       {flash && (
         <div className="bg-success-bg text-success-text text-sm px-3 py-2 rounded-sm border border-success/40 flex items-center gap-2">
