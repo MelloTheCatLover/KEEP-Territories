@@ -4,7 +4,7 @@ import { Loader2, MapPin, Users } from 'lucide-react';
 import { getSectorsMap } from './api';
 import type { Sector } from './types';
 import { HexMap, type TeamInfo } from './HexMap';
-import { computeMapLayout, LEFT_SLOTS, RIGHT_SLOTS } from './map-layout';
+import { computeMapLayout } from './map-layout';
 import { SectorActionModal } from './SectorActionModal';
 import { SpecialSectorModal } from './SpecialSectorModal';
 import { TeamSummaryCard } from './TeamSidePanel';
@@ -281,12 +281,10 @@ export function MapPage() {
           }`}
         >
           <div className="hidden gap-3 lg:order-1 lg:flex lg:flex-col lg:justify-center">
-            {LEFT_SLOTS.map((key) => {
-              const entry = mapLayout.slots[key];
-              if (!entry) return null;
+            {mapLayout.left.map((entry) => {
               return (
                 <TeamSummaryCard
-                  key={key}
+                  key={entry.team.id}
                   team={entry.team}
                   index={entry.index}
                   isOwn={entry.team.id === teamId}
@@ -317,12 +315,10 @@ export function MapPage() {
           </div>
 
           <div className="hidden gap-3 lg:order-3 lg:flex lg:flex-col lg:justify-center">
-            {RIGHT_SLOTS.map((key) => {
-              const entry = mapLayout.slots[key];
-              if (!entry) return null;
+            {mapLayout.right.map((entry) => {
               return (
                 <TeamSummaryCard
-                  key={key}
+                  key={entry.team.id}
                   team={entry.team}
                   index={entry.index}
                   isOwn={entry.team.id === teamId}

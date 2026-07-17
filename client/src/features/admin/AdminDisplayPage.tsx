@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { getSectorsMap } from '../map/api';
 import type { Sector } from '../map/types';
 import { HexMap, type TeamInfo } from '../map/HexMap';
-import { computeMapLayout, LEFT_SLOTS, RIGHT_SLOTS } from '../map/map-layout';
+import { computeMapLayout } from '../map/map-layout';
 import { TeamSummaryCard } from '../map/TeamSidePanel';
 import { getTeams, getTeam } from '../team/api';
 import type { TeamFullStats } from '../team/types';
@@ -120,12 +120,10 @@ export function AdminDisplayPage() {
       {state.status === 'ready' && mapLayout && (
         <div className="flex-1 p-4 grid gap-4 lg:items-stretch lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)_minmax(240px,320px)]">
           <div className="hidden gap-3 lg:flex lg:flex-col lg:justify-center">
-            {LEFT_SLOTS.map((key) => {
-              const entry = mapLayout.slots[key];
-              if (!entry) return null;
+            {mapLayout.left.map((entry) => {
               return (
                 <TeamSummaryCard
-                  key={key}
+                  key={entry.team.id}
                   team={entry.team}
                   index={entry.index}
                   isOwn={false}
@@ -148,12 +146,10 @@ export function AdminDisplayPage() {
           </div>
 
           <div className="hidden gap-3 lg:flex lg:flex-col lg:justify-center">
-            {RIGHT_SLOTS.map((key) => {
-              const entry = mapLayout.slots[key];
-              if (!entry) return null;
+            {mapLayout.right.map((entry) => {
               return (
                 <TeamSummaryCard
-                  key={key}
+                  key={entry.team.id}
                   team={entry.team}
                   index={entry.index}
                   isOwn={false}

@@ -6,16 +6,17 @@ import { ApiError } from '../../shared/api/client';
 import { deleteAllSectors, generateMap, getAdminMapStatus, getSectorsMap } from '../map/api';
 import { AccessDenied, AdminPageHeader } from './AdminShell';
 
-// Fixed preset (radius 4) — must mirror buildPresetCells on the server.
+// Fixed preset (radius 5) — must mirror buildPresetCells on the server.
 const PRESET_RINGS: Array<{ label: string; detail: string }> = [
   { label: 'Ядро', detail: '1 сектор · core' },
   { label: 'Кольцо 1', detail: '6 секторов · сложные' },
   { label: 'Кольцо 2', detail: '12 секторов · средние через один с особыми (тёмно-серые)' },
-  { label: 'Кольцо 3', detail: '18 секторов · средние, лёгкие в углах' },
-  { label: 'Кольцо 4', detail: '24 сектора · лёгкие, 6 домашних баз в углах' },
+  { label: 'Кольцо 3', detail: '18 секторов · средние' },
+  { label: 'Кольцо 4', detail: '24 сектора · лёгкие, 8 домашних баз через каждые 3 клетки' },
+  { label: 'Кольцо 5', detail: '30 секторов · лёгкие, тыл за базами' },
 ];
-const PRESET_TOTAL = 61;
-const PRESET_HOME_BASES = 6;
+const PRESET_TOTAL = 91;
+const PRESET_HOME_BASES = 8;
 
 type State =
   | { status: 'loading' }
@@ -136,8 +137,9 @@ export function AdminMapPage() {
       <Card>
         <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Раскладка</h2>
         <p className="text-sm text-neutral-700 mb-3">
-          Фиксированная схема лагеря: пять колец от ядра наружу. Тёмно-серые сектора
-          особых событий обычным захватом недоступны. Внешнее кольцо несёт 6 домашних баз.
+          Шесть колец от ядра наружу. Тёмно-серые сектора особых событий обычным
+          захватом недоступны. 8 домашних баз стоят равномерно на кольце 4 — у
+          каждой команды есть тыл из лёгких секторов.
         </p>
         <div className="space-y-2">
           {PRESET_RINGS.map((ring) => (

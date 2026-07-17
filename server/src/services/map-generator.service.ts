@@ -6,18 +6,37 @@ import { DifficultyLevel, DifficultySlug } from '../types/difficulty';
 import { getActiveSeasonId } from './season.service';
 
 /**
- * Fixed camp map preset. Radius 4 → 5 rings (incl. core), 61 sectors:
+ * Fixed camp map preset. Radius 5 → 6 rings (incl. core), 91 sectors:
  *
  *   r0  core            — 1
  *   r1  hard            — 6
  *   r2  medium / special alternating (corners medium, edges special-blue) — 12
- *   r3  medium edges, easy corners — 18
- *   r4  easy, 6 home bases at corners — 24
+ *   r3  medium          — 18
+ *   r4  easy, 8 home bases every 3rd cell — 24
+ *   r5  easy            — 30
+ *
+ * Home bases sit one ring in from the edge so each team has an easy "backyard"
+ * behind it. Ring 4 has 24 cells, so 8 bases land exactly every 3 cells — the
+ * hex distance between neighbouring bases is 3 everywhere.
  *
  * The ring layout, difficulties, special sectors and home-base positions are
  * not configurable — this is the single canonical world for a season.
  */
-export const PRESET_RADIUS = 4;
+export const PRESET_RADIUS = 5;
+
+export const HOME_BASE_RING = 4;
+
+/** 8 home bases: every 3rd cell of the 24-cell ring 4, starting at (4, 0). */
+export const HOME_BASE_COORDS: ReadonlyArray<{ q: number; r: number }> = [
+  { q: 4, r: 0 },
+  { q: 4, r: -3 },
+  { q: 2, r: -4 },
+  { q: -1, r: -3 },
+  { q: -4, r: 0 },
+  { q: -4, r: 3 },
+  { q: -2, r: 4 },
+  { q: 1, r: 3 },
+];
 
 export function generateHexCoordinates(radius: number): Array<{ q: number; r: number }> {
   const coords: Array<{ q: number; r: number }> = [];
@@ -65,6 +84,7 @@ export function buildPresetCells(): PresetCell[] {
       new Set(cornerCoordsForRadius(ring).map((c) => `${c.q},${c.r}`)),
     );
   }
+  const homeSet = new Set(HOME_BASE_COORDS.map((c) => `${c.q},${c.r}`));
 
   const cells: PresetCell[] = [];
   for (const { q, r } of generateHexCoordinates(PRESET_RADIUS)) {
@@ -79,11 +99,13 @@ export function buildPresetCells(): PresetCell[] {
       // corners → medium, edges → special-event (blue, non-capturable)
       cells.push({ q, r, slug: 'medium', isHome: false, isSpecial: !isCorner });
     } else if (ring === 3) {
-      // corners → easy, edges → medium
-      cells.push({ q, r, slug: isCorner ? 'easy' : 'medium', isHome: false, isSpecial: false });
+      cells.push({ q, r, slug: 'medium', isHome: false, isSpecial: false });
+    } else if (ring === HOME_BASE_RING) {
+      // ring 4: 8 home bases evenly along the ring, easy in between
+      cells.push({ q, r, slug: 'easy', isHome: homeSet.has(`${q},${r}`), isSpecial: false });
     } else {
-      // ring 4: corners → home bases, edges → easy
-      cells.push({ q, r, slug: 'easy', isHome: isCorner, isSpecial: false });
+      // ring 5: easy backyard behind the bases
+      cells.push({ q, r, slug: 'easy', isHome: false, isSpecial: false });
     }
   }
   return cells;
