@@ -290,7 +290,7 @@ async function checkTaskCounts(client: PoolClient, diffMap: DiffIdMap): Promise<
   const core = counts[diffMap.core] ?? 0;
   const errors: string[] = [];
   if (core < 1) errors.push(`core ${core}/1`);
-  if (easy < 4) errors.push(`easy ${easy}/4`);
+  if (easy < 6) errors.push(`easy ${easy}/6`);
   if (medium < 5) errors.push(`medium ${medium}/5`);
   if (errors.length > 0) {
     throw new AppError(400, `Not enough tasks: ${errors.join(', ')}`);
@@ -333,15 +333,16 @@ async function assignTasksAfterGeneration(client: PoolClient, seasonId: string):
     const slug = slugById[sector.difficulty_id];
     const taskPool = tasksByDiff[sector.difficulty_id] ?? [];
 
-    if (slug === 'easy' || slug === 'medium') {
-      const need = slug === 'easy' ? 4 : 5;
-      if (taskPool.length < need) {
+    if (slug === 'easy' || slug === 'medium' || slug === 'hard') {
+      // hard sectors carry the entire hard pool; easy/medium get a random draw
+      const need = slug === 'hard' ? taskPool.length : slug === 'easy' ? 6 : 5;
+      if (taskPool.length < need || need === 0) {
         throw new AppError(
           400,
-          `Not enough ${slug} tasks: need ${need} distinct, have ${taskPool.length}`
+          `Not enough ${slug} tasks: need ${Math.max(need, 1)} distinct, have ${taskPool.length}`
         );
       }
-      const picked = shuffle(taskPool).slice(0, need);
+      const picked = slug === 'hard' ? taskPool : shuffle(taskPool).slice(0, need);
       const values: string[] = [];
       const params: string[] = [];
       picked.forEach((taskId, i) => {
