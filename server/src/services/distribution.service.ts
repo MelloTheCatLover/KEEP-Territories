@@ -173,6 +173,22 @@ async function returningChildIds(client: Queryable, currentSeasonId: string): Pr
   return new Set(res.rows.map((r) => r.child_id));
 }
 
+/**
+ * Standing imported from the shift spreadsheet (children.base_category). Covers
+ * the shifts a child played before this platform, which leave no season history.
+ */
+async function importedCategories(client: Queryable): Promise<Map<string, ParticipantCategory>> {
+  const res = await client.query<{ id: string; base_category: ParticipantCategory }>(
+    `SELECT id, base_category FROM children WHERE base_category IS NOT NULL`,
+  );
+  return new Map(res.rows.map((r) => [r.id, r.base_category]));
+}
+
+/** The stronger of two categories (CATEGORY_ORDER runs strongest → weakest). */
+function strongest(a: ParticipantCategory, b: ParticipantCategory): ParticipantCategory {
+  return CATEGORY_ORDER.indexOf(a) <= CATEGORY_ORDER.indexOf(b) ? a : b;
+}
+
 export async function prepare(): Promise<DistributionState> {
   const client = await pool.connect();
   try {
@@ -199,15 +215,18 @@ export async function prepare(): Promise<DistributionState> {
 
     const winners = await winnerChildIds(client, seasonId);
     const returning = await returningChildIds(client, seasonId);
+    const imported = await importedCategories(client);
 
     // Snapshot each enrolled child with a default category. Existing rows are
     // kept (preserves manual edits / partial distribution) via ON CONFLICT.
     for (const { child_id } of enrolled.rows) {
-      const category: ParticipantCategory = winners.has(child_id)
+      const derived: ParticipantCategory = winners.has(child_id)
         ? 'winner'
         : returning.has(child_id)
           ? 'participant'
           : 'newbie';
+      const fromSheet = imported.get(child_id);
+      const category = fromSheet ? strongest(derived, fromSheet) : derived;
       await client.query(
         `INSERT INTO season_participants (season_id, child_id, category)
          VALUES ($1, $2, $3)

@@ -132,6 +132,16 @@ cd server && npm run seed:demo
 ```
 Создаст 3 команды (`alpha@demo.local` / `bravo@demo.local` / `charlie@demo.local`, пароль `password123`).
 
+### 8. Импорт списка смены из таблицы
+Табличку вожатого (ФИО / Искры / КТП / КТБ / Логин / Пароль) сохраните из Excel как CSV и накатите:
+```bash
+cd server && npx ts-node src/scripts/import-roster.ts --file roster.csv --list 128 --apply
+```
+Без `--apply` — пробный прогон, ничего не пишется. Скрипт заводит недостающих детей, добавляет всех в список,
+ставит пароли из таблицы (у существующих аккаунтов логин не меняется) и сохраняет статус из колонки **КТП**
+в `children.base_category`. Распределение по командам берёт максимум из этого статуса и истории сезонов в БД,
+поэтому «победители» прошлых, доплатформенных смен не попадают в новенькие.
+
 ---
 
 ## Деплой в прод (Docker)
@@ -232,7 +242,7 @@ cd client && npm run dev    # SPA на :5173 (Vite читает client/.env.deve
 │       ├── services/            бизнес-логика + транзакции
 │       ├── middleware/          auth, admin, role, validate, error
 │       ├── migrations/          NNN_*.sql + раннер
-│       ├── scripts/             seed-demo
+│       ├── scripts/             seed-demo, import-roster
 │       ├── types/               интерфейсы и DTO
 │       └── config/              env, pool
 └── docs/
