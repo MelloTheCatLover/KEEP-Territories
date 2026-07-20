@@ -59,7 +59,7 @@ export function AdminDistributionPage() {
     const items: WheelItem[] = cat
       ? state.participants
           .filter((p) => p.category === cat && p.team_id === null)
-          .map((p) => ({ id: p.child_id, label: p.full_name }))
+          .map((p) => ({ id: p.child_id, label: shortName(p.full_name) }))
       : [];
     return { currentCategory: cat, pool: items };
   }, [state]);
@@ -367,6 +367,11 @@ export function AdminDistributionPage() {
       )}
     </div>
   );
+}
+
+/** Фамилия + имя: отчество не влезает в сектор колеса и не нужно для узнавания. */
+function shortName(fullName: string): string {
+  return fullName.trim().split(/\s+/).slice(0, 2).join(' ');
 }
 
 function Loading() {

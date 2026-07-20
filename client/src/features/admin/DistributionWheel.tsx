@@ -143,7 +143,7 @@ function Slice({
           fontWeight={600}
           fill={textFill}
         >
-          {truncate(label, 14)}
+          {truncate(label, 18)}
         </text>
       )}
     </g>
