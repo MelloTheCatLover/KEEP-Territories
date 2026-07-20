@@ -27,6 +27,21 @@ export type DistributionTeam = {
   name: string;
   color: string | null;
   member_count: number;
+  color_pick_seq: number | null;
+};
+
+export type ColorPickState = {
+  active: boolean;
+  pending_team_id: string | null;
+  remaining_team_ids: string[];
+  taken_colors: string[];
+  done: boolean;
+};
+
+export type ColorSpinResult = {
+  team_id: string;
+  team_name: string;
+  state: DistributionState;
 };
 
 export type CategoryCount = { total: number; assigned: number };
@@ -42,6 +57,7 @@ export type DistributionState = {
   category_counts: Record<ParticipantCategory, CategoryCount>;
   remaining: number;
   done: boolean;
+  color_pick: ColorPickState;
 };
 
 export type SpinAssignment = {
@@ -79,4 +95,16 @@ export function spinDistribution(batchSize: number): Promise<SpinResult> {
 
 export function resetDistribution(): Promise<DistributionState> {
   return api.post<DistributionState>('/distribution/reset');
+}
+
+export function spinColorPick(): Promise<ColorSpinResult> {
+  return api.post<ColorSpinResult>('/distribution/colors/spin');
+}
+
+export function pickTeamColor(teamId: string, color: string): Promise<DistributionState> {
+  return api.post<DistributionState>(`/distribution/colors/${teamId}`, { color });
+}
+
+export function resetColorPicks(): Promise<DistributionState> {
+  return api.post<DistributionState>('/distribution/colors/reset');
 }

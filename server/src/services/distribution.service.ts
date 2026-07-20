@@ -6,6 +6,8 @@ import { computeOverall } from './trophy.service';
 import {
   CATEGORY_ORDER,
   CategoryCount,
+  ColorPickState,
+  ColorSpinResult,
   DistributionParticipant,
   DistributionState,
   DistributionTeam,
@@ -34,7 +36,7 @@ async function homeBaseCount(q: Queryable, seasonId: string): Promise<number> {
 
 async function listTeams(q: Queryable, seasonId: string): Promise<DistributionTeam[]> {
   const res = await q.query<DistributionTeam>(
-    `SELECT t.id, t.name, t.color,
+    `SELECT t.id, t.name, t.color, t.color_pick_seq,
             (SELECT COUNT(*)::int FROM season_participants sp WHERE sp.team_id = t.id) AS member_count
        FROM teams t
       WHERE t.season_id = $1
@@ -100,6 +102,7 @@ function buildState(
     }
   }
   const remaining = participants.length - assignedTotal;
+  const done = prepared && participants.length > 0 && remaining === 0;
   return {
     season_id: seasonId,
     season_name: name,
@@ -110,7 +113,25 @@ function buildState(
     participants,
     category_counts: counts,
     remaining,
-    done: prepared && participants.length > 0 && remaining === 0,
+    done,
+    color_pick: buildColorPick(teams, done),
+  };
+}
+
+/**
+ * Colour queue derived from the teams themselves: a team drawn but still
+ * colourless holds the turn, teams with neither are still in the wheel.
+ */
+function buildColorPick(teams: DistributionTeam[], distributionDone: boolean): ColorPickState {
+  const pending = teams.find((t) => t.color_pick_seq !== null && t.color === null) ?? null;
+  return {
+    active: distributionDone && teams.length > 0,
+    pending_team_id: pending?.id ?? null,
+    remaining_team_ids: teams
+      .filter((t) => t.color === null && t.color_pick_seq === null)
+      .map((t) => t.id),
+    taken_colors: teams.map((t) => t.color).filter((c): c is string => c !== null),
+    done: teams.length > 0 && teams.every((t) => t.color !== null),
   };
 }
 
@@ -409,6 +430,127 @@ export async function spin(batchSize: number): Promise<SpinResult> {
   } finally {
     client.release();
   }
+}
+
+const HEX_COLOR_REGEX = /^#[0-9A-F]{6}$/;
+
+/**
+ * Draw the next team for the colour queue. Idempotent while a turn is open: if
+ * a team was already drawn and hasn't picked, it is returned again instead of
+ * a second team being pulled in.
+ */
+export async function spinColor(): Promise<ColorSpinResult> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const seasonId = await getActiveSeasonId(client);
+
+    const state = await refresh(client, seasonId);
+    if (!state.color_pick.active) {
+      throw new AppError(400, 'Сначала распределите всех участников по командам');
+    }
+
+    const pendingId = state.color_pick.pending_team_id;
+    if (pendingId) {
+      const pendingTeam = state.teams.find((t) => t.id === pendingId)!;
+      await client.query('COMMIT');
+      return { team_id: pendingTeam.id, team_name: pendingTeam.name, state };
+    }
+
+    const drawRes = await client.query<{ id: string; name: string }>(
+      `SELECT id, name FROM teams
+        WHERE season_id = $1 AND color IS NULL AND color_pick_seq IS NULL
+        ORDER BY random()
+        LIMIT 1
+        FOR UPDATE`,
+      [seasonId],
+    );
+    if (drawRes.rows.length === 0) {
+      throw new AppError(400, 'Все команды уже выбрали цвет');
+    }
+    const team = drawRes.rows[0];
+
+    const seqRes = await client.query<{ next: number }>(
+      `SELECT COALESCE(MAX(color_pick_seq), 0) + 1 AS next FROM teams WHERE season_id = $1`,
+      [seasonId],
+    );
+    await client.query('UPDATE teams SET color_pick_seq = $1 WHERE id = $2', [
+      seqRes.rows[0].next,
+      team.id,
+    ]);
+
+    const next = await refresh(client, seasonId);
+    await client.query('COMMIT');
+    return { team_id: team.id, team_name: team.name, state: next };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Assign the colour the drawn team chose, then close its turn. */
+export async function pickColor(teamId: string, color: string): Promise<DistributionState> {
+  const normalized = color.trim().toUpperCase();
+  if (!HEX_COLOR_REGEX.test(normalized)) {
+    throw new AppError(400, 'Цвет должен быть hex-значением вида #FF5733');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const seasonId = await getActiveSeasonId(client);
+
+    const teamRes = await client.query<{ id: string; color: string | null; color_pick_seq: number | null }>(
+      `SELECT id, color, color_pick_seq FROM teams
+        WHERE id = $1 AND season_id = $2
+        FOR UPDATE`,
+      [teamId, seasonId],
+    );
+    if (teamRes.rows.length === 0) {
+      throw new AppError(404, 'Команда не найдена в активном сезоне');
+    }
+    const team = teamRes.rows[0];
+    if (team.color_pick_seq === null) {
+      throw new AppError(400, 'Очередь этой команды ещё не выпала — сначала крутите колесо');
+    }
+    if (team.color !== null) {
+      throw new AppError(400, 'Команда уже выбрала цвет');
+    }
+
+    const taken = await client.query(
+      'SELECT 1 FROM teams WHERE season_id = $1 AND color = $2',
+      [seasonId, normalized],
+    );
+    if (taken.rows.length > 0) {
+      throw new AppError(409, 'Этот цвет уже занят другой командой');
+    }
+
+    await client.query('UPDATE teams SET color = $1, updated_at = NOW() WHERE id = $2', [
+      normalized,
+      teamId,
+    ]);
+
+    const state = await refresh(client, seasonId);
+    await client.query('COMMIT');
+    return state;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Clear the whole colour queue (colours and turn order) without touching rosters. */
+export async function resetColors(): Promise<DistributionState> {
+  const seasonId = await getActiveSeasonId();
+  await pool.query(
+    'UPDATE teams SET color = NULL, color_pick_seq = NULL, updated_at = NOW() WHERE season_id = $1',
+    [seasonId],
+  );
+  return getState();
 }
 
 export async function reset(): Promise<DistributionState> {

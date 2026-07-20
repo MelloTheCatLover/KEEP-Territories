@@ -19,6 +19,28 @@ export interface DistributionTeam {
   name: string;
   color: string | null;
   member_count: number;
+  /** Order in which the team was drawn to pick a colour; null until drawn. */
+  color_pick_seq: number | null;
+}
+
+/** Colour-pick phase: runs after every participant has a team. */
+export interface ColorPickState {
+  /** Participants are all placed, so the queue may run. */
+  active: boolean;
+  /** Team currently choosing (drawn, colour not set yet). */
+  pending_team_id: string | null;
+  /** Teams still waiting to be drawn. */
+  remaining_team_ids: string[];
+  /** Colours already taken this season — excluded from the next pick. */
+  taken_colors: string[];
+  /** Every team has a colour. */
+  done: boolean;
+}
+
+export interface ColorSpinResult {
+  team_id: string;
+  team_name: string;
+  state: DistributionState;
 }
 
 export interface CategoryCount {
@@ -39,6 +61,7 @@ export interface DistributionState {
   remaining: number;
   /** True when every participant has a team. */
   done: boolean;
+  color_pick: ColorPickState;
 }
 
 export interface SpinAssignment {

@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { DistributionWheel, type WheelItem } from './DistributionWheel';
+import { ColorPickQueue } from './ColorPickQueue';
 import {
   getDistribution, prepareDistribution, resetDistribution,
   setParticipantCategory, spinDistribution,
@@ -169,6 +170,19 @@ export function AdminDistributionPage() {
                 участников: <span className="text-neutral-1000">{state.participants.length}</span>
               </div>
               <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 mr-2">
+                  <Label htmlFor="dur" className="mb-0 whitespace-nowrap">Прокрутка, сек</Label>
+                  <input
+                    id="dur"
+                    type="number"
+                    min={1}
+                    max={15}
+                    value={durationSec}
+                    onChange={(e) => setDurationSec(Math.max(1, Math.min(15, Number(e.target.value) || 1)))}
+                    disabled={spinning}
+                    className="w-16 bg-neutral-200 border border-neutral-400 rounded-sm px-2 py-1.5 text-sm text-neutral-1000"
+                  />
+                </div>
                 <Button variant="secondary" onClick={() => void handlePrepare()} isLoading={preparing}>
                   <span className="flex items-center gap-2"><Sparkles className="w-4 h-4" />
                     {state.prepared ? 'Досоздать команды' : 'Подготовить'}
@@ -213,7 +227,9 @@ export function AdminDistributionPage() {
                   <div className="text-center py-6">
                     <Sparkles className="w-8 h-8 text-brand-400 mx-auto mb-2" />
                     <p className="text-neutral-1000 font-display text-heading-sm">Распределение завершено</p>
-                    <p className="text-sm text-neutral-700 mt-1">Все участники в командах.</p>
+                    <p className="text-sm text-neutral-700 mt-1">
+                      Все участники в командах — дальше команды разбирают цвета.
+                    </p>
                   </div>
                 ) : (
                   <>
@@ -227,19 +243,6 @@ export function AdminDistributionPage() {
                           max={50}
                           value={batchSize}
                           onChange={(e) => setBatchSize(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
-                          disabled={spinning}
-                          className="w-24 bg-neutral-200 border border-neutral-400 rounded-sm px-3 py-2 text-sm text-neutral-1000"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="dur">Время прокрутки, сек</Label>
-                        <input
-                          id="dur"
-                          type="number"
-                          min={1}
-                          max={15}
-                          value={durationSec}
-                          onChange={(e) => setDurationSec(Math.max(1, Math.min(15, Number(e.target.value) || 1)))}
                           disabled={spinning}
                           className="w-24 bg-neutral-200 border border-neutral-400 rounded-sm px-3 py-2 text-sm text-neutral-1000"
                         />
@@ -282,6 +285,15 @@ export function AdminDistributionPage() {
                   </div>
                 )}
               </Card>
+
+              {/* Colour queue — opens once everyone has a team */}
+              {state.color_pick.active && (
+                <ColorPickQueue
+                  state={state}
+                  onState={setState}
+                  durationMs={durationSec * 1000}
+                />
+              )}
 
               {/* Teams */}
               <section>

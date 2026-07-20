@@ -52,3 +52,36 @@ export async function reset(_req: Request, res: Response, next: NextFunction): P
     next(error);
   }
 }
+
+export async function spinColor(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.json(await distributionService.spinColor());
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function pickColor(
+  req: Request<{ teamId: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { color } = req.body ?? {};
+    if (typeof color !== 'string') {
+      res.status(400).json({ error: 'Цвет обязателен' });
+      return;
+    }
+    res.json(await distributionService.pickColor(req.params.teamId, color));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function resetColors(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.json(await distributionService.resetColors());
+  } catch (error) {
+    next(error);
+  }
+}

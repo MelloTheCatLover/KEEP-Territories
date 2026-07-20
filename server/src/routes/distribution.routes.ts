@@ -18,6 +18,17 @@ function validateChildIdParam(
   next();
 }
 
+function validateTeamIdParam(
+  req: Request<{ teamId: string }>,
+  _res: Response,
+  next: NextFunction,
+): void {
+  if (!UUID_REGEX.test(req.params.teamId)) {
+    return next(new AppError(400, 'Invalid ID format'));
+  }
+  next();
+}
+
 const router = Router();
 
 router.use(authenticate, requireAdmin);
@@ -27,5 +38,10 @@ router.post('/prepare', distributionController.prepare);
 router.post('/spin', distributionController.spin);
 router.post('/reset', distributionController.reset);
 router.patch('/participants/:childId', validateChildIdParam, distributionController.setCategory);
+
+// Colour queue — runs once every participant has a team.
+router.post('/colors/spin', distributionController.spinColor);
+router.post('/colors/reset', distributionController.resetColors);
+router.post('/colors/:teamId', validateTeamIdParam, distributionController.pickColor);
 
 export default router;
