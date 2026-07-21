@@ -5,13 +5,38 @@ import { useAuth } from '../auth/AuthContext';
 import { getSectorsMap } from '../map/api';
 import type { Sector } from '../map/types';
 import { HexMap, type TeamInfo } from '../map/HexMap';
-import { computeMapLayout } from '../map/map-layout';
-import { TeamSummaryCard } from '../map/TeamSidePanel';
+import { computeMapLayout, type SlotEntry } from '../map/map-layout';
+import { ProjectorTeamCard } from '../map/TeamSidePanel';
 import { getTeams, getTeam } from '../team/api';
 import type { TeamFullStats } from '../team/types';
 
 /** How often the display refetches the board. */
 const REFRESH_MS = 5000;
+
+// Fixed design canvas. The board is laid out once at these dimensions and then
+// scaled as a whole to the projector's screen, so nothing reflows, wraps or
+// scrolls no matter the resolution (1024x768, 1280x800, 1920x1080 …).
+const CANVAS_W = 1600;
+const CANVAS_H = 900;
+const PAD = 20;
+const GAP = 20;
+const COL_W = 320;
+const FOOTER_H = 26;
+const MAP_BOX_W = CANVAS_W - PAD * 2 - (COL_W + GAP) * 2;
+const MAP_BOX_H = CANVAS_H - PAD * 2 - FOOTER_H;
+
+/** Scale that fits the canvas inside the window, letterboxing the remainder. */
+function useCanvasScale() {
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const update = () =>
+      setScale(Math.min(window.innerWidth / CANVAS_W, window.innerHeight / CANVAS_H));
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+  return scale;
+}
 
 type LoadState =
   | { status: 'loading' }
@@ -29,6 +54,7 @@ export function AdminDisplayPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const [state, setState] = useState<LoadState>({ status: 'loading' });
+  const scale = useCanvasScale();
 
   const fetchBoard = useCallback(async (silent: boolean) => {
     if (!silent) setState({ status: 'loading' });
@@ -85,6 +111,13 @@ export function AdminDisplayPage() {
     [state],
   );
 
+  // Map drawn at its natural aspect, fitted to the fixed map box.
+  const mapSize = useMemo(() => {
+    if (!mapLayout) return null;
+    const k = Math.min(MAP_BOX_W / mapLayout.vbW, MAP_BOX_H / mapLayout.vbH);
+    return { w: mapLayout.vbW * k, h: mapLayout.vbH * k };
+  }, [mapLayout]);
+
   if (!isAdmin) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center text-neutral-700">
@@ -96,80 +129,78 @@ export function AdminDisplayPage() {
     );
   }
 
+  const column = (entries: SlotEntry[]) => (
+    <div className="flex flex-col justify-center gap-3 min-h-0" style={{ width: COL_W }}>
+      {entries.map((entry) => (
+        <div key={entry.team.id} className="flex-1 min-h-0 max-h-[200px]">
+          <ProjectorTeamCard
+            team={entry.team}
+            index={entry.index}
+            pendingCount={pendingByTeam.get(entry.team.id) ?? 0}
+            isLeadershipLeader={
+              maxLeadership > 0 && entry.team.stats.leadership === maxLeadership
+            }
+          />
+        </div>
+      ))}
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-neutral-50 text-neutral-900 flex flex-col">
-      {state.status === 'loading' && (
-        <div className="flex-1 flex items-center justify-center gap-3 text-neutral-700">
-          <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
-          <span>Загрузка карты...</span>
-        </div>
-      )}
-
-      {state.status === 'error' && (
-        <div className="flex-1 flex items-center justify-center text-danger-text">
-          {state.message}
-        </div>
-      )}
-
-      {state.status === 'empty' && (
-        <div className="flex-1 flex items-center justify-center text-neutral-700">
-          Карта не сгенерирована.
-        </div>
-      )}
-
-      {state.status === 'ready' && mapLayout && (
-        <div className="flex-1 p-4 grid gap-4 lg:items-stretch lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)_minmax(240px,320px)]">
-          <div className="hidden gap-3 lg:flex lg:flex-col lg:justify-center">
-            {mapLayout.left.map((entry) => {
-              return (
-                <TeamSummaryCard
-                  key={entry.team.id}
-                  team={entry.team}
-                  index={entry.index}
-                  isOwn={false}
-                  pendingCount={pendingByTeam.get(entry.team.id) ?? 0}
-                  isLeadershipLeader={
-                    maxLeadership > 0 && entry.team.stats.leadership === maxLeadership
-                  }
-                />
-              );
-            })}
+    <div className="fixed inset-0 overflow-hidden bg-neutral-50 text-neutral-900 flex items-center justify-center">
+      <div
+        className="flex flex-col flex-shrink-0"
+        style={{
+          width: CANVAS_W,
+          height: CANVAS_H,
+          padding: PAD,
+          transform: `scale(${scale})`,
+          transformOrigin: 'center center',
+        }}
+      >
+        {state.status === 'loading' && (
+          <div className="flex-1 flex items-center justify-center gap-3 text-neutral-700 text-2xl">
+            <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
+            <span>Загрузка карты...</span>
           </div>
+        )}
 
-          <div
-            className="relative w-full self-center max-h-[92vh]"
-            style={{ aspectRatio: `${mapLayout.vbW} / ${mapLayout.vbH}` }}
-          >
-            <div className="absolute inset-0">
-              <HexMap sectors={state.sectors} teamsById={state.teamsById} />
+        {state.status === 'error' && (
+          <div className="flex-1 flex items-center justify-center text-danger-text text-2xl">
+            {state.message}
+          </div>
+        )}
+
+        {state.status === 'empty' && (
+          <div className="flex-1 flex items-center justify-center text-neutral-700 text-2xl">
+            Карта не сгенерирована.
+          </div>
+        )}
+
+        {state.status === 'ready' && mapLayout && mapSize && (
+          <div className="flex-1 min-h-0 flex items-stretch" style={{ gap: GAP }}>
+            {column(mapLayout.left)}
+
+            <div className="flex-1 min-w-0 flex items-center justify-center">
+              <div className="relative" style={{ width: mapSize.w, height: mapSize.h }}>
+                <HexMap sectors={state.sectors} teamsById={state.teamsById} />
+              </div>
             </div>
-          </div>
 
-          <div className="hidden gap-3 lg:flex lg:flex-col lg:justify-center">
-            {mapLayout.right.map((entry) => {
-              return (
-                <TeamSummaryCard
-                  key={entry.team.id}
-                  team={entry.team}
-                  index={entry.index}
-                  isOwn={false}
-                  pendingCount={pendingByTeam.get(entry.team.id) ?? 0}
-                  isLeadershipLeader={
-                    maxLeadership > 0 && entry.team.stats.leadership === maxLeadership
-                  }
-                />
-              );
-            })}
+            {column(mapLayout.right)}
           </div>
-        </div>
-      )}
+        )}
 
-      {state.status === 'ready' && (
-        <div className="px-4 py-1 text-2xs text-neutral-600 text-right">
-          Обновлено в {state.at.toLocaleTimeString('ru-RU')} · авто-обновление каждые{' '}
-          {REFRESH_MS / 1000} с
-        </div>
-      )}
+        {state.status === 'ready' && (
+          <div
+            className="text-xs text-neutral-600 text-right flex items-end justify-end"
+            style={{ height: FOOTER_H }}
+          >
+            Обновлено в {state.at.toLocaleTimeString('ru-RU')} · авто-обновление каждые{' '}
+            {REFRESH_MS / 1000} с
+          </div>
+        )}
+      </div>
     </div>
   );
 }
