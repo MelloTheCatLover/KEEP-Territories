@@ -101,6 +101,37 @@ export async function transferCaptain(req: Request, res: Response, next: NextFun
   }
 }
 
+export async function adminSetCaptain(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { userId } = req.body;
+    if (!userId || typeof userId !== 'string') {
+      throw new AppError(400, 'userId is required');
+    }
+    if (!UUID_REGEX.test(userId)) {
+      throw new AppError(400, 'Invalid userId format');
+    }
+
+    await teamService.adminSetCaptain(req.params.id, userId);
+    const team = await teamService.getById(req.params.id);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      teamId: team.id,
+      action: 'team.set_captain',
+      entityType: 'team',
+      entityId: team.id,
+      summary: `Назначен новый капитан команды «${team.name}»`,
+      metadata: { new_captain_id: userId, by: 'admin' },
+    });
+    res.status(200).json(team);
+  } catch (error) {
+    next(error);
+  }
+}
+
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function getAll(req: Request, res: Response, next: NextFunction): Promise<void> {

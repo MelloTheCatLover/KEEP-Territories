@@ -346,6 +346,50 @@ export async function transferCaptain(currentUserId: string, newCaptainId: strin
   }
 }
 
+/**
+ * Admin reassigns the captain of a team: promotes `newCaptainId` and demotes the
+ * current captain (if any) to member. Unlike {@link transferCaptain}, the actor
+ * is an admin, not the outgoing captain, so there is no self-transfer guard.
+ */
+export async function adminSetCaptain(teamId: string, newCaptainId: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const target = await client.query<{ team_id: string | null; team_role: string | null }>(
+      'SELECT team_id, team_role FROM users WHERE id = $1',
+      [newCaptainId]
+    );
+    if (target.rows.length === 0) {
+      throw new AppError(404, 'Target user not found');
+    }
+    if (target.rows[0].team_id !== teamId) {
+      throw new AppError(400, 'Target user is not in this team');
+    }
+    if (target.rows[0].team_role === 'captain') {
+      // Already captain — nothing to do, keep it idempotent.
+      await client.query('COMMIT');
+      return;
+    }
+
+    await client.query(
+      `UPDATE users SET team_role = 'member' WHERE team_id = $1 AND team_role = 'captain'`,
+      [teamId]
+    );
+    await client.query(
+      `UPDATE users SET team_role = 'captain' WHERE id = $1`,
+      [newCaptainId]
+    );
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function getAll(seasonId?: string): Promise<Team[]> {
   const sid = seasonId ?? (await getActiveSeasonId());
   const result = await pool.query<Team>(

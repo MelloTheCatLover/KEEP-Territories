@@ -127,6 +127,22 @@ export function MapPage() {
     return set;
   }, [teamId, state]);
 
+  // Compact movement read-out for the acting team: endurance-derived points,
+  // the resulting reach radius, and how many sectors are currently in range.
+  const reachInfo = useMemo(() => {
+    if (!teamId || state.status !== 'ready') return null;
+    const team = state.fullTeams.find((t) => t.id === teamId);
+    if (!team) return null;
+    const move = movementFromEndurance(team.stats.endurance);
+    return {
+      move,
+      reach: 1 + move,
+      endurance: team.stats.endurance,
+      hasAnchor: !!team.anchor,
+      reachable: reachableIds?.size ?? 0,
+    };
+  }, [teamId, state, reachableIds]);
+
   const highlightIds = useMemo(() => {
     if (isObserver) return undefined;
     if (canCreateTeam && state.status === 'ready') {
@@ -328,6 +344,28 @@ export function MapPage() {
                 }
               />
             </div>
+
+            {reachInfo && !canCreateTeam && (
+              <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 rounded-sm border border-neutral-400 bg-neutral-0/80 backdrop-blur-sm px-2.5 py-1.5 text-2xs text-neutral-800 shadow-2 pointer-events-none">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-brand-500">★</span>
+                  <span>
+                    Передвижение <b className="text-neutral-1000 font-mono">{reachInfo.move}</b>
+                    {' · '}дальность <b className="text-neutral-1000 font-mono">{reachInfo.reach}</b>
+                  </span>
+                </span>
+                <span className="text-neutral-700">
+                  {reachInfo.hasAnchor ? (
+                    <>
+                      выносливость {reachInfo.endurance} · в радиусе{' '}
+                      <b className="text-brand-500 font-mono">{reachInfo.reachable}</b> сект.
+                    </>
+                  ) : (
+                    'нет захватов — отсчёт от базы'
+                  )}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="hidden gap-3 lg:order-3 lg:flex lg:flex-col lg:justify-center">
@@ -356,7 +394,7 @@ export function MapPage() {
         </div>
       )}
 
-      {isAdmin && state.status === 'ready' && <TrophySection />}
+      {state.status === 'ready' && <TrophySection />}
 
       {createFor && (
         <CreateTeamModal

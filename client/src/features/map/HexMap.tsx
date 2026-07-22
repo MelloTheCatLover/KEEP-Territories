@@ -17,7 +17,9 @@ export const MAP_HEX_SIZE = HEX_SIZE;
 export const MAP_VIEWBOX_PADDING = VIEWBOX_PADDING;
 const BADGE_RADIUS = 4;
 const CAPTURE_RING_SCALE = 0.92;
-const FORT_SCALES = [0.65, 0.4, 0.2];
+// Fortification is drawn as concentric inset outlines ("walls"), one per level,
+// so the sector number stays readable — no filled hexes covering the centre.
+const FORT_INSETS = [0.78, 0.58, 0.38];
 
 // Pan/zoom: max zoom-in factor relative to the fitted view, and the
 // pointer-travel (in px) above which a gesture counts as a drag, not a tap.
@@ -318,7 +320,9 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds, anchor
         })}
       </g>
 
-      {/* 3) Fortification nested hexes — only on fully captured sectors */}
+      {/* 3) Fortification walls — concentric inset outlines on captured sectors.
+          Each level adds one ring; a dark halo under a light stroke keeps them
+          crisp over any team colour, and the centre stays clear for the number. */}
       <g className="hex-fort-layer" pointerEvents="none">
         {sectors.map((s) => {
           if (s.status !== 'captured') return null;
@@ -328,19 +332,29 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds, anchor
           if (!ownerId) return null;
           const team = teamsById[ownerId];
           const palette = team ? resolveTeamPalette(team) : null;
-          const fillColor = palette ? palette.dark : 'var(--color-neutral-400)';
+          const ringColor = palette ? palette.textOnBase : 'var(--color-neutral-0)';
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
           return (
             <g key={s.id}>
-              {FORT_SCALES.slice(0, fortLevel).map((scale, i) => (
-                <polygon
-                  key={i}
-                  points={hexPoints(x, y, HEX_SIZE * scale)}
-                  fill={fillColor}
-                  stroke="var(--color-neutral-1000)"
-                  strokeWidth={1}
-                  strokeLinejoin="round"
-                />
+              {FORT_INSETS.slice(0, fortLevel).map((scale, i) => (
+                <g key={i}>
+                  <polygon
+                    points={hexPoints(x, y, HEX_SIZE * scale)}
+                    fill="none"
+                    stroke="var(--color-neutral-1000)"
+                    strokeOpacity={0.35}
+                    strokeWidth={3}
+                    strokeLinejoin="round"
+                  />
+                  <polygon
+                    points={hexPoints(x, y, HEX_SIZE * scale)}
+                    fill="none"
+                    stroke={ringColor}
+                    strokeOpacity={0.85}
+                    strokeWidth={1.5}
+                    strokeLinejoin="round"
+                  />
+                </g>
               ))}
             </g>
           );
@@ -396,21 +410,29 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds, anchor
         })}
       </g>
 
-      {/* 5) Reachability pulse — top-most decorative layer */}
+      {/* 5) Reachability — a translucent fill marks where the team can act, with
+          an animated outline on top so the set is obvious, not just a thin ring. */}
       <g className="hex-pulse-layer" pointerEvents="none">
         {sectors.map((s) => {
           if (!highlightIds?.has(s.id)) return null;
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
           return (
-            <polygon
-              key={s.id}
-              className="hex-pulse"
-              points={hexPoints(x, y, HEX_SIZE - PULSE_INSET)}
-              fill="none"
-              stroke="var(--color-brand-300)"
-              strokeWidth={2.5}
-              strokeLinejoin="round"
-            />
+            <g key={s.id}>
+              <polygon
+                points={hexPoints(x, y, HEX_SIZE - 1)}
+                fill="var(--color-brand-400)"
+                fillOpacity={0.28}
+                stroke="none"
+              />
+              <polygon
+                className="hex-pulse"
+                points={hexPoints(x, y, HEX_SIZE - PULSE_INSET)}
+                fill="none"
+                stroke="var(--color-brand-200)"
+                strokeWidth={2.5}
+                strokeLinejoin="round"
+              />
+            </g>
           );
         })}
       </g>

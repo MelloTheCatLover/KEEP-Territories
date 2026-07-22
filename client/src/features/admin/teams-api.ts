@@ -45,6 +45,11 @@ export function adminAssignMember(teamId: string, userId: string): Promise<TeamF
   return api.post<TeamFullStats>(`/teams/${teamId}/members`, { user_id: userId });
 }
 
+/** Promote a team member to captain (demotes the current captain). */
+export function adminSetCaptain(teamId: string, userId: string): Promise<TeamFullStats> {
+  return api.post<TeamFullStats>(`/teams/${teamId}/captain`, { userId });
+}
+
 export function adminSetTeamResources(
   teamId: string,
   payload: { influence?: number; experience?: number; upgrade_points?: number },

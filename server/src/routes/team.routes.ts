@@ -38,5 +38,6 @@ router.patch('/:id', requireAdmin, validateParamId, teamController.adminUpdate);
 router.delete('/:id', requireAdmin, validateParamId, teamController.adminDelete);
 router.post('/:id/members', requireAdmin, validateParamId, teamController.adminAssignMember);
 router.delete('/:id/members/:userId', requireAdmin, validateKickParams, teamController.adminKick);
+router.post('/:id/captain', requireAdmin, validateParamId, teamController.adminSetCaptain);
 
 export default router;

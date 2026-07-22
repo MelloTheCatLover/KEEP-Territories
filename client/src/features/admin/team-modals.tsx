@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, Loader2, Pencil, Sliders, UserMinus, UserPlus, X } from 'lucide-react';
+import { AlertCircle, Crown, Loader2, Pencil, Sliders, UserMinus, UserPlus, X } from 'lucide-react';
 import { Button, ErrorBanner, Input, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { getTeam, getTeams } from '../team/api';
@@ -7,6 +7,7 @@ import {
   adminAssignMember,
   adminDeleteTeam,
   adminKickMember,
+  adminSetCaptain,
   adminSetTeamResources,
   adminSetTeamStats,
   adminUpdateTeam,
@@ -133,6 +134,19 @@ export function TeamManageModal({
     }
   }
 
+  async function handleMakeCaptain(userId: string) {
+    setMemberBusy(userId);
+    setMemberError(null);
+    try {
+      await adminSetCaptain(teamId, userId);
+      await changed();
+    } catch (err) {
+      setMemberError(err instanceof ApiError ? err.message : 'Не удалось назначить капитана');
+    } finally {
+      setMemberBusy(null);
+    }
+  }
+
   const swatch = team?.color ?? 'var(--color-neutral-400)';
 
   return (
@@ -232,6 +246,18 @@ export function TeamManageModal({
                         )}
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0">
+                        {m.team_role !== 'captain' && (
+                          <button
+                            type="button"
+                            onClick={() => void handleMakeCaptain(m.id)}
+                            disabled={memberBusy !== null}
+                            className="text-xs text-brand-300 hover:text-brand-200 flex items-center gap-1 disabled:opacity-50"
+                            title="Сделать капитаном"
+                          >
+                            <Crown className="w-3.5 h-3.5" />
+                            Капитан
+                          </button>
+                        )}
                         {others.length > 0 && (
                           <TeamPickerSelect
                             teams={others}
