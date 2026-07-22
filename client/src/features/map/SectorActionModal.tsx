@@ -364,10 +364,11 @@ export function SectorActionModal({
             />
           )}
 
-          {showActions && actions.length > 0 && checksFromIntelligence(userIntelligence) > 0 && (
+          {showActions && actions.length > 0 && sector.captured_by_team_id !== userTeamId && (
             <PeekPanel
               peek={peek}
               busy={peeking}
+              checksCap={checksFromIntelligence(userIntelligence)}
               onPeek={() => void handlePeek()}
             />
           )}
@@ -509,26 +510,40 @@ function InProgressPanel({
 function PeekPanel({
   peek,
   busy,
+  checksCap,
   onPeek,
 }: {
   peek: { pool: TaskBrief[]; remaining: number } | null;
   busy: boolean;
+  checksCap: number;
   onPeek: () => void;
 }) {
+  const noChecks = checksCap === 0;
   return (
     <div className="border border-neutral-400 rounded-sm p-3 bg-neutral-100">
       <div className="flex items-center justify-between gap-2 mb-2">
         <span className="text-2xs uppercase tracking-wider text-neutral-700">
           Разведка (интеллект)
         </span>
-        <Button variant="secondary" onClick={onPeek} isLoading={busy} disabled={busy} className="text-xs">
+        <Button
+          variant="secondary"
+          onClick={onPeek}
+          isLoading={busy}
+          disabled={busy || noChecks}
+          className="text-xs"
+          title={noChecks ? 'Нужен интеллект (порог 3)' : undefined}
+        >
           <span className="inline-flex items-center gap-1.5">
             <Eye className="w-3.5 h-3.5" />
             {peek ? 'Ещё раз' : 'Показать задания'}
           </span>
         </Button>
       </div>
-      {peek ? (
+      {noChecks ? (
+        <p className="text-xs text-neutral-700">
+          Проверок нет — прокачайте интеллект (порог 3 очка = 1 проверка).
+        </p>
+      ) : peek ? (
         <>
           <ul className="space-y-1 max-h-40 overflow-y-auto">
             {peek.pool.map((t) => (
@@ -541,7 +556,7 @@ function PeekPanel({
         </>
       ) : (
         <p className="text-xs text-neutral-700">
-          Подсмотрите возможные задания сектора, не начиная захват.
+          Подсмотрите возможные задания сектора, не начиная захват. Доступно проверок: {checksCap}.
         </p>
       )}
     </div>

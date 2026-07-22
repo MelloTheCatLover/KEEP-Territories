@@ -239,6 +239,17 @@ export function MapPage() {
               style={{ backgroundColor: state.teamsById[actingTeamId].color ?? undefined }}
             />
           )}
+          {actingTeamId && (() => {
+            const t = state.fullTeams.find((x) => x.id === actingTeamId);
+            if (!t) return null;
+            const reach = 1 + movementFromEndurance(t.stats.endurance);
+            return (
+              <span className="text-2xs text-neutral-700 flex items-center gap-1">
+                <span className="text-brand-500">★</span> отсчёт передвижения от последнего захвата ·
+                дальность {reach} (выносливость {t.stats.endurance})
+              </span>
+            );
+          })()}
         </div>
       )}
 
@@ -310,6 +321,11 @@ export function MapPage() {
                 teamsById={state.teamsById}
                 onSectorClick={!isObserver && (canCreateTeam || teamId || isAdmin) ? handleClick : undefined}
                 highlightIds={highlightIds}
+                anchorId={
+                  teamId
+                    ? state.fullTeams.find((t) => t.id === teamId)?.anchor?.sector_id ?? null
+                    : null
+                }
               />
             </div>
           </div>

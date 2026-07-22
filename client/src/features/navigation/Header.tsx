@@ -8,6 +8,7 @@ const navLinks = [
   { to: '/team', label: 'Команда' },
   { to: '/laws', label: 'Законы' },
   { to: '/seasons', label: 'Смены' },
+  { to: '/docs', label: 'Правила' },
   { to: '/admin', label: 'Админ', adminOnly: true },
 ];
 

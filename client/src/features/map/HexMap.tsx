@@ -60,6 +60,8 @@ type HexMapProps = {
   teamsById: Record<string, TeamInfo>;
   onSectorClick?: (sector: Sector) => void;
   highlightIds?: ReadonlySet<string>;
+  /** Acting team's movement anchor (last captured sector) — marked with a pin. */
+  anchorId?: string | null;
 };
 
 type HexStyle = {
@@ -120,7 +122,7 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
   };
 }
 
-export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexMapProps) {
+export function HexMap({ sectors, teamsById, onSectorClick, highlightIds, anchorId }: HexMapProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const base = useMemo<ViewBox | null>(() => {
@@ -412,6 +414,40 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds }: HexM
           );
         })}
       </g>
+
+      {/* Movement anchor — a pin on the acting team's last captured sector */}
+      {anchorId && (
+        <g className="hex-anchor-layer" pointerEvents="none">
+          {sectors
+            .filter((s) => s.id === anchorId)
+            .map((s) => {
+              const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
+              return (
+                <g key={s.id}>
+                  <circle
+                    cx={x}
+                    cy={y - HEX_SIZE * 0.5}
+                    r={HEX_SIZE * 0.24}
+                    fill="var(--color-brand-500)"
+                    stroke="var(--color-neutral-0)"
+                    strokeWidth={1.5}
+                  />
+                  <text
+                    x={x}
+                    y={y - HEX_SIZE * 0.5 + 3}
+                    textAnchor="middle"
+                    fontSize={9}
+                    fontFamily="var(--font-mono)"
+                    fontWeight={700}
+                    fill="var(--color-neutral-0)"
+                  >
+                    ★
+                  </text>
+                </g>
+              );
+            })}
+        </g>
+      )}
 
       {/* Events overlay — captures click/hover; renders hover outline */}
       <g className="hex-events-layer">
