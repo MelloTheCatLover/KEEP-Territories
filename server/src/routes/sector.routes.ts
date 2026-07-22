@@ -28,6 +28,7 @@ router.post('/:id/special-capture', requireAdmin, validateParamId, sectorControl
 
 // Participants are observers: only admins drive the field. Reads stay open.
 router.post('/:sectorId/action/start', requireAdmin, submissionController.startAction);
+router.post('/:sectorId/peek', requireAdmin, submissionController.peekSector);
 router.get('/:sectorId/submission/current', submissionController.getCurrentForSector);
 
 router.get('/:id/tasks', requireAdmin, validateParamId, sectorController.listSectorTasks);

@@ -17,6 +17,7 @@ router.get('/overview', congressController.getOverview);
 router.get('/laws', congressController.listLaws);
 router.post('/laws', congressController.createLaw);
 router.patch('/laws/:id', validateParamId, congressController.setLawStatus);
+router.post('/laws/:id/veto', validateParamId, congressController.vetoLaw);
 router.patch('/laws/:id/text', validateParamId, congressController.updateLawText);
 router.delete('/laws/:id', validateParamId, congressController.deleteLaw);
 

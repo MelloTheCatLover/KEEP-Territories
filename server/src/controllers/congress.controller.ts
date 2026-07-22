@@ -4,11 +4,14 @@ import * as audit from '../services/audit.service';
 import { AppError } from '../types/errors';
 import { LawStatus } from '../types/congress';
 
+// Veto has its own endpoint (it resolves the acting team server-side), so it is
+// not an accepted value for the plain status setter.
 const VALID_STATUS: LawStatus[] = ['pending', 'accepted', 'rejected'];
 const STATUS_RU: Record<LawStatus, string> = {
   pending: 'на голосовании',
   accepted: 'принят',
   rejected: 'отклонён',
+  vetoed: 'наложено вето',
 };
 
 export async function getOverview(_req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -93,6 +96,28 @@ export async function setLawStatus(
       seasonId: law.season_id,
       summary: `Закон «${law.text.slice(0, 60)}» — ${STATUS_RU[law.status]}`,
       metadata: { status: law.status },
+    });
+    res.status(200).json(law);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function vetoLaw(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { law, teamName } = await congressService.vetoLaw(req.params.id);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'congress.law_veto',
+      entityType: 'congress',
+      entityId: law.id,
+      seasonId: law.season_id,
+      summary: `Вето команды «${teamName}» на закон «${law.text.slice(0, 60)}»`,
+      metadata: { vetoed_by_team_id: law.vetoed_by_team_id },
     });
     res.status(200).json(law);
   } catch (error) {

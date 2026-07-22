@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, Loader2, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react';
+import { Ban, Check, Loader2, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -9,6 +9,7 @@ import {
   getCongressLaws,
   getCongressOverview,
   setCongressLawStatus,
+  vetoCongressLaw,
   updateCongressLawText,
   type CongressLaw,
   type CongressTeam,
@@ -50,12 +51,14 @@ const STATUS_CARD: Record<LawStatus, string> = {
   pending: 'bg-neutral-100 border-neutral-400',
   accepted: 'bg-success-bg border-success',
   rejected: 'bg-danger-bg border-danger',
+  vetoed: 'bg-warning-bg border-warning',
 };
 
 const STATUS_LABEL: Record<LawStatus, { text: string; cls: string }> = {
   pending: { text: 'На голосовании', cls: 'text-neutral-700' },
   accepted: { text: 'Принят', cls: 'text-success-text' },
   rejected: { text: 'Отклонён', cls: 'text-danger-text' },
+  vetoed: { text: 'Вето', cls: 'text-warning-text' },
 };
 
 export function AdminCongressPage() {
@@ -131,6 +134,22 @@ export function AdminCongressPage() {
       setLaws((prev) => prev.map((l) => (l.id === id ? law : l)));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Не удалось обновить закон');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function veto(id: string) {
+    const top = teams[0];
+    const who = top ? `команды «${top.name}»` : 'команды с наибольшим влиянием';
+    if (!confirm(`Наложить вето от лица ${who}? Вето на съезде одно.`)) return;
+    setBusyId(id);
+    setError(null);
+    try {
+      const law = await vetoCongressLaw(id);
+      setLaws((prev) => prev.map((l) => (l.id === id ? law : l)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось наложить вето');
     } finally {
       setBusyId(null);
     }
@@ -332,6 +351,9 @@ export function AdminCongressPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`text-2xs uppercase tracking-wider font-medium ${label.cls}`}>
                           {label.text}
+                          {law.status === 'vetoed' && law.vetoed_by_team_name
+                            ? ` · ${law.vetoed_by_team_name}`
+                            : ''}
                         </span>
                         <div className="flex-1" />
                         <button
@@ -360,6 +382,17 @@ export function AdminCongressPage() {
                             className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-danger text-danger-text hover:bg-danger-bg disabled:opacity-50"
                           >
                             <X className="w-3.5 h-3.5" /> Отклонить
+                          </button>
+                        )}
+                        {law.status !== 'vetoed' && (
+                          <button
+                            type="button"
+                            onClick={() => veto(law.id)}
+                            disabled={busy}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-warning text-warning-text hover:bg-warning-bg disabled:opacity-50"
+                            title="Вето от команды с наибольшим влиянием"
+                          >
+                            <Ban className="w-3.5 h-3.5" /> Вето
                           </button>
                         )}
                         {law.status !== 'pending' && (

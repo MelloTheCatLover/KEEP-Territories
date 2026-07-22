@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Scale, Check } from 'lucide-react';
+import { Loader2, Scale, Check, Ban } from 'lucide-react';
 import { ApiError } from '../../shared/api/client';
 import { getPublicLaws, type CongressLaw } from '../admin/congress-api';
 
@@ -45,18 +45,35 @@ export function LawsPage() {
         <p className="text-sm text-neutral-700">Принятых законов пока нет.</p>
       ) : (
         <div className="grid sm:grid-cols-2 gap-3">
-          {laws.map((law) => (
-            <div
-              key={law.id}
-              className="border border-success bg-success-bg rounded-md p-4"
-            >
-              <div className="inline-flex items-center gap-1.5 text-2xs uppercase tracking-wider font-semibold mb-2 text-success-text">
-                <Check className="w-3.5 h-3.5" />
-                Принят
+          {laws.map((law) => {
+            const vetoed = law.status === 'vetoed';
+            return (
+              <div
+                key={law.id}
+                className={`border rounded-md p-4 ${
+                  vetoed ? 'border-warning bg-warning-bg' : 'border-success bg-success-bg'
+                }`}
+              >
+                <div
+                  className={`inline-flex items-center gap-1.5 text-2xs uppercase tracking-wider font-semibold mb-2 ${
+                    vetoed ? 'text-warning-text' : 'text-success-text'
+                  }`}
+                >
+                  {vetoed ? <Ban className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
+                  {vetoed
+                    ? `Вето${law.vetoed_by_team_name ? ` · ${law.vetoed_by_team_name}` : ''}`
+                    : 'Принят'}
+                </div>
+                <p
+                  className={`text-sm whitespace-pre-wrap break-words ${
+                    vetoed ? 'text-neutral-700 line-through' : 'text-neutral-1000'
+                  }`}
+                >
+                  {law.text}
+                </p>
               </div>
-              <p className="text-sm text-neutral-1000 whitespace-pre-wrap break-words">{law.text}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

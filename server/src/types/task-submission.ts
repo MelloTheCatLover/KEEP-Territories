@@ -17,6 +17,7 @@ export interface TaskSubmission {
   reviewed_at: Date | null;
   created_at: Date;
   updated_at: Date;
+  reroll_count: number;
 }
 
 export interface TaskSubmissionWithDetails extends TaskSubmission {
@@ -41,6 +42,10 @@ export interface TaskSubmissionWithDetails extends TaskSubmission {
     id: string;
     username: string;
   };
+  /** How many rerolls the team has already spent on this submission. */
+  reroll_count: number;
+  /** Reroll cap from the team's luck; remaining = max − reroll_count. */
+  rerolls_max: number;
 }
 
 export interface StartActionDto {

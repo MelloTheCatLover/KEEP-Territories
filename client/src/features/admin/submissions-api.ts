@@ -49,6 +49,8 @@ export type TaskSubmissionWithDetails = {
     id: string;
     username: string;
   };
+  reroll_count: number;
+  rerolls_max: number;
 };
 
 export function getPendingSubmissions(): Promise<TaskSubmissionWithDetails[]> {

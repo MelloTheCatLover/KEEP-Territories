@@ -1,6 +1,6 @@
 import { api } from '../../shared/api/client';
 
-export type LawStatus = 'pending' | 'accepted' | 'rejected';
+export type LawStatus = 'pending' | 'accepted' | 'rejected' | 'vetoed';
 
 export interface CongressLaw {
   id: string;
@@ -9,6 +9,8 @@ export interface CongressLaw {
   status: LawStatus;
   created_at: string;
   decided_at: string | null;
+  vetoed_by_team_id: string | null;
+  vetoed_by_team_name: string | null;
 }
 
 export interface CongressTeam {
@@ -37,6 +39,11 @@ export function createCongressLaw(text: string): Promise<CongressLaw> {
 
 export function setCongressLawStatus(id: string, status: LawStatus): Promise<CongressLaw> {
   return api.patch<CongressLaw>(`/congress/laws/${id}`, { status });
+}
+
+/** Cast the veto — the server assigns it to the top-influence team. */
+export function vetoCongressLaw(id: string): Promise<CongressLaw> {
+  return api.post<CongressLaw>(`/congress/laws/${id}/veto`, {});
 }
 
 export function updateCongressLawText(id: string, text: string): Promise<CongressLaw> {

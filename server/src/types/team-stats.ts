@@ -38,4 +38,6 @@ export interface TeamFullStats {
   members: UserPublic[];
   captured_sectors_count: number;
   purchase_tokens: PurchaseTokens;
+  /** Movement anchor: last captured sector. null only before any capture. */
+  anchor: { sector_id: string; q: number; r: number } | null;
 }

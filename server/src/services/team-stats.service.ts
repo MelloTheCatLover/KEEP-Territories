@@ -91,10 +91,11 @@ export async function getUpgrades(teamId: string): Promise<Record<StatName, numb
 }
 
 export async function getPurchaseTokens(teamId: string): Promise<PurchaseTokens> {
+  // Only unspent tokens count — a spent token is the collected, used item.
   const result = await pool.query<{ merchant_type: MerchantType; count: number }>(
     `SELECT merchant_type, COUNT(*)::int AS count
      FROM team_purchase_tokens
-     WHERE team_id = $1
+     WHERE team_id = $1 AND spent_at IS NULL
      GROUP BY merchant_type`,
     [teamId]
   );
@@ -154,7 +155,7 @@ export async function getFullStats(teamId: string): Promise<TeamFullStats> {
   }
   const team = teamResult.rows[0];
 
-  const [influence, experience, upgrades, upgradeCount, membersResult, capturedResult, upgradeDelta, purchaseTokens] =
+  const [influence, experience, upgrades, upgradeCount, membersResult, capturedResult, upgradeDelta, purchaseTokens, anchorResult] =
     await Promise.all([
       getInfluence(teamId),
       getExperience(teamId),
@@ -171,6 +172,16 @@ export async function getFullStats(teamId: string): Promise<TeamFullStats> {
       ),
       getUpgradePointsDelta(teamId),
       getPurchaseTokens(teamId),
+      // Movement anchor: the most recently captured sector (home base first).
+      pool.query<{ id: string; q: number; r: number }>(
+        `SELECT s.id, s.q, s.r
+           FROM sector_captures sc
+           JOIN sectors s ON s.id = sc.sector_id
+          WHERE sc.team_id = $1
+          ORDER BY sc.captured_at DESC
+          LIMIT 1`,
+        [teamId]
+      ),
     ]);
 
   const level = await calculateLevel(experience);
@@ -188,6 +199,13 @@ export async function getFullStats(teamId: string): Promise<TeamFullStats> {
     members: membersResult.rows,
     captured_sectors_count: capturedResult.rows[0].count,
     purchase_tokens: purchaseTokens,
+    anchor: anchorResult.rows[0]
+      ? {
+          sector_id: anchorResult.rows[0].id,
+          q: anchorResult.rows[0].q,
+          r: anchorResult.rows[0].r,
+        }
+      : null,
   };
 }
 

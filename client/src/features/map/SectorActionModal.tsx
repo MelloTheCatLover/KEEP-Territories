@@ -14,16 +14,25 @@ import { Button, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import type { ActionType, Sector } from './types';
 import { formatSectorLabel } from './types';
-import { startAction, type StartActionResponse } from './api';
+import { Eye } from 'lucide-react';
+import { startAction, peekSector, type StartActionResponse, type TaskBrief } from './api';
 import { resolveEncounter, type EncounterInstance } from '../admin/encounters-api';
 import { TaskWheel } from './TaskWheel';
 import { difficultyColors } from '../../design-system/design-tokens';
+import {
+  penetrationFromStrength,
+  movementFromEndurance,
+  checksFromIntelligence,
+  hexDistance,
+} from './stat-thresholds';
 
 type Props = {
   sector: Sector;
-  allSectors: Sector[];
   userTeamId: string;
   userStrength: number;
+  userEndurance: number;
+  userIntelligence: number;
+  anchor: { q: number; r: number } | null;
   userActiveSectorId: string | null;
   onCancel: () => void;
   onStarted: (submissionId: string) => void;
@@ -39,21 +48,6 @@ type AvailableAction = {
 
 const MAX_FORTIFICATION = 3;
 
-/**
- * Пробитие: сколько уровней укрепления сила позволяет пробить при перехвате.
- * Зеркалит penetrationFromStrength на бэке (submission.service.ts).
- */
-function penetrationFromStrength(strength: number): number {
-  if (strength >= 10) return 3;
-  if (strength >= 8) return 2;
-  if (strength >= 5) return 1;
-  return 0;
-}
-
-const NEIGHBOR_OFFSETS: ReadonlyArray<[number, number]> = [
-  [1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1],
-];
-
 const ACTION_LABELS: Record<ActionType, string> = {
   capture: 'Захват',
   recapture: 'Перехват',
@@ -61,30 +55,31 @@ const ACTION_LABELS: Record<ActionType, string> = {
   remove_fortification: 'Снятие укрепления',
 };
 
-function hasAdjacentOwned(sector: Sector, all: Sector[], teamId: string): boolean {
-  const owned = new Set(
-    all
-      .filter((s) => s.captured_by_team_id === teamId)
-      .map((s) => `${s.q}:${s.r}`),
-  );
-  return NEIGHBOR_OFFSETS.some(([dq, dr]) => owned.has(`${sector.q + dq}:${sector.r + dr}`));
-}
-
 function computeAvailable(
   sector: Sector,
-  all: Sector[],
   teamId: string,
   strength: number,
+  endurance: number,
+  anchor: { q: number; r: number } | null,
 ): { actions: AvailableAction[]; reason: string | null } {
   if (sector.current_action_type !== null) {
     return { actions: [], reason: 'По сектору уже есть заявка на рассмотрении' };
   }
+
+  // Endurance reach from the anchor gates every action (mirrors the server).
+  const reach = 1 + movementFromEndurance(endurance);
+  const dist = anchor ? hexDistance(anchor.q, anchor.r, sector.q, sector.r) : Infinity;
+  const withinReach = dist <= reach;
+  const reachReason = `Сектор вне досягаемости (расстояние ${
+    anchor ? dist : '—'
+  }, дальность ${reach}). Прокачайте выносливость или захватите промежуточные сектора.`;
 
   if (sector.is_home_base) {
     if (sector.captured_by_team_id === teamId) {
       if (sector.fortification_level >= MAX_FORTIFICATION) {
         return { actions: [], reason: 'Домашняя база укреплена до максимума' };
       }
+      if (!withinReach) return { actions: [], reason: reachReason };
       return {
         actions: [
           {
@@ -104,6 +99,7 @@ function computeAvailable(
     if (sector.fortification_level >= MAX_FORTIFICATION) {
       return { actions: [], reason: 'Сектор укреплён до максимума' };
     }
+    if (!withinReach) return { actions: [], reason: reachReason };
     return {
       actions: [
         {
@@ -117,9 +113,8 @@ function computeAvailable(
     };
   }
 
-  const adjacent = hasAdjacentOwned(sector, all, teamId);
-  if (!adjacent) {
-    return { actions: [], reason: 'Сектор не граничит с вашими захваченными' };
+  if (!withinReach) {
+    return { actions: [], reason: reachReason };
   }
 
   if (sector.status === 'free') {
@@ -178,9 +173,11 @@ function emblemColors(slug: Sector['difficulty']['slug']): { bg: string; fg: str
 
 export function SectorActionModal({
   sector,
-  allSectors,
   userTeamId,
   userStrength,
+  userEndurance,
+  userIntelligence,
+  anchor,
   userActiveSectorId,
   onCancel,
   onStarted,
@@ -192,6 +189,21 @@ export function SectorActionModal({
   const [encounter, setEncounter] = useState<EncounterInstance | null>(null);
   const [pendingSubmissionId, setPendingSubmissionId] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
+  const [peeking, setPeeking] = useState(false);
+  const [peek, setPeek] = useState<{ pool: TaskBrief[]; remaining: number } | null>(null);
+
+  async function handlePeek() {
+    setPeeking(true);
+    setError(null);
+    try {
+      const res = await peekSector(sector.id, userTeamId);
+      setPeek({ pool: res.task_pool, remaining: res.checks_remaining });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось разведать сектор');
+    } finally {
+      setPeeking(false);
+    }
+  }
 
   function proceed(result: StartActionResponse) {
     if (result.encounter && result.encounter.status === 'pending') {
@@ -224,8 +236,8 @@ export function SectorActionModal({
     if (hasActiveElsewhere || isThisSectorActive) {
       return { actions: [] as AvailableAction[], reason: null };
     }
-    return computeAvailable(sector, allSectors, userTeamId, userStrength);
-  }, [sector, allSectors, userTeamId, userStrength, hasActiveElsewhere, isThisSectorActive]);
+    return computeAvailable(sector, userTeamId, userStrength, userEndurance, anchor);
+  }, [sector, userTeamId, userStrength, userEndurance, anchor, hasActiveElsewhere, isThisSectorActive]);
 
   const label = sector.is_home_base
     ? 'K'
@@ -349,6 +361,14 @@ export function SectorActionModal({
               actions={actions}
               busy={busy}
               onStart={(type) => void handleStart(type)}
+            />
+          )}
+
+          {showActions && actions.length > 0 && checksFromIntelligence(userIntelligence) > 0 && (
+            <PeekPanel
+              peek={peek}
+              busy={peeking}
+              onPeek={() => void handlePeek()}
             />
           )}
 
@@ -482,6 +502,48 @@ function InProgressPanel({
           </span>
         </Button>
       </div>
+    </div>
+  );
+}
+
+function PeekPanel({
+  peek,
+  busy,
+  onPeek,
+}: {
+  peek: { pool: TaskBrief[]; remaining: number } | null;
+  busy: boolean;
+  onPeek: () => void;
+}) {
+  return (
+    <div className="border border-neutral-400 rounded-sm p-3 bg-neutral-100">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <span className="text-2xs uppercase tracking-wider text-neutral-700">
+          Разведка (интеллект)
+        </span>
+        <Button variant="secondary" onClick={onPeek} isLoading={busy} disabled={busy} className="text-xs">
+          <span className="inline-flex items-center gap-1.5">
+            <Eye className="w-3.5 h-3.5" />
+            {peek ? 'Ещё раз' : 'Показать задания'}
+          </span>
+        </Button>
+      </div>
+      {peek ? (
+        <>
+          <ul className="space-y-1 max-h-40 overflow-y-auto">
+            {peek.pool.map((t) => (
+              <li key={t.id} className="text-sm text-neutral-1000">
+                • {t.title}
+              </li>
+            ))}
+          </ul>
+          <p className="text-2xs text-neutral-700 mt-2">Проверок осталось: {peek.remaining}</p>
+        </>
+      ) : (
+        <p className="text-xs text-neutral-700">
+          Подсмотрите возможные задания сектора, не начиная захват.
+        </p>
+      )}
     </div>
   );
 }

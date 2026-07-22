@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, Loader2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Clock, Dices, Loader2, Trash2 } from 'lucide-react';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
-import { getCurrentSubmission, getSectorById } from './api';
+import { getCurrentSubmission, getSectorById, rerollTask } from './api';
 import type { Sector } from './types';
 import { formatSectorLabel } from './types';
 import type { TaskSubmissionWithDetails } from '../admin/submissions-api';
@@ -116,6 +116,11 @@ export function SectorPage() {
         <SubmissionPanel
           sector={sector}
           submission={submission}
+          onReplace={(next) =>
+            setState((prev) =>
+              prev.status === 'ready' ? { ...prev, submission: next } : prev,
+            )
+          }
           onDropped={() => navigate('/map')}
         />
       )}
@@ -126,13 +131,17 @@ export function SectorPage() {
 function SubmissionPanel({
   sector,
   submission,
+  onReplace,
   onDropped,
 }: {
   sector: Sector;
   submission: TaskSubmissionWithDetails;
+  onReplace: (next: TaskSubmissionWithDetails) => void;
   onDropped: () => void;
 }) {
   const [dropOpen, setDropOpen] = useState(false);
+  const [rerolling, setRerolling] = useState(false);
+  const [rerollError, setRerollError] = useState<string | null>(null);
 
   const sectorLabel = sector.is_home_base
     ? 'K'
@@ -142,6 +151,21 @@ function SubmissionPanel({
 
   const dropInfluence = Math.floor(sector.difficulty.influence_reward / 2);
   const dropExperience = Math.floor(sector.difficulty.experience_reward / 2);
+
+  const rerollsLeft = Math.max(0, submission.rerolls_max - submission.reroll_count);
+
+  async function handleReroll() {
+    setRerolling(true);
+    setRerollError(null);
+    try {
+      const res = await rerollTask(submission.id, submission.team.id);
+      onReplace(res.submission);
+    } catch (err) {
+      setRerollError(err instanceof ApiError ? err.message : 'Не удалось перекрутить');
+    } finally {
+      setRerolling(false);
+    }
+  }
 
   return (
     <Card>
@@ -169,6 +193,28 @@ function SubmissionPanel({
         <p className="text-sm text-neutral-700">
           Задание не назначено. Обратитесь к администратору.
         </p>
+      )}
+
+      {submission.status === 'pending' && submission.task && submission.rerolls_max > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => void handleReroll()}
+            isLoading={rerolling}
+            disabled={rerolling || rerollsLeft === 0}
+            className="text-sm"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <Dices className="w-4 h-4" />
+              Перекрутить задание
+            </span>
+          </Button>
+          <span className="text-xs text-neutral-700">
+            Рероллов осталось: <b className="text-neutral-1000">{rerollsLeft}</b> из{' '}
+            {submission.rerolls_max}
+          </span>
+          {rerollError && <span className="text-xs text-danger-text">{rerollError}</span>}
+        </div>
       )}
 
       {submission.status === 'pending' && (

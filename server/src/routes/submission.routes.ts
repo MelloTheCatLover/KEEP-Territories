@@ -12,5 +12,6 @@ router.get('/pending', requireAdmin, submissionController.listPending);
 router.post('/:id/approve', requireAdmin, validateParamId, submissionController.approve);
 router.post('/:id/reject', requireAdmin, validateParamId, submissionController.reject);
 router.post('/:id/drop', requireAdmin, validateParamId, submissionController.dropPending);
+router.post('/:id/reroll', requireAdmin, validateParamId, submissionController.rerollTask);
 
 export default router;

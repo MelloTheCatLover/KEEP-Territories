@@ -5,6 +5,7 @@ import { getSectorsMap } from './api';
 import type { Sector } from './types';
 import { HexMap, type TeamInfo } from './HexMap';
 import { computeMapLayout } from './map-layout';
+import { movementFromEndurance, hexDistance } from './stat-thresholds';
 import { SectorActionModal } from './SectorActionModal';
 import { SpecialSectorModal } from './SpecialSectorModal';
 import { TeamSummaryCard } from './TeamSidePanel';
@@ -107,22 +108,21 @@ export function MapPage() {
     return found?.id ?? null;
   }, [state, teamId]);
 
+  // Reachability is measured from the acting team's anchor (its last captured
+  // sector), widened by endurance — not from the whole border. This mirrors the
+  // server rule in submission.service.ts (assertWithinReach).
   const reachableIds = useMemo(() => {
     if (!teamId || state.status !== 'ready') return undefined;
-    const owned = new Set<string>();
-    state.sectors.forEach((s) => {
-      if (s.captured_by_team_id === teamId) owned.add(`${s.q}:${s.r}`);
-    });
-    const offsets: Array<[number, number]> = [
-      [1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1],
-    ];
+    const team = state.fullTeams.find((t) => t.id === teamId);
+    const anchor = team?.anchor ?? null;
+    if (!anchor) return new Set<string>();
+    const reach = 1 + movementFromEndurance(team!.stats.endurance);
     const set = new Set<string>();
     state.sectors.forEach((s) => {
       if (s.captured_by_team_id === teamId) return;
       if (s.is_home_base) return;
       if (s.is_special) return;
-      const adjacent = offsets.some(([dq, dr]) => owned.has(`${s.q + dq}:${s.r + dr}`));
-      if (adjacent) set.add(s.id);
+      if (hexDistance(anchor.q, anchor.r, s.q, s.r) <= reach) set.add(s.id);
     });
     return set;
   }, [teamId, state]);
@@ -358,11 +358,17 @@ export function MapPage() {
       {actionFor && teamId && state.status === 'ready' && (
         <SectorActionModal
           sector={actionFor}
-          allSectors={state.sectors}
           userTeamId={teamId}
           userStrength={
             state.fullTeams.find((t) => t.id === teamId)?.stats.strength ?? 0
           }
+          userEndurance={
+            state.fullTeams.find((t) => t.id === teamId)?.stats.endurance ?? 0
+          }
+          userIntelligence={
+            state.fullTeams.find((t) => t.id === teamId)?.stats.intelligence ?? 0
+          }
+          anchor={state.fullTeams.find((t) => t.id === teamId)?.anchor ?? null}
           userActiveSectorId={userActiveSectorId}
           onCancel={() => setActionFor(null)}
           onStarted={(submissionId) => {

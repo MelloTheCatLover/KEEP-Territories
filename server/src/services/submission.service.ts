@@ -12,29 +12,80 @@ import { Sector, SectorActionType } from '../types/sector';
 import { StatName } from '../types/team-stats';
 import * as encounterService from './encounter.service';
 import * as seasonService from './season.service';
+import {
+  penetrationFromStrength,
+  movementFromEndurance,
+  checksFromIntelligence,
+  rerollsFromLuck,
+} from './stat-thresholds';
 
 const MAX_FORTIFICATION = 3;
 
-/**
- * Пробитие (penetration): сколько уровней укрепления команда может пробить
- * при перехвате, не снимая их вручную. Зависит от силы команды.
- *   сила 0–4 → 0 · 5–7 → 1 · 8–9 → 2 · 10+ → 3
- */
-function penetrationFromStrength(strength: number): number {
-  if (strength >= 10) return 3;
-  if (strength >= 8) return 2;
-  if (strength >= 5) return 1;
-  return 0;
-}
-
-async function getTeamStrength(client: PoolClient, teamId: string): Promise<number> {
+async function getTeamStat(
+  client: PoolClient,
+  teamId: string,
+  stat: StatName,
+): Promise<number> {
   const res = await client.query<{ count: number }>(
     `SELECT COUNT(*)::int AS count
        FROM team_stat_upgrades
-      WHERE team_id = $1 AND stat_name = 'strength'`,
-    [teamId],
+      WHERE team_id = $1 AND stat_name = $2`,
+    [teamId, stat],
   );
   return res.rows[0]?.count ?? 0;
+}
+
+/** Axial hex distance between two sectors. */
+function hexDistance(aq: number, ar: number, bq: number, br: number): number {
+  const dq = aq - bq;
+  const dr = ar - br;
+  return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
+}
+
+/**
+ * The team's movement anchor: the sector it captured most recently (its home
+ * base is its first capture, so a fresh team always has one). Reachability is
+ * measured from here, not from the whole border — that is what stops a team
+ * with a huge territory from "teleporting" across it. Endurance widens the
+ * radius; without it the team must capture waypoint sectors ("перевалы") to
+ * walk the anchor toward a distant target.
+ */
+async function getTeamAnchor(
+  client: PoolClient,
+  teamId: string,
+): Promise<{ q: number; r: number } | null> {
+  const res = await client.query<{ q: number; r: number }>(
+    `SELECT s.q, s.r
+       FROM sector_captures sc
+       JOIN sectors s ON s.id = sc.sector_id
+      WHERE sc.team_id = $1
+      ORDER BY sc.captured_at DESC
+      LIMIT 1`,
+    [teamId],
+  );
+  return res.rows[0] ?? null;
+}
+
+/** Whether the sector lies within the team's endurance reach of its anchor. */
+async function assertWithinReach(
+  client: PoolClient,
+  sector: Sector,
+  teamId: string,
+): Promise<void> {
+  const anchor = await getTeamAnchor(client, teamId);
+  if (!anchor) {
+    throw new AppError(400, 'У команды нет захваченных секторов');
+  }
+  const endurance = await getTeamStat(client, teamId, 'endurance');
+  const reach = 1 + movementFromEndurance(endurance);
+  const dist = hexDistance(anchor.q, anchor.r, sector.q, sector.r);
+  if (dist > reach) {
+    throw new AppError(
+      400,
+      `Сектор вне досягаемости (расстояние ${dist}, дальность ${reach}). ` +
+        `Прокачайте выносливость или захватите промежуточные сектора.`,
+    );
+  }
 }
 
 const ACTION_TYPES: ReadonlyArray<SectorActionType> = [
@@ -100,28 +151,6 @@ async function getUserTeamId(client: PoolClient, userId: string): Promise<string
     throw new AppError(403, 'Капитан не может захватывать сектора');
   }
   return res.rows[0].team_id;
-}
-
-const NEIGHBOR_OFFSETS: ReadonlyArray<[number, number]> = [
-  [1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1],
-];
-
-async function hasAdjacentOwnedSector(
-  client: PoolClient,
-  sector: Sector,
-  teamId: string,
-): Promise<boolean> {
-  const pairs = NEIGHBOR_OFFSETS.map(([dq, dr]) => [sector.q + dq, sector.r + dr]);
-  const placeholders = pairs.map((_, i) => `($${i * 2 + 2}, $${i * 2 + 3})`).join(',');
-  const params: Array<string | number> = [teamId];
-  pairs.forEach(([q, r]) => params.push(q, r));
-  const res = await client.query(
-    `SELECT 1 FROM sectors
-     WHERE captured_by_team_id = $1 AND (q, r) IN (${placeholders})
-     LIMIT 1`,
-    params,
-  );
-  return res.rows.length > 0;
 }
 
 async function buildTaskPool(
@@ -229,18 +258,17 @@ export async function startAction(
 
     validateActionForSector(actionType, sector, teamId);
 
-    if (actionType === 'capture' || actionType === 'recapture' || actionType === 'remove_fortification') {
-      const adjacent = await hasAdjacentOwnedSector(client, sector, teamId);
-      if (!adjacent) {
-        throw new AppError(400, 'Сектор не граничит с вашими — действие невозможно');
-      }
-    }
+    // Every action targets a sector on (or next to) the team's territory, so it
+    // must fall within the endurance reach of the team's anchor. This subsumes
+    // the old "must border an owned sector" rule and, for fortify too, forces a
+    // team to walk its anchor over via waypoint captures ("перевалы").
+    await assertWithinReach(client, sector, teamId);
 
     // Перехват укреплённого сектора: команда должна либо снять всё укрепление
     // вручную, либо пробить его силой. Пробитие покрывает fortification_level
     // до уровня, заданного силой (см. penetrationFromStrength).
     if (actionType === 'recapture' && sector.fortification_level > 0) {
-      const strength = await getTeamStrength(client, teamId);
+      const strength = await getTeamStat(client, teamId, 'strength');
       const penetration = penetrationFromStrength(strength);
       if (sector.fortification_level > penetration) {
         throw new AppError(
@@ -351,6 +379,14 @@ const DETAILS_SELECT = `
     sub.reviewed_at,
     sub.created_at,
     sub.updated_at,
+    sub.reroll_count,
+    -- Reroll cap from the team's luck (mirrors rerollsFromLuck).
+    (SELECT CASE
+       WHEN COUNT(*) >= 10 THEN 3
+       WHEN COUNT(*) >= 8 THEN 2
+       WHEN COUNT(*) >= 5 THEN 1
+       ELSE 0 END
+     FROM team_stat_upgrades WHERE team_id = sub.team_id AND stat_name = 'luck') AS rerolls_max,
     t.id AS team_row_id,
     t.name AS team_name,
     t.color AS team_color,
@@ -389,6 +425,8 @@ type DetailsRow = {
   reviewed_at: Date | null;
   created_at: Date;
   updated_at: Date;
+  reroll_count: number;
+  rerolls_max: number;
   team_row_id: string;
   team_name: string;
   team_color: string | null;
@@ -452,6 +490,8 @@ function rowToDetails(row: DetailsRow): TaskSubmissionWithDetails {
       id: row.user_row_id,
       username: row.user_username,
     },
+    reroll_count: row.reroll_count,
+    rerolls_max: row.rerolls_max ?? 0,
   };
 }
 
@@ -533,6 +573,8 @@ async function applyApprovedEffect(
         'INSERT INTO sector_captures (sector_id, team_id) VALUES ($1, $2)',
         [submission.sector_id, submission.team_id],
       );
+      // A capture refreshes the team's scouting budget: clear its peeks.
+      await client.query('DELETE FROM sector_peeks WHERE team_id = $1', [submission.team_id]);
       // A hidden merchant on this sector mints a one-off purchase token for the
       // team. UNIQUE(team_id, sector_id) makes recapture idempotent — no farming.
       const merchantType = (sector as { merchant_type?: string | null }).merchant_type ?? null;
@@ -842,6 +884,162 @@ export async function dropPending(
       level_after: levelAfter,
       removed_stats: removedStats,
     };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export interface RerollResponse {
+  submission: TaskSubmissionWithDetails;
+  task_pool: TaskBrief[];
+  rerolls_remaining: number;
+}
+
+/**
+ * Reroll (удача): swap the assigned task for another from the sector's pool.
+ * Capped by the team's luck; each reroll bumps reroll_count. Admins may reroll
+ * on behalf of the acting team.
+ */
+export async function rerollTask(
+  submissionId: string,
+  userId: string,
+  actingTeamId?: string,
+): Promise<RerollResponse> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const subRes = await client.query<TaskSubmission>(
+      'SELECT * FROM task_submissions WHERE id = $1 FOR UPDATE',
+      [submissionId],
+    );
+    if (subRes.rows.length === 0) {
+      throw new AppError(404, 'Submission not found');
+    }
+    const submission = subRes.rows[0];
+    if (submission.status !== 'pending') {
+      throw new AppError(409, 'Заявка уже обработана — реролл недоступен');
+    }
+
+    const teamId = await resolveActingTeam(client, userId, actingTeamId);
+    if (submission.team_id !== teamId) {
+      throw new AppError(403, 'Это задание не вашей команды');
+    }
+
+    const luck = await getTeamStat(client, teamId, 'luck');
+    const cap = rerollsFromLuck(luck);
+    if (submission.reroll_count >= cap) {
+      throw new AppError(
+        400,
+        cap === 0
+          ? 'Реролл недоступен — нужна удача'
+          : `Рероллы закончились (использовано ${submission.reroll_count} из ${cap})`,
+      );
+    }
+
+    const sectorRes = await client.query<Sector>('SELECT * FROM sectors WHERE id = $1', [
+      submission.sector_id,
+    ]);
+    if (sectorRes.rows.length === 0) {
+      throw new AppError(404, 'Sector not found');
+    }
+    const taskPool = await buildTaskPool(client, sectorRes.rows[0]);
+    if (taskPool.length === 0) {
+      throw new AppError(400, 'У сектора нет заданий для реролла');
+    }
+    // Prefer a task different from the current one when the pool allows.
+    const others = taskPool.filter((t) => t.id !== submission.task_id);
+    const picked = pickRandom(others.length > 0 ? others : taskPool)!;
+
+    await client.query(
+      `UPDATE task_submissions
+          SET task_id = $1, reroll_count = reroll_count + 1, updated_at = NOW()
+        WHERE id = $2`,
+      [picked.id, submissionId],
+    );
+
+    await client.query('COMMIT');
+    const updated = await getById(submissionId);
+    return {
+      submission: updated,
+      task_pool: taskPool,
+      rerolls_remaining: cap - updated.reroll_count,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export interface PeekResponse {
+  task_pool: TaskBrief[];
+  checks_remaining: number;
+}
+
+/**
+ * Check / разведка (интеллект): preview a sector's task pool before committing.
+ * Each distinct peeked sector costs one check; the budget comes from intelligence
+ * and refreshes on capture. Re-peeking an already-scouted sector is free.
+ */
+export async function peekSector(
+  sectorId: string,
+  userId: string,
+  actingTeamId?: string,
+): Promise<PeekResponse> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const teamId = await resolveActingTeam(client, userId, actingTeamId);
+
+    const sectorRes = await client.query<Sector>('SELECT * FROM sectors WHERE id = $1', [sectorId]);
+    if (sectorRes.rows.length === 0) {
+      throw new AppError(404, 'Sector not found');
+    }
+    const sector = sectorRes.rows[0];
+    if (sector.is_special) {
+      throw new AppError(400, 'Особый сектор — разведка недоступна');
+    }
+
+    const intelligence = await getTeamStat(client, teamId, 'intelligence');
+    const cap = checksFromIntelligence(intelligence);
+
+    const already = await client.query<{ id: string }>(
+      'SELECT id FROM sector_peeks WHERE team_id = $1 AND sector_id = $2',
+      [teamId, sectorId],
+    );
+    const usedRes = await client.query<{ count: number }>(
+      'SELECT COUNT(*)::int AS count FROM sector_peeks WHERE team_id = $1',
+      [teamId],
+    );
+    const used = usedRes.rows[0]?.count ?? 0;
+
+    if (already.rows.length === 0) {
+      if (used >= cap) {
+        throw new AppError(
+          400,
+          cap === 0
+            ? 'Разведка недоступна — нужен интеллект'
+            : `Проверки закончились (использовано ${used} из ${cap})`,
+        );
+      }
+      await client.query(
+        `INSERT INTO sector_peeks (team_id, sector_id) VALUES ($1, $2)
+         ON CONFLICT (team_id, sector_id) DO NOTHING`,
+        [teamId, sectorId],
+      );
+    }
+
+    const taskPool = await buildTaskPool(client, sector);
+    await client.query('COMMIT');
+
+    const nowUsed = already.rows.length === 0 ? used + 1 : used;
+    return { task_pool: taskPool, checks_remaining: Math.max(0, cap - nowUsed) };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

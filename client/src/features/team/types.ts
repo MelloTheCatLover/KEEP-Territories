@@ -34,6 +34,7 @@ export type TeamFullStats = {
   members: User[];
   captured_sectors_count: number;
   purchase_tokens: PurchaseTokens;
+  anchor: { sector_id: string; q: number; r: number } | null;
 };
 
 export type CreateTeamPayload = {

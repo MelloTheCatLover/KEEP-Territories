@@ -1,4 +1,4 @@
-export type LawStatus = 'pending' | 'accepted' | 'rejected';
+export type LawStatus = 'pending' | 'accepted' | 'rejected' | 'vetoed';
 
 export interface CongressLaw {
   id: string;
@@ -7,6 +7,8 @@ export interface CongressLaw {
   status: LawStatus;
   created_at: string;
   decided_at: string | null;
+  vetoed_by_team_id: string | null;
+  vetoed_by_team_name: string | null;
 }
 
 export interface CongressTeamInfluence {

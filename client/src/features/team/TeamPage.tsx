@@ -6,7 +6,9 @@ import { useAuth } from '../auth/AuthContext';
 import { getSettings, type GameSetting } from '../admin/settings-api';
 import { getTeamStats, leaveTeam, setTeamIdentity, transferCaptain, upgradeStat } from './api';
 import type { MerchantType, StatName, TeamFullStats } from './types';
-import { teamColors, TEAM_COLOR_ORDER, type TeamColorKey } from '../../design-system/design-tokens';
+import {
+  teamColors, TEAM_COLOR_ORDER, findTeamColorKey, type TeamColorKey,
+} from '../../design-system/design-tokens';
 import type { User } from '../auth/types';
 import { JoinOrCreateView } from './JoinOrCreateView';
 import { TeamsManager } from '../admin/AdminTeamsPage';
@@ -239,6 +241,15 @@ export function TeamPage() {
         />
       )}
 
+      {isCaptain && !needsTeamSetup(data) && (
+        <TeamShadeCard
+          data={data}
+          onSaved={(next) =>
+            setState((prev) => (prev.status === 'ready' ? { ...prev, data: next } : prev))
+          }
+        />
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         {isCaptain && hasOtherMembers && (
           <Button
@@ -364,6 +375,77 @@ export function TeamPage() {
   );
 }
 
+/**
+ * Captain fine-tunes the team's shade. The family is fixed (admin distribution
+ * hands it out, one per team) — only lightness steps within it are offered, so
+ * two teams can never end up looking alike.
+ */
+function TeamShadeCard({
+  data,
+  onSaved,
+}: {
+  data: TeamFullStats;
+  onSaved: (next: TeamFullStats) => void;
+}) {
+  const familyKey = findTeamColorKey(data.color);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!familyKey) return null;
+  const family = teamColors[familyKey];
+  const current = data.color?.toUpperCase();
+
+  async function handlePick(shade: string) {
+    if (busy || shade === current) return;
+    setBusy(shade);
+    setError(null);
+    try {
+      onSaved(await setTeamIdentity({ color: shade }));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось сменить оттенок');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Card>
+      <div className="flex items-start gap-3">
+        <Palette className="w-5 h-5 text-brand-400 flex-shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <h2 className="font-display text-neutral-1000">Оттенок команды</h2>
+          <p className="text-sm text-neutral-700 mb-3">
+            Ваш цвет — {family.label.toLowerCase()}. Выберите оттенок, в котором команда играет на карте.
+          </p>
+
+          {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
+
+          <div className="flex flex-wrap gap-2">
+            {family.shades.map((shade) => {
+              const selected = shade === current;
+              return (
+                <button
+                  key={shade}
+                  type="button"
+                  onClick={() => void handlePick(shade)}
+                  disabled={busy !== null}
+                  className={`w-10 h-10 rounded-full border-2 transition-all disabled:cursor-not-allowed ${
+                    selected ? 'border-neutral-1000 scale-110' : 'border-transparent hover:scale-105'
+                  }`}
+                  style={{ backgroundColor: shade }}
+                  title={shade}
+                  aria-label={`Оттенок ${shade}`}
+                  aria-pressed={selected}
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 /** A team is "unconfigured" after admin distribution: placeholder name or no color. */
 function needsTeamSetup(data: TeamFullStats): boolean {
   return /^Команда\s+\d+$/.test(data.name) || data.color === null;
@@ -450,8 +532,8 @@ function TeamSetupCard({
                       selected ? 'border-neutral-1000 scale-110' : 'border-transparent hover:scale-105'
                     }`}
                     style={{ backgroundColor: c.base }}
-                    title={key}
-                    aria-label={`Цвет ${key}`}
+                    title={c.label}
+                    aria-label={`Цвет ${c.label}`}
                     aria-pressed={selected}
                   />
                 );
@@ -480,10 +562,13 @@ function TokensSection({ tokens }: { tokens: TeamFullStats['purchase_tokens'] })
 
   return (
     <section>
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-2">
         <Ticket className="w-5 h-5 text-brand-400" />
         <h2 className="font-display text-heading-sm text-neutral-1000">Жетоны покупки</h2>
       </div>
+      <p className="text-sm text-warning-text mb-3">
+        Вы наткнулись на персонажа! Подойдите к нему и заберите товар — жетон сгорит после визита.
+      </p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {MERCHANT_ORDER.map((kind) => {
           const meta = MERCHANT_META[kind];

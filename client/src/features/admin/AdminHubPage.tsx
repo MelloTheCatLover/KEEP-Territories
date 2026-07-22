@@ -24,6 +24,7 @@ const SECTIONS: HubSection[] = [
     items: [
       { to: '/map', name: 'Карта' },
       { to: '/admin/congress', name: 'Съезды' },
+      { to: '/admin/merchants', name: 'Персонажи на карте' },
       { to: '/admin/display', name: 'Вывод на проектор', external: true },
       { to: '/admin/timelapse', name: 'Таймлапс', external: true },
     ],

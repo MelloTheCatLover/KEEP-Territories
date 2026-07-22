@@ -59,6 +59,48 @@ export async function getCurrentForSector(
   }
 }
 
+export async function rerollTask(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const teamId = typeof req.body?.team_id === 'string' ? req.body.team_id : undefined;
+    const result = await submissionService.rerollTask(req.params.id, req.user!.userId, teamId);
+    const s = result.submission;
+    await audit.record({
+      actorUserId: req.user!.userId,
+      teamId: s.team.id,
+      action: 'submission.reroll',
+      entityType: 'submission',
+      entityId: s.id,
+      summary: `Команда «${s.team.name}» перекрутила задание (осталось ${result.rerolls_remaining})`,
+      metadata: { reroll_count: s.reroll_count, sector_number: s.sector.number },
+    });
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function peekSector(
+  req: Request<{ sectorId: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const teamId = typeof req.body?.team_id === 'string' ? req.body.team_id : undefined;
+    const result = await submissionService.peekSector(
+      req.params.sectorId,
+      req.user!.userId,
+      teamId,
+    );
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function listPending(
   _req: Request,
   res: Response,

@@ -35,6 +35,28 @@ export function getCurrentSubmission(
   return api.get<TaskSubmissionWithDetails | null>(`/sectors/${sectorId}/submission/current`);
 }
 
+export type RerollResponse = {
+  submission: TaskSubmissionWithDetails;
+  task_pool: TaskBrief[];
+  rerolls_remaining: number;
+};
+
+/** Reroll (удача): swap the assigned task for another from the pool. */
+export function rerollTask(submissionId: string, teamId?: string): Promise<RerollResponse> {
+  return api.post<RerollResponse>(`/submissions/${submissionId}/reroll`, {
+    ...(teamId ? { team_id: teamId } : {}),
+  });
+}
+
+export type PeekResponse = { task_pool: TaskBrief[]; checks_remaining: number };
+
+/** Check / разведка (интеллект): preview a sector's task pool before committing. */
+export function peekSector(sectorId: string, teamId?: string): Promise<PeekResponse> {
+  return api.post<PeekResponse>(`/sectors/${sectorId}/peek`, {
+    ...(teamId ? { team_id: teamId } : {}),
+  });
+}
+
 export type SpecialPlaceAssignment = { team_id: string; place: number };
 export type SpecialCaptureResult = {
   sector: Sector;
