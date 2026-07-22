@@ -22,7 +22,17 @@ import { AdminMerchantsPage } from './features/admin/AdminMerchantsPage';
 import { AdminDisplayPage } from './features/admin/AdminDisplayPage';
 import { TimelapsePage } from './features/admin/TimelapsePage';
 import { LawsPage } from './features/laws/LawsPage';
-import { DocsPage } from './features/docs/DocsPage';
+import { DocsWiki } from './features/docs/DocsWiki';
+import {
+  DocsOverview,
+  DocsTurn,
+  DocsStats,
+  DocsCharacters,
+  DocsCongress,
+  DocsCups,
+  DocsStrategies,
+  DocsGlossary,
+} from './features/docs/DocsSections';
 import { TeamsOverviewPage } from './features/leaderboard/TeamsOverviewPage';
 import { SeasonsPage } from './features/seasons/SeasonsPage';
 import { SeasonViewPage } from './features/seasons/SeasonViewPage';
@@ -55,7 +65,21 @@ export const router = createBrowserRouter([
       { path: '/sectors/:id', element: <SectorPage /> },
       { path: '/team', element: <TeamPage /> },
       { path: '/laws', element: <LawsPage /> },
-      { path: '/docs', element: <DocsPage /> },
+      {
+        path: '/docs',
+        element: <DocsWiki />,
+        children: [
+          { index: true, element: <Navigate to="overview" replace /> },
+          { path: 'overview', element: <DocsOverview /> },
+          { path: 'turn', element: <DocsTurn /> },
+          { path: 'stats', element: <DocsStats /> },
+          { path: 'characters', element: <DocsCharacters /> },
+          { path: 'congress', element: <DocsCongress /> },
+          { path: 'cups', element: <DocsCups /> },
+          { path: 'strategies', element: <DocsStrategies /> },
+          { path: 'glossary', element: <DocsGlossary /> },
+        ],
+      },
       { path: '/profile', element: <ProfilePage /> },
       { path: '/admin', element: <AdminHubPage /> },
       { path: '/admin/map', element: <AdminMapPage /> },
