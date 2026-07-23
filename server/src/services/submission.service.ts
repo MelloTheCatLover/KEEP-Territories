@@ -77,12 +77,13 @@ async function assertWithinReach(
     throw new AppError(400, 'У команды нет захваченных секторов');
   }
   const endurance = await getTeamStat(client, teamId, 'endurance');
-  const reach = 1 + movementFromEndurance(endurance);
+  // Movement points are steps: a sector d hexes from the anchor costs d points.
+  const reach = movementFromEndurance(endurance);
   const dist = hexDistance(anchor.q, anchor.r, sector.q, sector.r);
   if (dist > reach) {
     throw new AppError(
       400,
-      `Сектор вне досягаемости (расстояние ${dist}, дальность ${reach}). ` +
+      `Сектор вне досягаемости (расстояние ${dist}, очков передвижения ${reach}). ` +
         `Прокачайте выносливость или захватите промежуточные сектора.`,
     );
   }

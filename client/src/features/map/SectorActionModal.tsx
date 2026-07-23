@@ -66,13 +66,14 @@ function computeAvailable(
     return { actions: [], reason: 'По сектору уже есть заявка на рассмотрении' };
   }
 
-  // Endurance reach from the anchor gates every action (mirrors the server).
-  const reach = 1 + movementFromEndurance(endurance);
+  // Movement points are steps from the anchor: a sector d hexes away costs d
+  // points. Reachable iff d ≤ points (mirrors the server).
+  const reach = movementFromEndurance(endurance);
   const dist = anchor ? hexDistance(anchor.q, anchor.r, sector.q, sector.r) : Infinity;
   const withinReach = dist <= reach;
   const reachReason = `Сектор вне досягаемости (расстояние ${
     anchor ? dist : '—'
-  }, дальность ${reach}). Прокачайте выносливость или захватите промежуточные сектора.`;
+  }, очков передвижения ${reach}). Прокачайте выносливость или захватите промежуточные сектора.`;
 
   if (sector.is_home_base) {
     if (sector.captured_by_team_id === teamId) {

@@ -187,7 +187,7 @@ export function InfoCard({
 
 /**
  * Hex reachability scheme: the ★ anchor at centre, rings tinted by distance so
- * the "радиус = 1 + очки передвижения" rule is visible at a glance.
+ * the "радиус = очки передвижения" rule is visible at a glance.
  */
 export function HexReachDiagram() {
   const SIZE = 16;
@@ -238,8 +238,9 @@ export function HexReachDiagram() {
         <LegendDot color="rgb(239,68,68)" label="дальность 3" />
       </div>
       <p className="text-2xs text-neutral-600 text-center mt-2">
-        Радиус досягаемости = 1 + очки передвижения. Схема показывает принцип;
-        при выносливости 10 очков передвижения 9 — радиус 10 (см. таблицу).
+        Очки передвижения = число шагов от последнего захвата (★): шаг на
+        соседний сектор — −1 очко. Схема показывает принцип; при выносливости
+        10 очков передвижения 9 — до 9 шагов (см. таблицу).
       </p>
     </div>
   );

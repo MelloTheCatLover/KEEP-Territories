@@ -109,14 +109,14 @@ export function MapPage() {
   }, [state, teamId]);
 
   // Reachability is measured from the acting team's anchor (its last captured
-  // sector), widened by endurance — not from the whole border. This mirrors the
-  // server rule in submission.service.ts (assertWithinReach).
+  // sector): movement points are steps, so a sector d hexes away costs d points
+  // and is reachable iff d ≤ points. Mirrors submission.service assertWithinReach.
   const reachableIds = useMemo(() => {
     if (!teamId || state.status !== 'ready') return undefined;
     const team = state.fullTeams.find((t) => t.id === teamId);
     const anchor = team?.anchor ?? null;
     if (!anchor) return new Set<string>();
-    const reach = 1 + movementFromEndurance(team!.stats.endurance);
+    const reach = movementFromEndurance(team!.stats.endurance);
     const set = new Set<string>();
     state.sectors.forEach((s) => {
       if (s.captured_by_team_id === teamId) return;
@@ -127,8 +127,8 @@ export function MapPage() {
     return set;
   }, [teamId, state]);
 
-  // Compact movement read-out for the acting team: endurance-derived points,
-  // the resulting reach radius, and how many sectors are currently in range.
+  // Compact movement read-out for the acting team: endurance-derived points
+  // (= max steps from the anchor) and how many sectors are currently in range.
   const reachInfo = useMemo(() => {
     if (!teamId || state.status !== 'ready') return null;
     const team = state.fullTeams.find((t) => t.id === teamId);
@@ -136,7 +136,6 @@ export function MapPage() {
     const move = movementFromEndurance(team.stats.endurance);
     return {
       move,
-      reach: 1 + move,
       endurance: team.stats.endurance,
       hasAnchor: !!team.anchor,
       reachable: reachableIds?.size ?? 0,
@@ -258,11 +257,11 @@ export function MapPage() {
           {actingTeamId && (() => {
             const t = state.fullTeams.find((x) => x.id === actingTeamId);
             if (!t) return null;
-            const reach = 1 + movementFromEndurance(t.stats.endurance);
+            const move = movementFromEndurance(t.stats.endurance);
             return (
               <span className="text-2xs text-neutral-700 flex items-center gap-1">
                 <span className="text-brand-500">★</span> отсчёт передвижения от последнего захвата ·
-                дальность {reach} (выносливость {t.stats.endurance})
+                до {move} шагов (выносливость {t.stats.endurance})
               </span>
             );
           })()}
@@ -350,14 +349,13 @@ export function MapPage() {
                 <span className="flex items-center gap-1.5">
                   <span className="text-brand-500">★</span>
                   <span>
-                    Передвижение <b className="text-neutral-1000 font-mono">{reachInfo.move}</b>
-                    {' · '}дальность <b className="text-neutral-1000 font-mono">{reachInfo.reach}</b>
+                    Передвижение <b className="text-neutral-1000 font-mono">{reachInfo.move}</b> шагов
                   </span>
                 </span>
                 <span className="text-neutral-700">
                   {reachInfo.hasAnchor ? (
                     <>
-                      выносливость {reachInfo.endurance} · в радиусе{' '}
+                      выносливость {reachInfo.endurance} · достижимо{' '}
                       <b className="text-brand-500 font-mono">{reachInfo.reachable}</b> сект.
                     </>
                   ) : (
