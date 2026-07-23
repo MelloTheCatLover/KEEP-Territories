@@ -37,23 +37,50 @@ export const colors = {
   info:    { base: '#3B82F6', bg: '#0F1E2A', hover: '#2563EB', text: '#93C5FD' },
 } as const;
 
+/**
+ * Team colours. Hues sit 35-55° apart in OKLCH with lightness picked so each
+ * still reads as its name; the closest pair (зелёный/бирюзовый) is ΔEok 14.7
+ * apart, where the previous palette had pairs at 9.3 (алый/коралловый,
+ * лазурный/индиго) that teams kept confusing on the map.
+ *
+ * `shades` are lightness steps of the same hue — the captain moves the team
+ * within them. Every shade stays nearer to its own base than to any other
+ * family's base (min ΔEok 9.9), so a shade never blurs two teams together.
+ *
+ * Keep in sync with server/src/types/team-palette.ts.
+ */
 export const teamColors = {
-  crimson: { base: '#E53935', bright: '#FF5A52', dark: '#A92723', muted: '#8C2A28', textOnBase: '#F2F4F8' },
-  coral:   { base: '#F06A2C', bright: '#FF8A4C', dark: '#B24E1F', muted: '#924019', textOnBase: '#F2F4F8' },
-  amber:   { base: '#E6B422', bright: '#FFD340', dark: '#A98318', muted: '#8C6D14', textOnBase: '#0D0E11' },
-  emerald: { base: '#2BA84A', bright: '#4CD964', dark: '#1F7C36', muted: '#1A6B30', textOnBase: '#F2F4F8' },
-  cyan:    { base: '#1BB5D4', bright: '#3FD8F5', dark: '#13849B', muted: '#0E6478', textOnBase: '#0D0E11' },
-  azure:   { base: '#2952D9', bright: '#4D78FF', dark: '#1E3DA1', muted: '#17327F', textOnBase: '#F2F4F8' },
-  indigo:  { base: '#6366F1', bright: '#8689FF', dark: '#4A4DB3', muted: '#3A3D99', textOnBase: '#F2F4F8' },
-  magenta: { base: '#D6409F', bright: '#F45EBB', dark: '#9E2F75', muted: '#842863', textOnBase: '#F2F4F8' },
+  crimson:   { base: '#FA3232', bright: '#FC8D81', dark: '#AE1318', muted: '#69221D', textOnBase: '#0D0E11',
+               label: 'Красный',    shades: ['#CA181E', '#E11C22', '#FA3232', '#FB5249', '#FB7267'] },
+  tangerine: { base: '#E98A1E', bright: '#FDBB81', dark: '#A66112', muted: '#6E4926', textOnBase: '#0D0E11',
+               label: 'Оранжевый',  shades: ['#C37317', '#D67F1B', '#E98A1E', '#FC9726', '#FCAD64'] },
+  gold:      { base: '#F0D02A', bright: '#FEE98A', dark: '#B79E1D', muted: '#887A3D', textOnBase: '#0D0E11',
+               label: 'Жёлтый',     shades: ['#D0B323', '#E0C226', '#F0D02A', '#FDDF52', '#FEE98A'] },
+  emerald:   { base: '#24C455', bright: '#2EF16B', dark: '#168C3B', muted: '#2B6035', textOnBase: '#0D0E11',
+               label: 'Зелёный',    shades: ['#1CA446', '#20B44E', '#24C455', '#28D55D', '#2CE665'] },
+  teal:      { base: '#24BBBC', bright: '#2EE5E7', dark: '#168586', muted: '#2B5C5C', textOnBase: '#0D0E11',
+               label: 'Бирюзовый',  shades: ['#1C9C9D', '#20ABAD', '#24BBBC', '#28CBCC', '#2CDBDC'] },
+  azure:     { base: '#2C82F9', bright: '#77ACFB', dark: '#0B53B0', muted: '#183765', textOnBase: '#0D0E11',
+               label: 'Синий',      shades: ['#1066D5', '#1372ED', '#2C82F9', '#4B92FA', '#66A2FA'] },
+  violet:    { base: '#A75FF9', bright: '#C29AFB', dark: '#7A15CA', muted: '#4B2476', textOnBase: '#0D0E11',
+               label: 'Фиолетовый', shades: ['#931CF2', '#9E41F9', '#A75FF9', '#B177FA', '#BB8CFB'] },
+  magenta:   { base: '#F21F9C', bright: '#FC83BC', dark: '#A51269', muted: '#642043', textOnBase: '#0D0E11',
+               label: 'Малиновый',  shades: ['#C6187F', '#DC1B8D', '#F21F9C', '#FB49A8', '#FB6FB4'] },
 } as const;
 
 export type TeamColorKey = keyof typeof teamColors;
 
-/** Ordered for max hue separation — assign to teams in this order. */
+/** Ordered around the hue circle — assign to teams in this order. */
 export const TEAM_COLOR_ORDER: TeamColorKey[] = [
-  'crimson', 'coral', 'amber', 'emerald', 'cyan', 'azure', 'indigo', 'magenta',
+  'crimson', 'tangerine', 'gold', 'emerald', 'teal', 'azure', 'violet', 'magenta',
 ];
+
+/** Family a colour belongs to (base or any of its shades); null if off-palette. */
+export const findTeamColorKey = (color: string | null | undefined): TeamColorKey | null => {
+  if (!color) return null;
+  const hex = color.toUpperCase();
+  return TEAM_COLOR_ORDER.find((k) => (teamColors[k].shades as readonly string[]).includes(hex)) ?? null;
+};
 
 export const difficultyColors = {
   easy:   '#6EE7B7',
@@ -188,14 +215,16 @@ export type TeamColor = {
   textOnBase: string;
 };
 
-/** Resolve a TeamColor entry from a hex value, matching any palette base. */
+/**
+ * Resolve a TeamColor entry from a hex value. A team on a non-base shade still
+ * belongs to its family, but renders from its own hex so the chosen shade shows.
+ */
 export const findTeamColorByHex = (hex: string | null | undefined): TeamColor | null => {
   if (!hex) return null;
   const normalized = hex.toUpperCase();
-  for (const key of TEAM_COLOR_ORDER) {
-    if (teamColors[key].base.toUpperCase() === normalized) return teamColors[key];
-  }
-  return null;
+  const key = findTeamColorKey(normalized);
+  if (!key) return null;
+  return teamColors[key].base === normalized ? teamColors[key] : paletteFromHex(normalized);
 };
 
 function hexToRgb(hex: string): [number, number, number] {
