@@ -233,12 +233,13 @@ export function HexReachDiagram() {
       </svg>
       <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-3 text-xs text-neutral-700">
         <LegendDot color="var(--color-brand-500)" label="★ последний захват" />
-        <LegendDot color="rgb(34,197,94)" label="дальность 1 (выносл. 1–3)" />
-        <LegendDot color="rgb(245,158,11)" label="дальность 2 (выносл. 4–6)" />
-        <LegendDot color="rgb(239,68,68)" label="дальность 3 (выносл. 7–9)" />
+        <LegendDot color="rgb(34,197,94)" label="дальность 1" />
+        <LegendDot color="rgb(245,158,11)" label="дальность 2" />
+        <LegendDot color="rgb(239,68,68)" label="дальность 3" />
       </div>
       <p className="text-2xs text-neutral-600 text-center mt-2">
-        Дальность = 1 + очки передвижения. Радиус 4 — при выносливости 10.
+        Радиус досягаемости = 1 + очки передвижения. Схема показывает принцип;
+        при выносливости 10 очков передвижения 9 — радиус 10 (см. таблицу).
       </p>
     </div>
   );

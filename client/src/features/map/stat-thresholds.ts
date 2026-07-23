@@ -9,9 +9,10 @@ export function penetrationFromStrength(strength: number): number {
 }
 
 export function movementFromEndurance(endurance: number): number {
-  if (endurance >= 10) return 3;
-  if (endurance >= 7) return 2;
-  if (endurance >= 4) return 1;
+  if (endurance >= 10) return 9;
+  if (endurance >= 7) return 7;
+  if (endurance >= 4) return 5;
+  if (endurance >= 1) return 3;
   return 0;
 }
 
