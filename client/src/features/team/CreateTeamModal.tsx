@@ -5,6 +5,7 @@ import { ApiError } from '../../shared/api/client';
 import {
   teamColors,
   TEAM_COLOR_ORDER,
+  findTeamColorKey,
   type TeamColorKey,
 } from '../../design-system/design-tokens';
 import type { Sector } from '../map/types';
@@ -19,12 +20,15 @@ type Props = {
 
 const EMPTY_TAKEN: ReadonlySet<string> = new Set();
 
-function normalizeHex(hex: string): string {
-  return hex.toUpperCase();
-}
-
+/**
+ * A colour is taken when any team already plays in that family — a rival on a
+ * lighter shade of green still owns green.
+ */
 function isTaken(key: TeamColorKey, taken: ReadonlySet<string>): boolean {
-  return taken.has(normalizeHex(teamColors[key].base));
+  for (const color of taken) {
+    if (findTeamColorKey(color) === key) return true;
+  }
+  return false;
 }
 
 export function CreateTeamModal({ sector, takenColors = EMPTY_TAKEN, onCancel, onCreated }: Props) {
@@ -109,7 +113,7 @@ export function CreateTeamModal({ sector, takenColors = EMPTY_TAKEN, onCancel, o
         <div>
           <Label>Цвет команды</Label>
           <p className="text-xs text-neutral-700 mb-2">
-            Выбор один раз — позже не меняется.
+            Цвет закрепляется за командой; капитан позже сможет подобрать его оттенок.
           </p>
           <div className="flex flex-wrap gap-2">
             {TEAM_COLOR_ORDER.map((key) => {
@@ -130,8 +134,8 @@ export function CreateTeamModal({ sector, takenColors = EMPTY_TAKEN, onCancel, o
                       : 'border-transparent hover:scale-105'
                   }`}
                   style={{ backgroundColor: c.base }}
-                  title={taken ? `${key} — занят` : key}
-                  aria-label={taken ? `Цвет ${key} занят` : `Цвет ${key}`}
+                  title={taken ? `${c.label} — занят` : c.label}
+                  aria-label={taken ? `Цвет ${c.label} занят` : `Цвет ${c.label}`}
                   aria-pressed={selected}
                 >
                   {taken && (

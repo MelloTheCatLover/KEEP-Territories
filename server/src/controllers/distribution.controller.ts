@@ -67,12 +67,12 @@ export async function pickColor(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const { color } = req.body ?? {};
-    if (typeof color !== 'string') {
+    const { color_key: colorKey } = req.body ?? {};
+    if (typeof colorKey !== 'string') {
       res.status(400).json({ error: 'Цвет обязателен' });
       return;
     }
-    res.json(await distributionService.pickColor(req.params.teamId, color));
+    res.json(await distributionService.pickColor(req.params.teamId, colorKey));
   } catch (error) {
     next(error);
   }

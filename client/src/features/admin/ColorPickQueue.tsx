@@ -43,11 +43,11 @@ export function ColorPickQueue({ state, onState, durationMs }: Props) {
   }, [teams, queue.remaining_team_ids, pending]);
 
   const available = useMemo(() => {
-    const taken = new Set(queue.taken_colors.map((c) => c.toUpperCase()));
+    const taken = new Set(queue.taken_color_keys);
     return TEAM_COLOR_ORDER
-      .map((key) => ({ key, ...teamColors[key] }))
-      .filter((c) => !taken.has(c.base.toUpperCase()));
-  }, [queue.taken_colors]);
+      .filter((key) => !taken.has(key))
+      .map((key) => ({ key, ...teamColors[key] }));
+  }, [queue.taken_color_keys]);
 
   async function handleSpin() {
     if (spinning) return;
@@ -72,12 +72,12 @@ export function ColorPickQueue({ state, onState, durationMs }: Props) {
     setSpinning(false);
   }
 
-  async function handlePick(color: string) {
+  async function handlePick(colorKey: string) {
     if (!pendingTeam || picking) return;
-    setPicking(color);
+    setPicking(colorKey);
     setError(null);
     try {
-      onState(await pickTeamColor(pendingTeam.id, color));
+      onState(await pickTeamColor(pendingTeam.id, colorKey));
       setWinnerId(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Не удалось выбрать цвет');
@@ -141,7 +141,7 @@ export function ColorPickQueue({ state, onState, durationMs }: Props) {
               <button
                 key={c.key}
                 type="button"
-                onClick={() => void handlePick(c.base)}
+                onClick={() => void handlePick(c.key)}
                 disabled={picking !== null}
                 className="rounded-sm border border-neutral-400 p-3 flex flex-col items-center gap-2
                            transition-transform hover:scale-[1.03] disabled:opacity-50 disabled:hover:scale-100"
@@ -152,8 +152,8 @@ export function ColorPickQueue({ state, onState, durationMs }: Props) {
                   style={{ backgroundColor: c.base }}
                   aria-hidden
                 />
-                <span className="text-xs" style={{ color: c.textOnBase }}>
-                  {picking === c.base ? 'Выбираем…' : c.base}
+                <span className="text-xs text-neutral-1000">
+                  {picking === c.key ? 'Выбираем…' : c.label}
                 </span>
               </button>
             ))}

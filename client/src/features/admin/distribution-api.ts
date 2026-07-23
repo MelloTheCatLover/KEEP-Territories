@@ -34,7 +34,7 @@ export type ColorPickState = {
   active: boolean;
   pending_team_id: string | null;
   remaining_team_ids: string[];
-  taken_colors: string[];
+  taken_color_keys: string[];
   done: boolean;
 };
 
@@ -101,8 +101,8 @@ export function spinColorPick(): Promise<ColorSpinResult> {
   return api.post<ColorSpinResult>('/distribution/colors/spin');
 }
 
-export function pickTeamColor(teamId: string, color: string): Promise<DistributionState> {
-  return api.post<DistributionState>(`/distribution/colors/${teamId}`, { color });
+export function pickTeamColor(teamId: string, colorKey: string): Promise<DistributionState> {
+  return api.post<DistributionState>(`/distribution/colors/${teamId}`, { color_key: colorKey });
 }
 
 export function resetColorPicks(): Promise<DistributionState> {

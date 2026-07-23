@@ -1,6 +1,7 @@
 import { PoolClient } from 'pg';
 import { pool } from '../config/db';
 import { AppError } from '../types/errors';
+import { familyByKey, familyOfColor } from '../types/team-palette';
 import { getActiveSeasonId } from './season.service';
 import { computeOverall } from './trophy.service';
 import {
@@ -130,7 +131,7 @@ function buildColorPick(teams: DistributionTeam[], distributionDone: boolean): C
     remaining_team_ids: teams
       .filter((t) => t.color === null && t.color_pick_seq === null)
       .map((t) => t.id),
-    taken_colors: teams.map((t) => t.color).filter((c): c is string => c !== null),
+    taken_color_keys: takenFamilyKeys(teams),
     done: teams.length > 0 && teams.every((t) => t.color !== null),
   };
 }
@@ -432,7 +433,12 @@ export async function spin(batchSize: number): Promise<SpinResult> {
   }
 }
 
-const HEX_COLOR_REGEX = /^#[0-9A-F]{6}$/;
+/** Colour families already claimed this season — a family belongs to one team. */
+function takenFamilyKeys(teams: DistributionTeam[]): string[] {
+  return teams
+    .map((t) => familyOfColor(t.color)?.key)
+    .filter((k): k is string => k !== undefined);
+}
 
 /**
  * Draw the next team for the colour queue. Idempotent while a turn is open: if
@@ -490,11 +496,14 @@ export async function spinColor(): Promise<ColorSpinResult> {
   }
 }
 
-/** Assign the colour the drawn team chose, then close its turn. */
-export async function pickColor(teamId: string, color: string): Promise<DistributionState> {
-  const normalized = color.trim().toUpperCase();
-  if (!HEX_COLOR_REGEX.test(normalized)) {
-    throw new AppError(400, 'Цвет должен быть hex-значением вида #FF5733');
+/**
+ * Assign the colour the drawn team chose, then close its turn. Teams claim a
+ * whole family, not a single hex — the captain later moves within it.
+ */
+export async function pickColor(teamId: string, colorKey: string): Promise<DistributionState> {
+  const family = familyByKey(colorKey);
+  if (!family) {
+    throw new AppError(400, 'Неизвестный цвет палитры');
   }
 
   const client = await pool.connect();
@@ -519,16 +528,17 @@ export async function pickColor(teamId: string, color: string): Promise<Distribu
       throw new AppError(400, 'Команда уже выбрала цвет');
     }
 
-    const taken = await client.query(
-      'SELECT 1 FROM teams WHERE season_id = $1 AND color = $2',
-      [seasonId, normalized],
+    const others = await client.query<{ color: string | null }>(
+      'SELECT color FROM teams WHERE season_id = $1 AND id <> $2',
+      [seasonId, teamId],
     );
-    if (taken.rows.length > 0) {
+    const claimed = others.rows.some((r) => familyOfColor(r.color)?.key === family.key);
+    if (claimed) {
       throw new AppError(409, 'Этот цвет уже занят другой командой');
     }
 
     await client.query('UPDATE teams SET color = $1, updated_at = NOW() WHERE id = $2', [
-      normalized,
+      family.base,
       teamId,
     ]);
 

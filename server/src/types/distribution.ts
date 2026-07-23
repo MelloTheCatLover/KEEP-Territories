@@ -31,8 +31,8 @@ export interface ColorPickState {
   pending_team_id: string | null;
   /** Teams still waiting to be drawn. */
   remaining_team_ids: string[];
-  /** Colours already taken this season — excluded from the next pick. */
-  taken_colors: string[];
+  /** Colour families already claimed this season — excluded from the next pick. */
+  taken_color_keys: string[];
   /** Every team has a colour. */
   done: boolean;
 }

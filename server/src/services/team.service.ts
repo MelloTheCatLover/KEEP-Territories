@@ -3,6 +3,7 @@ import { pool } from '../config/db';
 import { Team, CreateTeamDto } from '../types/team';
 import { TeamFullStats } from '../types/team-stats';
 import { AppError } from '../types/errors';
+import { familyOfColor } from '../types/team-palette';
 import * as teamStatsService from './team-stats.service';
 import { getActiveSeasonId } from './season.service';
 
@@ -87,11 +88,17 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
     const normalizedColor = normalizeColor(dto.color);
     assertHexColor(normalizedColor);
     if (normalizedColor != null) {
-      const colorCheck = await client.query(
-        'SELECT id FROM teams WHERE color = $1 AND season_id = $2',
-        [normalizedColor, seasonId]
+      // A palette colour is claimed per family: a rival on a lighter shade of
+      // green still owns green, so the whole family is off the table.
+      const wanted = familyOfColor(normalizedColor);
+      const existing = await client.query<{ color: string | null }>(
+        'SELECT color FROM teams WHERE season_id = $1',
+        [seasonId]
       );
-      if (colorCheck.rows.length > 0) {
+      const clash = wanted
+        ? existing.rows.some((r) => familyOfColor(r.color)?.key === wanted.key)
+        : existing.rows.some((r) => r.color === normalizedColor);
+      if (clash) {
         throw new AppError(409, 'This color is already taken by another team');
       }
     }
@@ -472,15 +479,19 @@ export async function adminUpdate(
 }
 
 /**
- * Captain sets their own team's name/color. Used after admin distribution, when
- * teams are created empty ("Команда N", no color) for members to personalize.
+ * Captain sets their own team's name/colour. Used after admin distribution, when
+ * teams are created empty ("Команда N", no colour) for the captain to personalize.
+ *
+ * Colour is constrained to the palette: a team that already holds a family may
+ * only move between that family's shades, so the map never gets two teams whose
+ * colours read the same. A team without a colour yet claims a free family.
  */
 export async function setIdentity(
   userId: string,
   patch: { name?: string; color?: string | null },
 ): Promise<TeamFullStats> {
-  const userRes = await pool.query<{ team_id: string | null }>(
-    'SELECT team_id FROM users WHERE id = $1',
+  const userRes = await pool.query<{ team_id: string | null; team_role: string | null }>(
+    'SELECT team_id, team_role FROM users WHERE id = $1',
     [userId],
   );
   if (userRes.rows.length === 0) {
@@ -490,6 +501,40 @@ export async function setIdentity(
   if (!teamId) {
     throw new AppError(400, 'You are not in a team');
   }
+  if (userRes.rows[0].team_role !== 'captain') {
+    throw new AppError(403, 'Название и цвет команды меняет капитан');
+  }
+
+  if (patch.color != null) {
+    const wanted = familyOfColor(patch.color);
+    if (!wanted) {
+      throw new AppError(400, 'Цвет не из палитры команд');
+    }
+    const teamRes = await pool.query<{ color: string | null; season_id: string }>(
+      'SELECT color, season_id FROM teams WHERE id = $1',
+      [teamId],
+    );
+    if (teamRes.rows.length === 0) {
+      throw new AppError(404, 'Team not found');
+    }
+    const current = familyOfColor(teamRes.rows[0].color);
+    if (current && current.key !== wanted.key) {
+      throw new AppError(
+        400,
+        `Команда играет в цвете «${current.label}» — доступны только его оттенки`,
+      );
+    }
+    if (!current) {
+      const others = await pool.query<{ color: string | null }>(
+        'SELECT color FROM teams WHERE season_id = $1 AND id <> $2',
+        [teamRes.rows[0].season_id, teamId],
+      );
+      if (others.rows.some((r) => familyOfColor(r.color)?.key === wanted.key)) {
+        throw new AppError(409, 'Этот цвет уже занят другой командой');
+      }
+    }
+  }
+
   return applyTeamIdentity(teamId, patch);
 }
 
