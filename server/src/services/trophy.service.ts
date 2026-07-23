@@ -126,7 +126,7 @@ const METRICS_QUERY = `
         SELECT SUM(dl.influence_reward)
           FROM sectors s
           JOIN difficulty_levels dl ON dl.id = s.difficulty_id
-         WHERE s.captured_by_team_id = t.id AND s.is_special = false
+         WHERE s.captured_by_team_id = t.id AND s.is_special = false AND s.no_reward = false
       ), 0)
       + COALESCE((SELECT SUM(influence) FROM special_sector_awards WHERE team_id = t.id), 0)
       - COALESCE((SELECT SUM(influence) FROM team_penalties WHERE team_id = t.id), 0)

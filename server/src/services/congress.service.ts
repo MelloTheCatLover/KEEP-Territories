@@ -13,7 +13,7 @@ export async function getTeamInfluence(): Promise<CongressTeamInfluence[]> {
               COALESCE((SELECT SUM(dl.influence_reward)
                           FROM sectors s
                           JOIN difficulty_levels dl ON dl.id = s.difficulty_id
-                         WHERE s.captured_by_team_id = t.id AND s.is_special = false), 0)
+                         WHERE s.captured_by_team_id = t.id AND s.is_special = false AND s.no_reward = false), 0)
               + COALESCE((SELECT SUM(influence) FROM special_sector_awards WHERE team_id = t.id), 0)
               - COALESCE((SELECT SUM(influence) FROM team_penalties WHERE team_id = t.id), 0)
               + COALESCE((SELECT influence_delta FROM team_adjustments WHERE team_id = t.id), 0)
@@ -146,5 +146,116 @@ export async function deleteLaw(id: string): Promise<void> {
   const res = await pool.query('DELETE FROM congress_laws WHERE id = $1', [id]);
   if (res.rowCount === 0) {
     throw new AppError(404, 'Закон не найден');
+  }
+}
+
+/* ── Special laws: mechanical, admin-triggered events ─────────────────────── */
+
+/**
+ * "Свинский поступок": grant every team of the active season one extra saboteur
+ * (диверсант) purchase token — a floating token not tied to a merchant sector.
+ * NULLs are distinct in Postgres, so UNIQUE(team_id, sector_id) never blocks
+ * these sector-less grants. Returns how many teams received a token.
+ */
+export async function piggishDeed(): Promise<{ teams: number }> {
+  const seasonId = await getActiveSeasonId();
+  const res = await pool.query(
+    `INSERT INTO team_purchase_tokens (team_id, sector_id, merchant_type)
+     SELECT id, NULL, 'saboteur' FROM teams WHERE season_id = $1`,
+    [seasonId],
+  );
+  return { teams: res.rowCount ?? 0 };
+}
+
+export interface EarthquakeAssignment {
+  team_id: string;
+  team_name: string;
+  sector_id: string;
+  sector_number: number | null;
+}
+
+/**
+ * "Землетрясение": scatter up to 8 sectors among the season's teams, one per
+ * team. Eligible sectors are any except the core, home bases, special sectors,
+ * and sectors currently being captured; already-owned sectors are fair game
+ * (the quake redistributes territory), but a team is never handed a sector it
+ * already owns. Assigned sectors are flagged no_reward, so they count only
+ * toward the "rulers" cup — no influence, experience, streak or recaptures.
+ */
+export async function earthquake(): Promise<{ assignments: EarthquakeAssignment[] }> {
+  const seasonId = await getActiveSeasonId();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // One sector per team, so at most 8 sectors move. Random order.
+    const teamsRes = await client.query<{ id: string; name: string }>(
+      `SELECT id, name FROM teams WHERE season_id = $1 ORDER BY random() LIMIT 8`,
+      [seasonId],
+    );
+    const teams = teamsRes.rows;
+    if (teams.length === 0) {
+      throw new AppError(409, 'Нет команд для землетрясения');
+    }
+
+    const sectorsRes = await client.query<{
+      id: string;
+      number: number | null;
+      captured_by_team_id: string | null;
+    }>(
+      `SELECT s.id, s.number, s.captured_by_team_id
+         FROM sectors s
+         JOIN difficulty_levels dl ON dl.id = s.difficulty_id
+        WHERE s.season_id = $1
+          AND dl.slug <> 'core'
+          AND s.is_home_base = false
+          AND s.is_special = false
+          AND s.status <> 'capturing'
+          AND s.capturing_by_team_id IS NULL
+          AND s.current_action_type IS NULL
+        ORDER BY random()`,
+      [seasonId],
+    );
+    const sectors = sectorsRes.rows;
+
+    const used = new Set<string>();
+    const assignments: EarthquakeAssignment[] = [];
+    for (const team of teams) {
+      const sec = sectors.find((s) => !used.has(s.id) && s.captured_by_team_id !== team.id);
+      if (!sec) break;
+      used.add(sec.id);
+      assignments.push({
+        team_id: team.id,
+        team_name: team.name,
+        sector_id: sec.id,
+        sector_number: sec.number,
+      });
+    }
+    if (assignments.length === 0) {
+      throw new AppError(409, 'Нет подходящих секторов для землетрясения');
+    }
+
+    for (const a of assignments) {
+      await client.query(
+        `UPDATE sectors SET
+           status = 'captured',
+           captured_by_team_id = $1,
+           capturing_by_team_id = NULL,
+           capture_started_at = NULL,
+           current_action_type = NULL,
+           fortification_level = 0,
+           no_reward = true
+         WHERE id = $2`,
+        [a.team_id, a.sector_id],
+      );
+    }
+
+    await client.query('COMMIT');
+    return { assignments };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
 }

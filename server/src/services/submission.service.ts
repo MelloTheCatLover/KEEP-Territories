@@ -565,7 +565,8 @@ async function applyApprovedEffect(
            capturing_by_team_id = NULL,
            capture_started_at = NULL,
            current_action_type = NULL,
-           fortification_level = 0
+           fortification_level = 0,
+           no_reward = false
          WHERE id = $2`,
         [submission.team_id, submission.sector_id],
       );

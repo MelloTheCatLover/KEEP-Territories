@@ -144,3 +144,35 @@ export async function deleteLaw(
     next(error);
   }
 }
+
+export async function piggishDeed(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await congressService.piggishDeed();
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'congress.piggish_deed',
+      entityType: 'congress',
+      summary: `Свинский поступок: диверсия каждой из ${result.teams} команд`,
+      metadata: { teams: result.teams },
+    });
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function earthquake(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await congressService.earthquake();
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'congress.earthquake',
+      entityType: 'congress',
+      summary: `Землетрясение: ${result.assignments.length} секторов распределены между командами`,
+      metadata: { count: result.assignments.length },
+    });
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}

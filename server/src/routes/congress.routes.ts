@@ -21,4 +21,8 @@ router.post('/laws/:id/veto', validateParamId, congressController.vetoLaw);
 router.patch('/laws/:id/text', validateParamId, congressController.updateLawText);
 router.delete('/laws/:id', validateParamId, congressController.deleteLaw);
 
+// Special laws — mechanical, admin-triggered game events.
+router.post('/piggish-deed', congressController.piggishDeed);
+router.post('/earthquake', congressController.earthquake);
+
 export default router;

@@ -53,3 +53,20 @@ export function updateCongressLawText(id: string, text: string): Promise<Congres
 export function deleteCongressLaw(id: string): Promise<void> {
   return api.delete<void>(`/congress/laws/${id}`);
 }
+
+/** "Свинский поступок": +1 saboteur (диверсант) token to every team. */
+export function piggishDeed(): Promise<{ teams: number }> {
+  return api.post<{ teams: number }>('/congress/piggish-deed', {});
+}
+
+export interface EarthquakeAssignment {
+  team_id: string;
+  team_name: string;
+  sector_id: string;
+  sector_number: number | null;
+}
+
+/** "Землетрясение": scatter up to 8 sectors among teams (one each). */
+export function earthquake(): Promise<{ assignments: EarthquakeAssignment[] }> {
+  return api.post<{ assignments: EarthquakeAssignment[] }>('/congress/earthquake', {});
+}

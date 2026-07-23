@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Ban, Check, Loader2, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react';
+import { Ban, Check, Loader2, Pencil, PiggyBank, Plus, RotateCcw, Trash2, X, Zap } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -11,6 +11,8 @@ import {
   setCongressLawStatus,
   vetoCongressLaw,
   updateCongressLawText,
+  piggishDeed,
+  earthquake,
   type CongressLaw,
   type CongressTeam,
   type LawStatus,
@@ -80,6 +82,8 @@ export function AdminCongressPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [specialBusy, setSpecialBusy] = useState<null | 'piggish' | 'earthquake'>(null);
+  const [specialMsg, setSpecialMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -190,6 +194,37 @@ export function AdminCongressPage() {
     }
   }
 
+  async function handlePiggish() {
+    setSpecialBusy('piggish');
+    setSpecialMsg(null);
+    setError(null);
+    try {
+      const r = await piggishDeed();
+      setSpecialMsg(`Свинский поступок: +1 диверсия каждой из ${r.teams} команд.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось применить закон');
+    } finally {
+      setSpecialBusy(null);
+    }
+  }
+
+  async function handleEarthquake() {
+    setSpecialBusy('earthquake');
+    setSpecialMsg(null);
+    setError(null);
+    try {
+      const r = await earthquake();
+      setSpecialMsg(
+        `Землетрясение: ${r.assignments.length} секторов распределены между командами.`,
+      );
+      await load(); // ownership changed — refresh influence table
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось применить закон');
+    } finally {
+      setSpecialBusy(null);
+    }
+  }
+
   if (!isAdmin) return <AccessDenied />;
 
   return (
@@ -270,6 +305,58 @@ export function AdminCongressPage() {
                   </tfoot>
                 </table>
               </div>
+            )}
+          </Card>
+
+          <Card className="mb-6">
+            <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Спец-законы</h2>
+            <p className="text-xs text-neutral-700 mb-4">
+              Разовые события борьбы — применяются кнопкой ко всем командам сразу.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="border border-neutral-300 rounded-md p-4 bg-neutral-100">
+                <div className="flex items-center gap-2 mb-1">
+                  <PiggyBank className="w-4 h-4 text-brand-400" />
+                  <span className="font-display text-base text-neutral-1000">Свинский поступок</span>
+                </div>
+                <p className="text-sm text-neutral-700 mb-3">
+                  Каждой команде — по одной диверсии (очко покупки у диверсанта).
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handlePiggish}
+                  disabled={specialBusy !== null}
+                  isLoading={specialBusy === 'piggish'}
+                >
+                  <PiggyBank className="w-4 h-4" />
+                  Применить
+                </Button>
+              </div>
+
+              <div className="border border-neutral-300 rounded-md p-4 bg-neutral-100">
+                <div className="flex items-center gap-2 mb-1">
+                  <Zap className="w-4 h-4 text-brand-400" />
+                  <span className="font-display text-base text-neutral-1000">Землетрясение</span>
+                </div>
+                <p className="text-sm text-neutral-700 mb-3">
+                  До 8 секторов раздаются командам (по одному). Идут только в кубок
+                  «Правители» — без влияния, стрика и перезахватов.
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleEarthquake}
+                  disabled={specialBusy !== null}
+                  isLoading={specialBusy === 'earthquake'}
+                >
+                  <Zap className="w-4 h-4" />
+                  Применить
+                </Button>
+              </div>
+            </div>
+            {specialMsg && (
+              <p className="text-sm text-success-text mt-3">{specialMsg}</p>
             )}
           </Card>
 
