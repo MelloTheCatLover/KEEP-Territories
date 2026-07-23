@@ -4,8 +4,8 @@ import { Sector, SectorPublic } from '../types/sector';
 import { getById } from './sector.service';
 
 /**
- * Fixed reward bundle per final place in a special-sector event. Places beyond
- * 6 do not exist — the form caps at 6 standings.
+ * Fixed reward bundle per final place in a special-sector event. Sized for a
+ * full field of 8 teams — the form caps at 8 standings.
  */
 export const SPECIAL_PLACE_REWARDS: Record<number, { influence: number; experience: number }> = {
   1: { influence: 14, experience: 450 },
@@ -14,9 +14,11 @@ export const SPECIAL_PLACE_REWARDS: Record<number, { influence: number; experien
   4: { influence: 8, experience: 300 },
   5: { influence: 7, experience: 250 },
   6: { influence: 6, experience: 200 },
+  7: { influence: 5, experience: 150 },
+  8: { influence: 4, experience: 100 },
 };
 
-export const MAX_SPECIAL_PLACE = 6;
+export const MAX_SPECIAL_PLACE = 8;
 
 export interface PlaceAssignment {
   team_id: string;

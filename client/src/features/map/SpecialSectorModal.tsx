@@ -22,12 +22,14 @@ const PLACE_REWARDS: Record<number, { influence: number; experience: number }> =
   4: { influence: 8, experience: 300 },
   5: { influence: 7, experience: 250 },
   6: { influence: 6, experience: 200 },
+  7: { influence: 5, experience: 150 },
+  8: { influence: 4, experience: 100 },
 };
 
-const PLACES = [1, 2, 3, 4, 5, 6];
+const PLACES = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export function SpecialSectorModal({ sector, teams, onCancel, onDone }: Props) {
-  // place (1..6) -> teamId ('' = not assigned)
+  // place (1..8) -> teamId ('' = not assigned)
   const [byPlace, setByPlace] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -190,8 +190,8 @@ const METRICS_QUERY = `
          AND action_type = 'recapture'
     ), 0)::int AS recaptures,
     COALESCE((
-      -- "Champions" points: better place = more points (1st→6 … 6th→1).
-      SELECT SUM(7 - ssa.place) FROM special_sector_awards ssa WHERE ssa.team_id = t.id
+      -- "Champions" points: better place = more points (1st→8 … 8th→1).
+      SELECT SUM(9 - ssa.place) FROM special_sector_awards ssa WHERE ssa.team_id = t.id
     ), 0)::int AS special_events
   FROM teams t
   WHERE t.season_id = $1
