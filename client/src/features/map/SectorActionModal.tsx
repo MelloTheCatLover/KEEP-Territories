@@ -33,6 +33,8 @@ type Props = {
   userEndurance: number;
   userIntelligence: number;
   anchor: { q: number; r: number } | null;
+  /** Whether this sector borders the team's captured territory. */
+  bordersTerritory: boolean;
   userActiveSectorId: string | null;
   onCancel: () => void;
   onStarted: (submissionId: string) => void;
@@ -61,6 +63,7 @@ function computeAvailable(
   strength: number,
   endurance: number,
   anchor: { q: number; r: number } | null,
+  bordersTerritory: boolean,
 ): { actions: AvailableAction[]; reason: string | null } {
   if (sector.current_action_type !== null) {
     return { actions: [], reason: 'По сектору уже есть заявка на рассмотрении' };
@@ -74,6 +77,8 @@ function computeAvailable(
   const reachReason = `Сектор вне досягаемости (расстояние ${
     anchor ? dist : '—'
   }, очков передвижения ${reach}). Прокачайте выносливость или захватите промежуточные сектора.`;
+  const borderReason =
+    'Сектор не граничит с вашей территорией — ходить можно только на сектора рядом с захваченными.';
 
   if (sector.is_home_base) {
     if (sector.captured_by_team_id === teamId) {
@@ -116,6 +121,11 @@ function computeAvailable(
 
   if (!withinReach) {
     return { actions: [], reason: reachReason };
+  }
+  // Taking a new sector requires bordering the team's territory (fortifying an
+  // own sector, handled above, does not).
+  if (!bordersTerritory) {
+    return { actions: [], reason: borderReason };
   }
 
   if (sector.status === 'free') {
@@ -179,6 +189,7 @@ export function SectorActionModal({
   userEndurance,
   userIntelligence,
   anchor,
+  bordersTerritory,
   userActiveSectorId,
   onCancel,
   onStarted,
@@ -237,8 +248,8 @@ export function SectorActionModal({
     if (hasActiveElsewhere || isThisSectorActive) {
       return { actions: [] as AvailableAction[], reason: null };
     }
-    return computeAvailable(sector, userTeamId, userStrength, userEndurance, anchor);
-  }, [sector, userTeamId, userStrength, userEndurance, anchor, hasActiveElsewhere, isThisSectorActive]);
+    return computeAvailable(sector, userTeamId, userStrength, userEndurance, anchor, bordersTerritory);
+  }, [sector, userTeamId, userStrength, userEndurance, anchor, bordersTerritory, hasActiveElsewhere, isThisSectorActive]);
 
   const label = sector.is_home_base
     ? 'K'

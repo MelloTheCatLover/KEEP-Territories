@@ -6,6 +6,7 @@ import type { Sector } from './types';
 import { HexMap, type TeamInfo } from './HexMap';
 import { computeMapLayout } from './map-layout';
 import { movementFromEndurance, hexDistance } from './stat-thresholds';
+import { neighbors, axialKey } from './hex-utils';
 import { SectorActionModal } from './SectorActionModal';
 import { SpecialSectorModal } from './SpecialSectorModal';
 import { TeamSummaryCard } from './TeamSidePanel';
@@ -108,9 +109,26 @@ export function MapPage() {
     return found?.id ?? null;
   }, [state, teamId]);
 
-  // Reachability is measured from the acting team's anchor (its last captured
-  // sector): movement points are steps, so a sector d hexes away costs d points
-  // and is reachable iff d ≤ points. Mirrors submission.service assertWithinReach.
+  // Keys of every sector the acting team already holds — a new target must
+  // border one of these (you expand from the frontier, not into empty space).
+  const capturedKeys = useMemo(() => {
+    const keys = new Set<string>();
+    if (!teamId || state.status !== 'ready') return keys;
+    state.sectors.forEach((s) => {
+      if (s.captured_by_team_id === teamId) keys.add(axialKey(s.q, s.r));
+    });
+    return keys;
+  }, [teamId, state]);
+
+  const bordersTerritory = useCallback(
+    (s: { q: number; r: number }) =>
+      neighbors(s.q, s.r).some((n) => capturedKeys.has(axialKey(n.q, n.r))),
+    [capturedKeys],
+  );
+
+  // Reachability: a target must border the team's captured territory AND lie
+  // within the anchor's movement-point radius (steps from the last capture).
+  // Mirrors submission.service assertWithinReach.
   const reachableIds = useMemo(() => {
     if (!teamId || state.status !== 'ready') return undefined;
     const team = state.fullTeams.find((t) => t.id === teamId);
@@ -122,10 +140,12 @@ export function MapPage() {
       if (s.captured_by_team_id === teamId) return;
       if (s.is_home_base) return;
       if (s.is_special) return;
-      if (hexDistance(anchor.q, anchor.r, s.q, s.r) <= reach) set.add(s.id);
+      if (hexDistance(anchor.q, anchor.r, s.q, s.r) > reach) return;
+      if (!bordersTerritory(s)) return;
+      set.add(s.id);
     });
     return set;
-  }, [teamId, state]);
+  }, [teamId, state, bordersTerritory]);
 
   // Compact movement read-out for the acting team: endurance-derived points
   // (= max steps from the anchor) and how many sectors are currently in range.
@@ -421,6 +441,7 @@ export function MapPage() {
             state.fullTeams.find((t) => t.id === teamId)?.stats.intelligence ?? 0
           }
           anchor={state.fullTeams.find((t) => t.id === teamId)?.anchor ?? null}
+          bordersTerritory={bordersTerritory(actionFor)}
           userActiveSectorId={userActiveSectorId}
           onCancel={() => setActionFor(null)}
           onStarted={(submissionId) => {

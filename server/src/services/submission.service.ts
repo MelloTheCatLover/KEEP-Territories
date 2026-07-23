@@ -42,6 +42,26 @@ function hexDistance(aq: number, ar: number, bq: number, br: number): number {
   return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
 }
 
+/** The six axial neighbour offsets (mirror of client hex-utils). */
+const AXIAL_NEIGHBORS: ReadonlyArray<{ q: number; r: number }> = [
+  { q: 1, r: 0 }, { q: -1, r: 0 }, { q: 0, r: 1 },
+  { q: 0, r: -1 }, { q: 1, r: -1 }, { q: -1, r: 1 },
+];
+
+/** Whether the sector borders at least one sector the team already holds. */
+async function bordersOwnTerritory(
+  client: PoolClient,
+  sector: Sector,
+  teamId: string,
+): Promise<boolean> {
+  const captured = await client.query<{ q: number; r: number }>(
+    'SELECT q, r FROM sectors WHERE captured_by_team_id = $1',
+    [teamId],
+  );
+  const keys = new Set(captured.rows.map((c) => `${c.q},${c.r}`));
+  return AXIAL_NEIGHBORS.some((d) => keys.has(`${sector.q + d.q},${sector.r + d.r}`));
+}
+
 /**
  * The team's movement anchor: the sector it captured most recently (its home
  * base is its first capture, so a fresh team always has one). Reachability is
@@ -86,6 +106,18 @@ async function assertWithinReach(
       `Сектор вне досягаемости (расстояние ${dist}, очков передвижения ${reach}). ` +
         `Прокачайте выносливость или захватите промежуточные сектора.`,
     );
+  }
+
+  // Taking a new sector (not fortifying an owned one): it must border the team's
+  // captured territory — expansion goes one step out from the frontier, never a
+  // jump into empty space that merely sits within the anchor radius.
+  if (sector.captured_by_team_id !== teamId) {
+    if (!(await bordersOwnTerritory(client, sector, teamId))) {
+      throw new AppError(
+        400,
+        'Сектор не граничит с вашей территорией — ходить можно только на сектора рядом с захваченными.',
+      );
+    }
   }
 }
 
