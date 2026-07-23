@@ -85,7 +85,7 @@ export function Header() {
       </Link>
 
       {/* Desktop nav */}
-      <nav className="hidden md:flex items-center gap-1">
+      <nav className="hidden lg:flex items-center gap-1">
         {links.map((link) => (
           <NavLink key={link.to} to={link.to} className={navLinkClass}>
             {link.label}
@@ -94,7 +94,7 @@ export function Header() {
       </nav>
 
       {/* Desktop user menu */}
-      <div ref={wrapperRef} className="relative hidden md:block">
+      <div ref={wrapperRef} className="relative hidden lg:block">
         <button
           onClick={() => setOpen((prev) => !prev)}
           className="flex items-center gap-2 px-2 py-1 rounded-sm hover:bg-neutral-200 transition-colors"
@@ -133,7 +133,7 @@ export function Header() {
       </div>
 
       {/* Mobile hamburger */}
-      <div ref={mobileRef} className="relative md:hidden">
+      <div ref={mobileRef} className="relative lg:hidden">
         <button
           onClick={() => setMobileOpen((prev) => !prev)}
           aria-label="Меню"
