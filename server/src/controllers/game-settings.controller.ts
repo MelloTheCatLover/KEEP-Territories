@@ -3,7 +3,12 @@ import * as gameSettingsService from '../services/game-settings.service';
 import { GameSettingKey } from '../types/game-settings';
 import { AppError } from '../types/errors';
 
-const VALID_KEYS: GameSettingKey[] = ['base_exp_threshold', 'exp_step', 'max_fortification_level'];
+const VALID_KEYS: GameSettingKey[] = [
+  'base_exp_threshold',
+  'exp_step',
+  'max_fortification_level',
+  'reward_multiplier',
+];
 
 export async function getAll(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -28,6 +33,16 @@ export async function update(req: Request, res: Response, next: NextFunction): P
     await gameSettingsService.set(key as GameSettingKey, value.trim());
     const settings = await gameSettingsService.getAll();
     res.status(200).json(settings);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function setRewardBoost(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const enabled = req.body?.enabled === true;
+    const result = await gameSettingsService.setRewardBoost(enabled);
+    res.status(200).json(result);
   } catch (error) {
     next(error);
   }

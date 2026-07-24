@@ -10,7 +10,7 @@ export async function getTeamInfluence(): Promise<CongressTeamInfluence[]> {
     `SELECT t.id, t.name, t.color,
             GREATEST(
               0,
-              COALESCE((SELECT SUM(dl.influence_reward)
+              COALESCE((SELECT ROUND(SUM(dl.influence_reward * s.reward_multiplier))
                           FROM sectors s
                           JOIN difficulty_levels dl ON dl.id = s.difficulty_id
                          WHERE s.captured_by_team_id = t.id AND s.is_special = false AND s.no_reward = false), 0)

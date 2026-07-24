@@ -5,4 +5,8 @@ export interface GameSettings {
 }
 
 // Типизированные ключи
-export type GameSettingKey = 'base_exp_threshold' | 'exp_step' | 'max_fortification_level';
+export type GameSettingKey =
+  | 'base_exp_threshold'
+  | 'exp_step'
+  | 'max_fortification_level'
+  | 'reward_multiplier';

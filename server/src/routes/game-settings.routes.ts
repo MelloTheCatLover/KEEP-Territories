@@ -9,5 +9,6 @@ router.use(authenticate);
 
 router.get('/', gameSettingsController.getAll);
 router.put('/', requireAdmin, gameSettingsController.update);
+router.put('/reward-boost', requireAdmin, gameSettingsController.setRewardBoost);
 
 export default router;

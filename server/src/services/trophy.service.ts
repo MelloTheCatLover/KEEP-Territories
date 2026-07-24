@@ -123,7 +123,7 @@ const METRICS_QUERY = `
     GREATEST(
       0,
       COALESCE((
-        SELECT SUM(dl.influence_reward)
+        SELECT ROUND(SUM(dl.influence_reward * s.reward_multiplier))
           FROM sectors s
           JOIN difficulty_levels dl ON dl.id = s.difficulty_id
          WHERE s.captured_by_team_id = t.id AND s.is_special = false AND s.no_reward = false
@@ -135,7 +135,7 @@ const METRICS_QUERY = `
     GREATEST(
       0,
       COALESCE((
-        SELECT SUM(dl.experience_reward)
+        SELECT ROUND(SUM(dl.experience_reward * s.reward_multiplier))
           FROM sector_captures sc
           JOIN sectors s ON sc.sector_id = s.id
           JOIN difficulty_levels dl ON dl.id = s.difficulty_id

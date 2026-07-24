@@ -9,7 +9,7 @@ export async function getInfluence(teamId: string): Promise<number> {
   const result = await pool.query<{ influence: number }>(
     `SELECT GREATEST(
        0,
-       (SELECT COALESCE(SUM(dl.influence_reward), 0)
+       (SELECT COALESCE(ROUND(SUM(dl.influence_reward * s.reward_multiplier)), 0)
           FROM sectors s
           JOIN difficulty_levels dl ON s.difficulty_id = dl.id
          WHERE s.captured_by_team_id = $1 AND s.is_special = false AND s.no_reward = false)
@@ -26,7 +26,7 @@ export async function getExperience(teamId: string): Promise<number> {
   const result = await pool.query<{ experience: number }>(
     `SELECT GREATEST(
        0,
-       (SELECT COALESCE(SUM(dl.experience_reward), 0)
+       (SELECT COALESCE(ROUND(SUM(dl.experience_reward * s.reward_multiplier)), 0)
           FROM sector_captures sc
           JOIN sectors s ON sc.sector_id = s.id
           JOIN difficulty_levels dl ON dl.id = s.difficulty_id

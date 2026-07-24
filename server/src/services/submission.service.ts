@@ -601,7 +601,10 @@ async function applyApprovedEffect(
            capture_started_at = NULL,
            current_action_type = NULL,
            fortification_level = 0,
-           no_reward = false
+           no_reward = false,
+           reward_multiplier = COALESCE(
+             (SELECT value::numeric FROM game_settings WHERE key = 'reward_multiplier'), 1
+           )
          WHERE id = $2`,
         [submission.team_id, submission.sector_id],
       );

@@ -5,6 +5,7 @@ import { getSectorsMap } from './api';
 import type { Sector, DifficultySlug, SectorStatus } from './types';
 import { HexMap, type TeamInfo, type MerchantMarker, MERCHANT_MARK } from './HexMap';
 import { getMerchantSectors, type MerchantSector } from '../admin/merchant-api';
+import { getSettings, setRewardBoost as apiSetRewardBoost } from '../admin/settings-api';
 import { computeMapLayout } from './map-layout';
 import { movementFromEndurance, hexDistance } from './stat-thresholds';
 import { neighbors, axialKey } from './hex-utils';
@@ -46,6 +47,8 @@ export function MapPage() {
   const [fltDifficulty, setFltDifficulty] = useState<'' | DifficultySlug>('');
   const [fltStatus, setFltStatus] = useState<'' | SectorStatus>('');
   const [fltTeam, setFltTeam] = useState<string>('');
+  const [rewardBoost, setRewardBoost] = useState(false);
+  const [rewardBusy, setRewardBusy] = useState(false);
 
   const fetchMap = useCallback(async (silent: boolean) => {
     // Silent refresh (e.g. after a queue decision) keeps the current map on
@@ -185,6 +188,36 @@ export function MapPage() {
       cancelled = true;
     };
   }, [isAdmin, showMerchants]);
+
+  // Reflect the current reward-multiplier flag for admins.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    getSettings()
+      .then((list) => {
+        if (cancelled) return;
+        const s = list.find((x) => x.key === 'reward_multiplier');
+        if (s) setRewardBoost(parseFloat(s.value) > 1);
+      })
+      .catch(() => {
+        /* optional — ignore */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
+
+  const toggleRewardBoost = useCallback(async (next: boolean) => {
+    setRewardBusy(true);
+    try {
+      await apiSetRewardBoost(next);
+      setRewardBoost(next);
+    } catch {
+      /* leave the toggle as-is on failure */
+    } finally {
+      setRewardBusy(false);
+    }
+  }, []);
 
   const merchantMarkers = useMemo<MerchantMarker[] | undefined>(() => {
     if (!isAdmin || !showMerchants) return undefined;
@@ -480,6 +513,22 @@ export function MapPage() {
                         ))}
                       </div>
                     )}
+
+                    <div className="border-t border-neutral-300 pt-2">
+                      <label className="flex items-center justify-between gap-2 cursor-pointer">
+                        <span className="text-neutral-800">Награда ×1.5 (влияние/опыт)</span>
+                        <input
+                          type="checkbox"
+                          checked={rewardBoost}
+                          disabled={rewardBusy}
+                          onChange={(e) => void toggleRewardBoost(e.target.checked)}
+                          className="accent-brand-500"
+                        />
+                      </label>
+                      <p className="text-2xs text-neutral-600 mt-1">
+                        Действует на сектора, захваченные при включённом флаге.
+                      </p>
+                    </div>
 
                     <div className="border-t border-neutral-300 pt-2 space-y-2">
                       <AdminFilterRow label="Сложность">
