@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Loader2, MapPin, Users } from 'lucide-react';
+import { Loader2, MapPin, Users, SlidersHorizontal, ChevronDown } from 'lucide-react';
 import { getSectorsMap } from './api';
-import type { Sector } from './types';
-import { HexMap, type TeamInfo } from './HexMap';
+import type { Sector, DifficultySlug, SectorStatus } from './types';
+import { HexMap, type TeamInfo, type MerchantMarker, MERCHANT_MARK } from './HexMap';
+import { getMerchantSectors, type MerchantSector } from '../admin/merchant-api';
 import { computeMapLayout } from './map-layout';
 import { movementFromEndurance, hexDistance } from './stat-thresholds';
 import { neighbors, axialKey } from './hex-utils';
@@ -38,6 +39,13 @@ export function MapPage() {
   const [actionFor, setActionFor] = useState<Sector | null>(null);
   const [specialFor, setSpecialFor] = useState<Sector | null>(null);
   const [manageTeamId, setManageTeamId] = useState<string | null>(null);
+  // Admin-only map tools: reveal merchants + view the board under filters.
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  const [showMerchants, setShowMerchants] = useState(false);
+  const [merchants, setMerchants] = useState<MerchantSector[]>([]);
+  const [fltDifficulty, setFltDifficulty] = useState<'' | DifficultySlug>('');
+  const [fltStatus, setFltStatus] = useState<'' | SectorStatus>('');
+  const [fltTeam, setFltTeam] = useState<string>('');
 
   const fetchMap = useCallback(async (silent: boolean) => {
     // Silent refresh (e.g. after a queue decision) keeps the current map on
@@ -161,6 +169,46 @@ export function MapPage() {
       reachable: reachableIds?.size ?? 0,
     };
   }, [teamId, state, reachableIds]);
+
+  // Lazily load merchant locations the first time an admin reveals them.
+  useEffect(() => {
+    if (!isAdmin || !showMerchants) return;
+    let cancelled = false;
+    getMerchantSectors()
+      .then((r) => {
+        if (!cancelled) setMerchants(r.sectors);
+      })
+      .catch(() => {
+        /* overlay is optional — ignore load errors */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, showMerchants]);
+
+  const merchantMarkers = useMemo<MerchantMarker[] | undefined>(() => {
+    if (!isAdmin || !showMerchants) return undefined;
+    return merchants.map((m) => ({
+      q: m.q,
+      r: m.r,
+      kind: m.merchant_type,
+      spent: m.token_spent_at != null,
+    }));
+  }, [isAdmin, showMerchants, merchants]);
+
+  // Sectors matching every active admin filter; null = no filter (nothing dimmed).
+  const filterIds = useMemo<ReadonlySet<string> | null>(() => {
+    if (!isAdmin || state.status !== 'ready') return null;
+    if (!fltDifficulty && !fltStatus && !fltTeam) return null;
+    const set = new Set<string>();
+    state.sectors.forEach((s) => {
+      if (fltDifficulty && s.difficulty.slug !== fltDifficulty) return;
+      if (fltStatus && s.status !== fltStatus) return;
+      if (fltTeam && s.captured_by_team_id !== fltTeam) return;
+      set.add(s.id);
+    });
+    return set;
+  }, [isAdmin, state, fltDifficulty, fltStatus, fltTeam]);
 
   const highlightIds = useMemo(() => {
     if (isObserver) return undefined;
@@ -361,6 +409,8 @@ export function MapPage() {
                     ? state.fullTeams.find((t) => t.id === teamId)?.anchor?.sector_id ?? null
                     : null
                 }
+                merchantMarkers={merchantMarkers}
+                filterIds={filterIds}
               />
             </div>
 
@@ -382,6 +432,111 @@ export function MapPage() {
                     'нет захватов — отсчёт от базы'
                   )}
                 </span>
+              </div>
+            )}
+
+            {isAdmin && (
+              <div className="absolute top-2 right-2 z-20 w-56 max-w-[calc(100%-1rem)] rounded-sm border border-neutral-400 bg-neutral-0/90 backdrop-blur-sm shadow-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setAdminPanelOpen((o) => !o)}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-2 font-medium text-neutral-1000"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-brand-400" />
+                    Админ-панель
+                  </span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-neutral-700 transition-transform ${
+                      adminPanelOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {adminPanelOpen && (
+                  <div className="border-t border-neutral-300 p-3 space-y-3">
+                    <label className="flex items-center justify-between gap-2 cursor-pointer">
+                      <span className="text-neutral-800">Показать торговцев</span>
+                      <input
+                        type="checkbox"
+                        checked={showMerchants}
+                        onChange={(e) => setShowMerchants(e.target.checked)}
+                        className="accent-brand-500"
+                      />
+                    </label>
+
+                    {showMerchants && (
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-2xs text-neutral-700">
+                        {(['master', 'saboteur', 'trader'] as const).map((k) => (
+                          <span key={k} className="inline-flex items-center gap-1">
+                            <span
+                              className="w-3.5 h-3.5 rounded-full inline-flex items-center justify-center text-[8px] font-bold text-white"
+                              style={{ backgroundColor: MERCHANT_MARK[k].color }}
+                            >
+                              {MERCHANT_MARK[k].letter}
+                            </span>
+                            {MERCHANT_MARK[k].label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="border-t border-neutral-300 pt-2 space-y-2">
+                      <AdminFilterRow label="Сложность">
+                        <select
+                          value={fltDifficulty}
+                          onChange={(e) => setFltDifficulty(e.target.value as '' | DifficultySlug)}
+                          className="w-28 px-1.5 py-1 rounded-sm bg-neutral-50 border border-neutral-500 text-neutral-1000"
+                        >
+                          <option value="">все</option>
+                          <option value="easy">easy</option>
+                          <option value="medium">medium</option>
+                          <option value="hard">hard</option>
+                          <option value="core">core</option>
+                        </select>
+                      </AdminFilterRow>
+                      <AdminFilterRow label="Статус">
+                        <select
+                          value={fltStatus}
+                          onChange={(e) => setFltStatus(e.target.value as '' | SectorStatus)}
+                          className="w-28 px-1.5 py-1 rounded-sm bg-neutral-50 border border-neutral-500 text-neutral-1000"
+                        >
+                          <option value="">все</option>
+                          <option value="free">свободные</option>
+                          <option value="capturing">захват идёт</option>
+                          <option value="captured">захвачены</option>
+                        </select>
+                      </AdminFilterRow>
+                      <AdminFilterRow label="Команда">
+                        <select
+                          value={fltTeam}
+                          onChange={(e) => setFltTeam(e.target.value)}
+                          className="w-28 px-1.5 py-1 rounded-sm bg-neutral-50 border border-neutral-500 text-neutral-1000"
+                        >
+                          <option value="">все</option>
+                          {teamOptions.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      </AdminFilterRow>
+                      {(fltDifficulty || fltStatus || fltTeam) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFltDifficulty('');
+                            setFltStatus('');
+                            setFltTeam('');
+                          }}
+                          className="text-brand-400 hover:text-brand-300"
+                        >
+                          Сбросить фильтры
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -475,5 +630,14 @@ export function MapPage() {
         />
       )}
     </div>
+  );
+}
+
+function AdminFilterRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="flex items-center justify-between gap-2">
+      <span className="text-neutral-800">{label}</span>
+      {children}
+    </label>
   );
 }

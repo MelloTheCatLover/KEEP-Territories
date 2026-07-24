@@ -57,6 +57,16 @@ const DIFFICULTY_BADGE: Record<DifficultySlug, string> = {
   core: difficultyColors.core,
 };
 
+export type MerchantKind = 'master' | 'saboteur' | 'trader';
+export type MerchantMarker = { q: number; r: number; kind: MerchantKind; spent: boolean };
+
+/** Admin merchant overlay: a coloured letter badge per merchant kind. */
+export const MERCHANT_MARK: Record<MerchantKind, { letter: string; color: string; label: string }> = {
+  master: { letter: 'М', color: '#8B5CF6', label: 'Мастер' },
+  saboteur: { letter: 'Д', color: '#EF4444', label: 'Диверсант' },
+  trader: { letter: 'Т', color: '#22C55E', label: 'Торговец' },
+};
+
 type HexMapProps = {
   sectors: Sector[];
   teamsById: Record<string, TeamInfo>;
@@ -64,6 +74,10 @@ type HexMapProps = {
   highlightIds?: ReadonlySet<string>;
   /** Acting team's movement anchor (last captured sector) — marked with a pin. */
   anchorId?: string | null;
+  /** Admin merchant overlay — hidden NPC locations, drawn when provided. */
+  merchantMarkers?: MerchantMarker[];
+  /** Admin filter: when set, sectors NOT in this set are dimmed. */
+  filterIds?: ReadonlySet<string> | null;
 };
 
 type HexStyle = {
@@ -124,7 +138,15 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
   };
 }
 
-export function HexMap({ sectors, teamsById, onSectorClick, highlightIds, anchorId }: HexMapProps) {
+export function HexMap({
+  sectors,
+  teamsById,
+  onSectorClick,
+  highlightIds,
+  anchorId,
+  merchantMarkers,
+  filterIds,
+}: HexMapProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const base = useMemo<ViewBox | null>(() => {
@@ -468,6 +490,58 @@ export function HexMap({ sectors, teamsById, onSectorClick, highlightIds, anchor
                 </g>
               );
             })}
+        </g>
+      )}
+
+      {/* Admin filter dim — sectors outside the active filter fade back */}
+      {filterIds && (
+        <g className="hex-dim-layer" pointerEvents="none">
+          {sectors.map((s) => {
+            if (filterIds.has(s.id)) return null;
+            const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
+            return (
+              <polygon
+                key={s.id}
+                points={hexPoints(x, y, HEX_SIZE)}
+                fill="var(--color-neutral-50)"
+                fillOpacity={0.72}
+                stroke="none"
+              />
+            );
+          })}
+        </g>
+      )}
+
+      {/* Admin merchant overlay — hidden NPC locations */}
+      {merchantMarkers && merchantMarkers.length > 0 && (
+        <g className="hex-merchant-layer" pointerEvents="none">
+          {merchantMarkers.map((m) => {
+            const { x, y } = axialToPixel(m.q, m.r, HEX_SIZE);
+            const mark = MERCHANT_MARK[m.kind];
+            const cy = y + HEX_SIZE * 0.44;
+            return (
+              <g key={`${m.q}:${m.r}`} opacity={m.spent ? 0.45 : 1}>
+                <circle
+                  cx={x}
+                  cy={cy}
+                  r={HEX_SIZE * 0.26}
+                  fill={mark.color}
+                  stroke="var(--color-neutral-0)"
+                  strokeWidth={1.5}
+                />
+                <text
+                  x={x}
+                  y={cy + 3.5}
+                  textAnchor="middle"
+                  fontSize={10}
+                  fontWeight={700}
+                  fill="#fff"
+                >
+                  {mark.letter}
+                </text>
+              </g>
+            );
+          })}
         </g>
       )}
 
