@@ -397,6 +397,57 @@ export async function adminSetCaptain(teamId: string, newCaptainId: string): Pro
   }
 }
 
+/**
+ * Reroll captains across the active season: for every team with at least two
+ * members, hand the captain role to a random member other than the current
+ * captain. Solo teams and empty teams are left untouched. Returns how many
+ * teams changed.
+ */
+export async function rerollCaptains(): Promise<{ teams: number; changed: number }> {
+  const seasonId = await getActiveSeasonId();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const teamsRes = await client.query<{ id: string }>(
+      'SELECT id FROM teams WHERE season_id = $1',
+      [seasonId],
+    );
+
+    let changed = 0;
+    for (const { id: teamId } of teamsRes.rows) {
+      const members = await client.query<{ id: string; team_role: string | null }>(
+        'SELECT id, team_role FROM users WHERE team_id = $1',
+        [teamId],
+      );
+      if (members.rows.length < 2) continue;
+
+      const current = members.rows.find((m) => m.team_role === 'captain') ?? null;
+      const candidates = members.rows.filter((m) => m.id !== current?.id);
+      if (candidates.length === 0) continue;
+      const next = candidates[Math.floor(Math.random() * candidates.length)];
+
+      await client.query(
+        `UPDATE users SET team_role = 'member' WHERE team_id = $1 AND team_role = 'captain'`,
+        [teamId],
+      );
+      await client.query(
+        `UPDATE users SET team_role = 'captain' WHERE id = $1`,
+        [next.id],
+      );
+      changed++;
+    }
+
+    await client.query('COMMIT');
+    return { teams: teamsRes.rows.length, changed };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function getAll(seasonId?: string): Promise<Team[]> {
   const sid = seasonId ?? (await getActiveSeasonId());
   const result = await pool.query<Team>(

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Pencil, Sliders, Trash2, UserMinus, UserPlus, RefreshCw } from 'lucide-react';
+import { Crown, Loader2, Pencil, Sliders, Trash2, UserMinus, UserPlus, RefreshCw } from 'lucide-react';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { getTeams, getTeam } from '../team/api';
@@ -8,6 +8,7 @@ import {
   adminKickMember,
   getUnassignedMembers,
   getRoster,
+  rerollCaptains,
   type UnassignedMember,
   type RosterMember,
 } from './teams-api';
@@ -50,6 +51,8 @@ export function TeamsManager() {
   const [deleting, setDeleting] = useState<TeamFullStats | null>(null);
   const [tuning, setTuning] = useState<TeamFullStats | null>(null);
   const [addingTo, setAddingTo] = useState<TeamFullStats | null>(null);
+  const [rerolling, setRerolling] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -73,19 +76,59 @@ export function TeamsManager() {
     void load();
   }, [load]);
 
+  async function handleReroll() {
+    if (
+      !window.confirm(
+        'Переролить капитанов? В каждой команде роль капитана перейдёт случайному другому участнику.',
+      )
+    ) {
+      return;
+    }
+    setRerolling(true);
+    setNotice(null);
+    try {
+      const r = await rerollCaptains();
+      setNotice(`Капитаны перевыбраны в ${r.changed} из ${r.teams} команд.`);
+      await load();
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : 'Не удалось переролить капитанов');
+    } finally {
+      setRerolling(false);
+    }
+  }
+
   return (
     <div className="max-w-5xl mx-auto px-4 space-y-4">
       <AdminPageHeader
         title="Команды"
         actions={
-          <Button variant="secondary" onClick={() => void load()} disabled={state.status === 'loading'}>
-            <span className="flex items-center gap-2">
-              <RefreshCw className="w-4 h-4" />
-              Обновить
-            </span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => void handleReroll()}
+              disabled={rerolling || state.status === 'loading'}
+              isLoading={rerolling}
+            >
+              <span className="flex items-center gap-2">
+                <Crown className="w-4 h-4" />
+                Переролить капитанов
+              </span>
+            </Button>
+            <Button variant="secondary" onClick={() => void load()} disabled={state.status === 'loading'}>
+              <span className="flex items-center gap-2">
+                <RefreshCw className="w-4 h-4" />
+                Обновить
+              </span>
+            </Button>
+          </div>
         }
       />
+
+      {notice && (
+        <div className="text-sm text-neutral-900 bg-neutral-100 border border-neutral-400 rounded-sm px-3 py-2">
+          {notice}
+        </div>
+      )}
 
       {state.status === 'loading' && (
         <div className="flex items-center gap-3 text-neutral-700">

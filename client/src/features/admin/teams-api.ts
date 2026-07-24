@@ -50,6 +50,11 @@ export function adminSetCaptain(teamId: string, userId: string): Promise<TeamFul
   return api.post<TeamFullStats>(`/teams/${teamId}/captain`, { userId });
 }
 
+/** Reroll captains across all teams: each moves to a random other member. */
+export function rerollCaptains(): Promise<{ teams: number; changed: number }> {
+  return api.post<{ teams: number; changed: number }>('/teams/reroll-captains', {});
+}
+
 export function adminSetTeamResources(
   teamId: string,
   payload: { influence?: number; experience?: number; upgrade_points?: number },

@@ -132,6 +132,22 @@ export async function adminSetCaptain(
   }
 }
 
+export async function rerollCaptains(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await teamService.rerollCaptains();
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'team.reroll_captains',
+      entityType: 'team',
+      summary: `Перевыбраны капитаны: ${result.changed} из ${result.teams} команд`,
+      metadata: result,
+    });
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function getAll(req: Request, res: Response, next: NextFunction): Promise<void> {

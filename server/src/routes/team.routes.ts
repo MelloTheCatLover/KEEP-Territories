@@ -29,6 +29,7 @@ router.get('/', teamController.getAll);
 router.get('/unassigned', requireAdmin, teamController.listUnassigned);
 router.get('/roster', requireAdmin, teamController.listRoster);
 router.post('/leave', teamController.leave);
+router.post('/reroll-captains', requireAdmin, teamController.rerollCaptains);
 router.post('/transfer', requireTeamRole('captain'), teamController.transferCaptain);
 router.patch('/mine', requireTeamRole('captain'), teamController.setIdentity);
 router.get('/:id', validateParamId, teamController.getById);
