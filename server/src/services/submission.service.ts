@@ -9,7 +9,7 @@ import {
   StartActionResponse,
 } from '../types/task-submission';
 import { Sector, SectorActionType } from '../types/sector';
-import { StatName } from '../types/team-stats';
+import { StatName, MerchantType } from '../types/team-stats';
 import * as encounterService from './encounter.service';
 import * as seasonService from './season.service';
 import {
@@ -572,10 +572,12 @@ export async function getPending(): Promise<TaskSubmissionWithDetails[]> {
   return res.rows.map(rowToDetails);
 }
 
+type ApprovedEffect = { merchant: MerchantType | null; tokenMinted: boolean };
+
 async function applyApprovedEffect(
   client: PoolClient,
   submission: TaskSubmission,
-): Promise<void> {
+): Promise<ApprovedEffect> {
   const sectorRes = await client.query<Sector>(
     'SELECT * FROM sectors WHERE id = $1 FOR UPDATE',
     [submission.sector_id],
@@ -611,16 +613,19 @@ async function applyApprovedEffect(
       await client.query('DELETE FROM sector_peeks WHERE team_id = $1', [submission.team_id]);
       // A hidden merchant on this sector mints a one-off purchase token for the
       // team. UNIQUE(team_id, sector_id) makes recapture idempotent — no farming.
-      const merchantType = (sector as { merchant_type?: string | null }).merchant_type ?? null;
+      const merchantType =
+        ((sector as { merchant_type?: string | null }).merchant_type ?? null) as MerchantType | null;
+      let tokenMinted = false;
       if (merchantType) {
-        await client.query(
+        const ins = await client.query(
           `INSERT INTO team_purchase_tokens (team_id, sector_id, merchant_type)
            VALUES ($1, $2, $3)
            ON CONFLICT (team_id, sector_id) DO NOTHING`,
           [submission.team_id, submission.sector_id, merchantType],
         );
+        tokenMinted = (ins.rowCount ?? 0) > 0;
       }
-      return;
+      return { merchant: merchantType, tokenMinted };
     }
     case 'fortify': {
       const next = Math.min(sector.fortification_level + 1, MAX_FORTIFICATION);
@@ -631,7 +636,7 @@ async function applyApprovedEffect(
          WHERE id = $2`,
         [next, submission.sector_id],
       );
-      return;
+      return { merchant: null, tokenMinted: false };
     }
     case 'remove_fortification': {
       const next = Math.max(sector.fortification_level - 1, 0);
@@ -642,9 +647,10 @@ async function applyApprovedEffect(
          WHERE id = $2`,
         [next, submission.sector_id],
       );
-      return;
+      return { merchant: null, tokenMinted: false };
     }
   }
+  return { merchant: null, tokenMinted: false };
 }
 
 async function revertPendingEffect(
@@ -669,11 +675,18 @@ async function revertPendingEffect(
   }
 }
 
+export type ApproveResult = TaskSubmissionWithDetails & {
+  /** Merchant found on the sector by this capture (null if none). */
+  merchant: MerchantType | null;
+  /** True only when a fresh purchase token was minted (not a re-looted sector). */
+  merchant_token_minted: boolean;
+};
+
 export async function approve(
   id: string,
   reviewerId: string,
   comment: string | null,
-): Promise<TaskSubmissionWithDetails> {
+): Promise<ApproveResult> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -691,7 +704,7 @@ export async function approve(
       throw new AppError(409, 'Заявка уже обработана');
     }
 
-    await applyApprovedEffect(client, submission);
+    const effect = await applyApprovedEffect(client, submission);
 
     await client.query(
       `UPDATE task_submissions SET
@@ -705,7 +718,8 @@ export async function approve(
     );
 
     await client.query('COMMIT');
-    return getById(id);
+    const details = await getById(id);
+    return { ...details, merchant: effect.merchant, merchant_token_minted: effect.tokenMinted };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

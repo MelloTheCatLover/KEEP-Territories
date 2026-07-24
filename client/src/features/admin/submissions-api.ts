@@ -1,6 +1,6 @@
 import { api } from '../../shared/api/client';
 import type { DifficultySlug } from '../map/types';
-import type { StatName } from '../team/types';
+import type { StatName, MerchantType } from '../team/types';
 
 export type SubmissionStatus = 'pending' | 'approved' | 'rejected';
 export type SubmissionActionType =
@@ -57,11 +57,18 @@ export function getPendingSubmissions(): Promise<TaskSubmissionWithDetails[]> {
   return api.get<TaskSubmissionWithDetails[]>('/submissions/pending');
 }
 
+export type ApproveResult = TaskSubmissionWithDetails & {
+  /** Merchant NPC found on the sector by this capture, or null. */
+  merchant: MerchantType | null;
+  /** True only when a fresh purchase token was minted (not a re-looted sector). */
+  merchant_token_minted: boolean;
+};
+
 export function approveSubmission(
   id: string,
   comment?: string | null,
-): Promise<TaskSubmissionWithDetails> {
-  return api.post<TaskSubmissionWithDetails>(`/submissions/${id}/approve`, {
+): Promise<ApproveResult> {
+  return api.post<ApproveResult>(`/submissions/${id}/approve`, {
     comment: comment ?? null,
   });
 }

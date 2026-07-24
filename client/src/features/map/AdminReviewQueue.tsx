@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Loader2, RefreshCw, X } from 'lucide-react';
+import { Check, Loader2, RefreshCw, Store, X } from 'lucide-react';
 import {
   approveSubmission,
   getPendingSubmissions,
@@ -8,6 +8,7 @@ import {
   type TaskSubmissionWithDetails,
 } from '../admin/submissions-api';
 import { formatSectorLabel } from './types';
+import { MERCHANT_MARK } from './HexMap';
 
 const ACTION_LABELS: Record<SubmissionActionType, string> = {
   capture: 'Захват',
@@ -31,6 +32,7 @@ export function AdminReviewQueue({ refreshKey = 0, onActed }: Props) {
   const [items, setItems] = useState<TaskSubmissionWithDetails[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [merchantNotice, setMerchantNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -50,8 +52,20 @@ export function AdminReviewQueue({ refreshKey = 0, onActed }: Props) {
     setError(null);
     try {
       // No comment required for either decision — reject sends null.
-      if (decision === 'approve') await approveSubmission(id, null);
-      else await rejectSubmission(id, null);
+      if (decision === 'approve') {
+        const res = await approveSubmission(id, null);
+        if (res.merchant) {
+          const name = MERCHANT_MARK[res.merchant].label;
+          const team = res.team?.name ? `«${res.team.name}»` : 'команда';
+          setMerchantNotice(
+            res.merchant_token_minted
+              ? `На секторе был персонаж: ${name}! ${team} получила жетон покупки.`
+              : `На секторе персонаж: ${name} — жетон уже был получен ранее.`,
+          );
+        }
+      } else {
+        await rejectSubmission(id, null);
+      }
       setItems((prev) => prev?.filter((i) => i.id !== id) ?? null);
       onActed();
     } catch {
@@ -80,6 +94,21 @@ export function AdminReviewQueue({ refreshKey = 0, onActed }: Props) {
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {merchantNotice && (
+        <div className="flex items-start gap-2 px-3 py-2 bg-brand-900/30 border-b border-brand-700 text-xs text-brand-100">
+          <Store className="w-4 h-4 mt-0.5 flex-shrink-0 text-brand-300" />
+          <span className="flex-1">{merchantNotice}</span>
+          <button
+            type="button"
+            onClick={() => setMerchantNotice(null)}
+            className="p-0.5 -mr-0.5 text-brand-300 hover:text-brand-100 transition-colors flex-shrink-0"
+            aria-label="Скрыть"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-2">
         {error && (

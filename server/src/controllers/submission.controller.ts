@@ -136,7 +136,7 @@ export async function approve(
       entityType: 'sector',
       entityId: submission.sector.id,
       summary: `Одобрено: ${ACTION_RU[submission.action_type]} команды «${submission.team.name}» — ${sectorLabel(submission.sector.number, submission.sector.q, submission.sector.r)}`,
-      metadata: { action_type: submission.action_type, submission_id: submission.id, sector_number: submission.sector.number, difficulty: submission.difficulty.slug },
+      metadata: { action_type: submission.action_type, submission_id: submission.id, sector_number: submission.sector.number, difficulty: submission.difficulty.slug, merchant: submission.merchant },
     });
     res.status(200).json(submission);
   } catch (error) {
