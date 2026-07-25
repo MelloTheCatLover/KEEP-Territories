@@ -39,7 +39,8 @@ export async function getAll(): Promise<GameSettings[]> {
  * Toggle the ×1.5 reward flag. Enabling it boosts every sector captured today
  * (their latest capture is on the current day) and sets the global multiplier so
  * further captures snapshot 1.5 as they happen; disabling clears the boost from
- * all sectors. Returns how many sectors changed.
+ * all sectors. The core never gets the ×1.5 — it is excluded here and in the
+ * capture snapshot. Returns how many sectors changed.
  */
 export async function setRewardBoost(enabled: boolean): Promise<{ enabled: boolean; boosted: number }> {
   const client = await pool.connect();
@@ -56,6 +57,7 @@ export async function setRewardBoost(enabled: boolean): Promise<{ enabled: boole
         `UPDATE sectors s SET reward_multiplier = 1.5
           WHERE s.captured_by_team_id IS NOT NULL
             AND s.reward_multiplier <> 1.5
+            AND s.difficulty_id NOT IN (SELECT id FROM difficulty_levels WHERE slug = 'core')
             AND EXISTS (
               SELECT 1 FROM sector_captures sc
                WHERE sc.sector_id = s.id

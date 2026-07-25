@@ -602,9 +602,12 @@ async function applyApprovedEffect(
            current_action_type = NULL,
            fortification_level = 0,
            no_reward = false,
-           reward_multiplier = COALESCE(
-             (SELECT value::numeric FROM game_settings WHERE key = 'reward_multiplier'), 1
-           )
+           reward_multiplier = CASE
+             WHEN difficulty_id IN (SELECT id FROM difficulty_levels WHERE slug = 'core') THEN 1
+             ELSE COALESCE(
+               (SELECT value::numeric FROM game_settings WHERE key = 'reward_multiplier'), 1
+             )
+           END
          WHERE id = $2`,
         [submission.team_id, submission.sector_id],
       );
