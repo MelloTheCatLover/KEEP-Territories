@@ -35,8 +35,9 @@ export function parseAssignments(raw: unknown): PlaceAssignment[] {
   if (!Array.isArray(raw) || raw.length === 0) {
     throw new AppError(400, 'Нужно указать хотя бы одну команду и её место');
   }
+  // A place may be shared by several teams (ties) — each tied team earns that
+  // place's full bundle. A team, however, still gets exactly one place.
   const seenTeams = new Set<string>();
-  const seenPlaces = new Set<number>();
   const assignments: PlaceAssignment[] = [];
   for (const item of raw) {
     const teamId = (item as { team_id?: unknown })?.team_id;
@@ -50,11 +51,7 @@ export function parseAssignments(raw: unknown): PlaceAssignment[] {
     if (seenTeams.has(teamId)) {
       throw new AppError(400, 'Одна команда не может занять два места');
     }
-    if (seenPlaces.has(place)) {
-      throw new AppError(400, `Место ${place} назначено дважды`);
-    }
     seenTeams.add(teamId);
-    seenPlaces.add(place);
     assignments.push({ team_id: teamId, place });
   }
   return assignments;
@@ -109,6 +106,8 @@ export async function captureSpecialSector(
     }
 
     // 1st place owns the sector: paints it and earns the capture-cup credit.
+    // A sector has a single owner, so if 1st place is tied the first-listed
+    // team of that place takes the colour (every tied team still gets the bundle).
     const winner = assignments.find((a) => a.place === 1) ?? null;
     await client.query(
       `UPDATE sectors SET
