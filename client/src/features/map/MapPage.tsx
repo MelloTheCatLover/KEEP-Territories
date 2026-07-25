@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Loader2, MapPin, Users, SlidersHorizontal, ChevronDown } from 'lucide-react';
-import { getSectorsMap } from './api';
+import { getSectorsMap, getActiveLaw, type ActiveLaw } from './api';
 import type { Sector, DifficultySlug, SectorStatus } from './types';
 import { HexMap, type TeamInfo, type MerchantMarker, MERCHANT_MARK } from './HexMap';
 import { getMerchantSectors, type MerchantSector } from '../admin/merchant-api';
@@ -49,13 +49,19 @@ export function MapPage() {
   const [fltTeam, setFltTeam] = useState<string>('');
   const [rewardBoost, setRewardBoost] = useState(false);
   const [rewardBusy, setRewardBusy] = useState(false);
+  const [activeLaw, setActiveLaw] = useState<ActiveLaw>('none');
 
   const fetchMap = useCallback(async (silent: boolean) => {
     // Silent refresh (e.g. after a queue decision) keeps the current map on
     // screen instead of flashing the loading state.
     if (!silent) setState({ status: 'loading' });
     try {
-      const [sectors, teams] = await Promise.all([getSectorsMap(), getTeams()]);
+      const [sectors, teams, law] = await Promise.all([
+        getSectorsMap(),
+        getTeams(),
+        getActiveLaw(),
+      ]);
+      setActiveLaw(law.active_law);
       if (sectors.length === 0) {
         setState({ status: 'empty' });
         return;
@@ -646,6 +652,14 @@ export function MapPage() {
           }
           anchor={state.fullTeams.find((t) => t.id === teamId)?.anchor ?? null}
           bordersTerritory={bordersTerritory(actionFor)}
+          teleportActive={activeLaw === 'teleport'}
+          anchorDifficulty={(() => {
+            const anchorId = state.fullTeams.find((t) => t.id === teamId)?.anchor?.sector_id;
+            return anchorId
+              ? state.sectors.find((s) => s.id === anchorId)?.difficulty.slug ?? null
+              : null;
+          })()}
+          teamExperience={state.fullTeams.find((t) => t.id === teamId)?.experience ?? 0}
           userActiveSectorId={userActiveSectorId}
           onCancel={() => setActionFor(null)}
           onStarted={(submissionId) => {

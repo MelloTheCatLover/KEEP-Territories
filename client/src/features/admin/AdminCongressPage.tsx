@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Ban, Check, Loader2, Pencil, PiggyBank, Plus, RotateCcw, Trash2, X, Zap } from 'lucide-react';
+import { Ban, Check, Loader2, Pencil, PiggyBank, Plus, RotateCcw, Rocket, Trash2, X, Zap } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -13,6 +13,9 @@ import {
   updateCongressLawText,
   piggishDeed,
   earthquake,
+  getActiveLaw,
+  setActiveLaw,
+  type ActiveLaw,
   type CongressLaw,
   type CongressTeam,
   type LawStatus,
@@ -84,14 +87,21 @@ export function AdminCongressPage() {
   const [editText, setEditText] = useState('');
   const [specialBusy, setSpecialBusy] = useState<null | 'piggish' | 'earthquake'>(null);
   const [specialMsg, setSpecialMsg] = useState<string | null>(null);
+  const [activeLaw, setActiveLawState] = useState<ActiveLaw>('none');
+  const [lawBusy, setLawBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [ov, lw] = await Promise.all([getCongressOverview(), getCongressLaws()]);
+      const [ov, lw, al] = await Promise.all([
+        getCongressOverview(),
+        getCongressLaws(),
+        getActiveLaw(),
+      ]);
       setTeams(ov.teams);
       setLaws(lw.laws);
+      setActiveLawState(al.active_law);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Не удалось загрузить данные');
     } finally {
@@ -225,6 +235,26 @@ export function AdminCongressPage() {
     }
   }
 
+  async function toggleTeleport() {
+    const next: ActiveLaw = activeLaw === 'teleport' ? 'none' : 'teleport';
+    setLawBusy(true);
+    setSpecialMsg(null);
+    setError(null);
+    try {
+      const r = await setActiveLaw(next);
+      setActiveLawState(r.active_law);
+      setSpecialMsg(
+        r.active_law === 'teleport'
+          ? 'Закон «Телепорт» действует. Прежние действующие законы — в архив.'
+          : 'Закон «Телепорт» отключён.',
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось переключить закон');
+    } finally {
+      setLawBusy(false);
+    }
+  }
+
   if (!isAdmin) return <AccessDenied />;
 
   return (
@@ -306,6 +336,42 @@ export function AdminCongressPage() {
                 </table>
               </div>
             )}
+          </Card>
+
+          <Card className="mb-6">
+            <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">
+              Действующий закон
+            </h2>
+            <p className="text-xs text-neutral-700 mb-4">
+              Механический закон-правило. Действует одно поколение — включение
+              нового отправляет прежний в архив.
+            </p>
+            <div className="border border-neutral-300 rounded-md p-4 bg-neutral-100">
+              <div className="flex items-center gap-2 mb-1">
+                <Rocket className="w-4 h-4 text-brand-400" />
+                <span className="font-display text-base text-neutral-1000">Телепорт</span>
+                {activeLaw === 'teleport' && (
+                  <span className="text-2xs uppercase tracking-wider text-success-text border border-success rounded-sm px-1.5 py-0.5">
+                    Действует
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-neutral-700 mb-3">
+                Команда может телепортироваться при захвате на сектор той же
+                сложности, что и её последний захват (якорь), минуя дальность и
+                границу. Цена — 75 опыта, без лимита.
+              </p>
+              <Button
+                type="button"
+                variant={activeLaw === 'teleport' ? 'secondary' : 'primary'}
+                onClick={toggleTeleport}
+                disabled={lawBusy}
+                isLoading={lawBusy}
+              >
+                <Rocket className="w-4 h-4" />
+                {activeLaw === 'teleport' ? 'Отключить' : 'Включить'}
+              </Button>
+            </div>
           </Card>
 
           <Card className="mb-6">

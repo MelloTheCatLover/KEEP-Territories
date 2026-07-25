@@ -22,11 +22,20 @@ export function startAction(
   sectorId: string,
   actionType: ActionType,
   teamId?: string,
+  teleport?: boolean,
 ): Promise<StartActionResponse> {
   return api.post<StartActionResponse>(`/sectors/${sectorId}/action/start`, {
     action_type: actionType,
     ...(teamId ? { team_id: teamId } : {}),
+    ...(teleport ? { teleport: true } : {}),
   });
+}
+
+export type ActiveLaw = 'none' | 'teleport';
+
+/** The single active mechanical law — drives player-side affordances. */
+export function getActiveLaw(): Promise<{ active_law: ActiveLaw }> {
+  return api.get<{ active_law: ActiveLaw }>('/congress/active-law');
 }
 
 export function getCurrentSubmission(

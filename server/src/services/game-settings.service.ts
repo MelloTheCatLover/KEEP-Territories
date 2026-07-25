@@ -1,5 +1,5 @@
 import { pool } from '../config/db';
-import { GameSettings, GameSettingKey } from '../types/game-settings';
+import { GameSettings, GameSettingKey, ActiveLaw, ACTIVE_LAWS } from '../types/game-settings';
 import { AppError } from '../types/errors';
 
 export async function get(key: GameSettingKey): Promise<string> {
@@ -26,6 +26,30 @@ export async function set(key: GameSettingKey, value: string): Promise<void> {
   if (result.rowCount === 0) {
     throw new AppError(404, `Setting "${key}" not found`);
   }
+}
+
+/**
+ * The single active mechanical law ("generation"). Reading tolerates a missing
+ * row (fresh DB before migration 069) by treating it as 'none'.
+ */
+export async function getActiveLaw(): Promise<ActiveLaw> {
+  const result = await pool.query<{ value: string }>(
+    `SELECT value FROM game_settings WHERE key = 'active_law'`,
+  );
+  const value = result.rows[0]?.value;
+  return ACTIVE_LAWS.includes(value as ActiveLaw) ? (value as ActiveLaw) : 'none';
+}
+
+/**
+ * Activate a law — this archives whatever was active before (single slot).
+ * Passing 'none' clears the active law.
+ */
+export async function setActiveLaw(law: ActiveLaw): Promise<void> {
+  await pool.query(
+    `INSERT INTO game_settings (key, value) VALUES ('active_law', $1)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [law],
+  );
 }
 
 export async function getAll(): Promise<GameSettings[]> {

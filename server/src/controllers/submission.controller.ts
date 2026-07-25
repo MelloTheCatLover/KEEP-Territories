@@ -21,11 +21,13 @@ export async function startAction(
 ): Promise<void> {
   try {
     const teamId = typeof req.body?.team_id === 'string' ? req.body.team_id : undefined;
+    const teleport = req.body?.teleport === true;
     const result = await submissionService.startAction(
       req.params.sectorId,
       req.user!.userId,
       req.body?.action_type,
       teamId,
+      teleport,
     );
     const s = result.submission;
     await audit.record({

@@ -10,8 +10,13 @@ router.use(authenticate);
 
 // Participant-facing: decided laws only, available to any authenticated user.
 router.get('/public-laws', congressController.listPublicLaws);
+// The active mechanical law drives player-side affordances (e.g. teleport), so
+// any authenticated user may read it.
+router.get('/active-law', congressController.getActiveLaw);
 
 router.use(requireAdmin);
+
+router.put('/active-law', congressController.setActiveLaw);
 
 router.get('/overview', congressController.getOverview);
 router.get('/laws', congressController.listLaws);

@@ -1,8 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import * as congressService from '../services/congress.service';
+import * as gameSettingsService from '../services/game-settings.service';
 import * as audit from '../services/audit.service';
 import { AppError } from '../types/errors';
 import { LawStatus } from '../types/congress';
+import { ActiveLaw, ACTIVE_LAWS } from '../types/game-settings';
+
+const ACTIVE_LAW_RU: Record<ActiveLaw, string> = {
+  none: 'ничего',
+  teleport: 'Телепорт',
+};
 
 // Veto has its own endpoint (it resolves the acting team server-side), so it is
 // not an accepted value for the plain status setter.
@@ -172,6 +179,36 @@ export async function earthquake(req: Request, res: Response, next: NextFunction
       metadata: { count: result.assignments.length },
     });
     res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+// The single active mechanical law. GET is open to any authenticated user (the
+// map shows teleport affordances when it is active); PUT is admin-only.
+export async function getActiveLaw(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.status(200).json({ active_law: await gameSettingsService.getActiveLaw() });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function setActiveLaw(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const law = req.body?.law;
+    if (!ACTIVE_LAWS.includes(law)) {
+      throw new AppError(400, `law должен быть одним из: ${ACTIVE_LAWS.join(', ')}`);
+    }
+    await gameSettingsService.setActiveLaw(law);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'congress.active_law',
+      entityType: 'congress',
+      summary: `Действующий закон: ${ACTIVE_LAW_RU[law as ActiveLaw]}`,
+      metadata: { law },
+    });
+    res.status(200).json({ active_law: law });
   } catch (error) {
     next(error);
   }

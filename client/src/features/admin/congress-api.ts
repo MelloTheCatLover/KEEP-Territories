@@ -70,3 +70,15 @@ export interface EarthquakeAssignment {
 export function earthquake(): Promise<{ assignments: EarthquakeAssignment[] }> {
   return api.post<{ assignments: EarthquakeAssignment[] }>('/congress/earthquake', {});
 }
+
+export type ActiveLaw = 'none' | 'teleport';
+
+/** The single active mechanical law ("generation"). */
+export function getActiveLaw(): Promise<{ active_law: ActiveLaw }> {
+  return api.get<{ active_law: ActiveLaw }>('/congress/active-law');
+}
+
+/** Activate a law (archives the previous one). 'none' clears it. */
+export function setActiveLaw(law: ActiveLaw): Promise<{ active_law: ActiveLaw }> {
+  return api.put<{ active_law: ActiveLaw }>('/congress/active-law', { law });
+}

@@ -9,4 +9,9 @@ export type GameSettingKey =
   | 'base_exp_threshold'
   | 'exp_step'
   | 'max_fortification_level'
-  | 'reward_multiplier';
+  | 'reward_multiplier'
+  | 'active_law';
+
+/** Mechanical congress laws that can be the single active "generation". */
+export type ActiveLaw = 'none' | 'teleport';
+export const ACTIVE_LAWS: ActiveLaw[] = ['none', 'teleport'];

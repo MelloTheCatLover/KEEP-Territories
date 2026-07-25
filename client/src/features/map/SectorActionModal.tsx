@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ArrowRight,
+  Rocket,
 } from 'lucide-react';
 import { Button, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -35,6 +36,12 @@ type Props = {
   anchor: { q: number; r: number } | null;
   /** Whether this sector borders the team's captured territory. */
   bordersTerritory: boolean;
+  /** "Телепорт" law active — allows same-difficulty jumps for an XP cost. */
+  teleportActive: boolean;
+  /** Difficulty slug of the team's anchor (its last-captured sector). */
+  anchorDifficulty: string | null;
+  /** Team's current experience — gates whether it can afford a teleport. */
+  teamExperience: number;
   userActiveSectorId: string | null;
   onCancel: () => void;
   onStarted: (submissionId: string) => void;
@@ -49,6 +56,9 @@ type AvailableAction = {
 };
 
 const MAX_FORTIFICATION = 3;
+
+/** Experience spent per teleport — mirrors TELEPORT_COST on the server. */
+const TELEPORT_COST = 75;
 
 const ACTION_LABELS: Record<ActionType, string> = {
   capture: 'Захват',
@@ -190,6 +200,9 @@ export function SectorActionModal({
   userIntelligence,
   anchor,
   bordersTerritory,
+  teleportActive,
+  anchorDifficulty,
+  teamExperience,
   userActiveSectorId,
   onCancel,
   onStarted,
@@ -251,6 +264,36 @@ export function SectorActionModal({
     return computeAvailable(sector, userTeamId, userStrength, userEndurance, anchor, bordersTerritory);
   }, [sector, userTeamId, userStrength, userEndurance, anchor, bordersTerritory, hasActiveElsewhere, isThisSectorActive]);
 
+  // Teleport (active law): a same-difficulty (re)capture beyond normal reach,
+  // for an XP cost. Only offered when the ordinary action is NOT available (out
+  // of reach / not bordering) — otherwise the free normal action already shows.
+  const teleport = useMemo(() => {
+    if (!teleportActive || hasActiveElsewhere || isThisSectorActive) return null;
+    if (sector.current_action_type !== null || sector.is_home_base) return null;
+    if (anchorDifficulty === null || anchorDifficulty !== sector.difficulty.slug) return null;
+    if (sector.captured_by_team_id === userTeamId) return null;
+    let type: ActionType | null = null;
+    if (sector.status === 'free') {
+      type = 'capture';
+    } else if (sector.status === 'captured' && sector.captured_by_team_id) {
+      if (sector.fortification_level <= penetrationFromStrength(userStrength)) {
+        type = 'recapture';
+      }
+    }
+    if (type === null || actions.some((a) => a.type === type)) return null;
+    return { type, affordable: teamExperience >= TELEPORT_COST };
+  }, [
+    teleportActive,
+    hasActiveElsewhere,
+    isThisSectorActive,
+    sector,
+    anchorDifficulty,
+    userTeamId,
+    userStrength,
+    actions,
+    teamExperience,
+  ]);
+
   const label = sector.is_home_base
     ? 'K'
     : sector.number != null
@@ -259,11 +302,11 @@ export function SectorActionModal({
 
   const titleText = sector.is_home_base ? 'Домашняя база' : `Сектор ${label}`;
 
-  async function handleStart(type: ActionType) {
+  async function handleStart(type: ActionType, viaTeleport = false) {
     setBusy(type);
     setError(null);
     try {
-      const result = await startAction(sector.id, type, userTeamId);
+      const result = await startAction(sector.id, type, userTeamId, viaTeleport);
       const winnerId = result.submission.task_id;
       const showWheel =
         winnerId !== null &&
@@ -374,6 +417,32 @@ export function SectorActionModal({
               busy={busy}
               onStart={(type) => void handleStart(type)}
             />
+          )}
+
+          {showActions && teleport && (
+            <div className="border border-brand-400 rounded-md p-3 bg-neutral-100">
+              <div className="flex items-center gap-2 mb-1">
+                <Rocket className="w-4 h-4 text-brand-500" />
+                <span className="font-display text-sm text-neutral-1000">
+                  Телепорт · {teleport.type === 'capture' ? 'захват' : 'перехват'}
+                </span>
+              </div>
+              <p className="text-xs text-neutral-700 mb-2">
+                Прыжок на сектор той же сложности, минуя дальность и границу.
+                Цена — {TELEPORT_COST} опыта (у вас {teamExperience}).
+              </p>
+              <Button
+                variant="primary"
+                onClick={() => void handleStart(teleport.type, true)}
+                disabled={busy !== null || !teleport.affordable}
+                isLoading={busy === teleport.type}
+              >
+                <Rocket className="w-4 h-4" />
+                {teleport.affordable
+                  ? `Телепортироваться (−${TELEPORT_COST} опыта)`
+                  : 'Недостаточно опыта'}
+              </Button>
+            </div>
           )}
 
           {showActions && actions.length > 0 && sector.captured_by_team_id !== userTeamId && (
