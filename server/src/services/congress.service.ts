@@ -93,12 +93,16 @@ export async function updateLawText(id: string, rawText: unknown): Promise<Congr
 
 export async function setLawStatus(id: string, status: LawStatus): Promise<CongressLaw> {
   const decidedAt = status === 'pending' ? null : new Date();
-  // Moving off a veto (back to pending etc.) clears the vetoing team.
+  // This setter only ever receives pending/accepted/rejected (the controller
+  // rejects 'vetoed'; a veto is cast solely via vetoLaw), so any status change
+  // here means moving off the veto — clear the vetoing team unconditionally.
+  // (Reusing $1 inside a CASE made Postgres deduce inconsistent types for the
+  // parameter and threw on every call — hence the plain NULL.)
   const res = await pool.query(
     `UPDATE congress_laws
         SET status = $1,
             decided_at = $2,
-            vetoed_by_team_id = CASE WHEN $1 = 'vetoed' THEN vetoed_by_team_id ELSE NULL END
+            vetoed_by_team_id = NULL
       WHERE id = $3`,
     [status, decidedAt, id],
   );
@@ -235,6 +239,27 @@ export async function earthquake(): Promise<{ assignments: EarthquakeAssignment[
       throw new AppError(409, 'Нет подходящих секторов для землетрясения');
     }
 
+    // A quake changes only sector colour and the "rulers" cup (raw sector
+    // count) — it must not shift influence. The receiver is flagged no_reward
+    // so it gains nothing, but the sector's previous owner would otherwise lose
+    // the influence it earned there. Credit that lost influence back to each
+    // donor as a persistent adjustment so total influence stays put. Rewarding
+    // donors only: sectors already flagged no_reward (a prior quake) or unowned
+    // never contributed influence, so they need no compensation.
+    const sectorIds = assignments.map((a) => a.sector_id);
+    const compRes = await client.query<{ donor: string; lost: number }>(
+      `SELECT s.captured_by_team_id AS donor,
+              ROUND(SUM(dl.influence_reward * s.reward_multiplier))::int AS lost
+         FROM sectors s
+         JOIN difficulty_levels dl ON dl.id = s.difficulty_id
+        WHERE s.id = ANY($1)
+          AND s.no_reward = false
+          AND s.is_special = false
+          AND s.captured_by_team_id IS NOT NULL
+        GROUP BY s.captured_by_team_id`,
+      [sectorIds],
+    );
+
     for (const a of assignments) {
       await client.query(
         `UPDATE sectors SET
@@ -247,6 +272,18 @@ export async function earthquake(): Promise<{ assignments: EarthquakeAssignment[
            no_reward = true
          WHERE id = $2`,
         [a.team_id, a.sector_id],
+      );
+    }
+
+    for (const { donor, lost } of compRes.rows) {
+      if (!lost) continue;
+      await client.query(
+        `INSERT INTO team_adjustments (team_id, influence_delta, updated_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (team_id) DO UPDATE SET
+           influence_delta = team_adjustments.influence_delta + EXCLUDED.influence_delta,
+           updated_at = NOW()`,
+        [donor, lost],
       );
     }
 
