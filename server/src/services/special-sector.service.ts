@@ -105,10 +105,13 @@ export async function captureSpecialSector(
       awards.push({ team_id, place, influence: reward.influence, experience: reward.experience });
     }
 
-    // 1st place owns the sector: paints it and earns the capture-cup credit.
-    // A sector has a single owner, so if 1st place is tied the first-listed
-    // team of that place takes the colour (every tied team still gets the bundle).
-    const winner = assignments.find((a) => a.place === 1) ?? null;
+    // The best (lowest) place present owns the sector: paints it and earns the
+    // capture-cup credit. Usually that is 1st, but standings need not include a
+    // 1st place — whoever ranks highest still takes the colour. A sector has a
+    // single owner, so a tie at the top goes to the first-listed team of that
+    // place (every tied team still gets the reward bundle).
+    const bestPlace = Math.min(...assignments.map((a) => a.place));
+    const winner = assignments.find((a) => a.place === bestPlace) ?? null;
     await client.query(
       `UPDATE sectors SET
          status = $1,
