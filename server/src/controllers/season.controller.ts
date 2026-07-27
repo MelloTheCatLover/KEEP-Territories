@@ -4,10 +4,20 @@ import * as seasonService from '../services/season.service';
 import * as sectorService from '../services/sector.service';
 import * as trophyService from '../services/trophy.service';
 import * as audit from '../services/audit.service';
+import * as gameSettingsService from '../services/game-settings.service';
 
 async function isAdmin(userId: string): Promise<boolean> {
   const res = await pool.query<{ role: string }>('SELECT role FROM users WHERE id = $1', [userId]);
   return res.rows[0]?.role === 'admin';
+}
+
+/**
+ * Trophy standings — live or archived — are the admin's to reveal: participants
+ * see them only while the `trophies_visible` flag is on.
+ */
+async function canSeeTrophies(userId: string): Promise<boolean> {
+  if (await isAdmin(userId)) return true;
+  return gameSettingsService.getTrophiesVisible();
 }
 
 export async function list(_req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -120,6 +130,10 @@ export async function archive(req: Request<{ id: string }>, res: Response, next:
 
 export async function getTrophies(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
   try {
+    if (!(await canSeeTrophies(req.user!.userId))) {
+      res.status(403).json({ error: 'Кубки скрыты администратором' });
+      return;
+    }
     res.json(await trophyService.getSeasonTrophies(req.params.id));
   } catch (error) {
     next(error);
@@ -144,9 +158,13 @@ export async function getRosters(req: Request<{ id: string }>, res: Response, ne
 
 export async function getFinals(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
   try {
+    // The ceremony is one long trophy reveal, so it follows the same flag as the
+    // standings themselves — and, for participants, still only after archiving.
+    if (!(await canSeeTrophies(req.user!.userId))) {
+      res.status(403).json({ error: 'Итоги смены скрыты администратором' });
+      return;
+    }
     const finals = await seasonService.getFinals(req.params.id);
-    // Finals reveal the normally-hidden trophy values. Before archiving, that is
-    // for the admin's eyes only; once archived, anyone may replay the ceremony.
     if (finals.status !== 'archived' && !(await isAdmin(req.user!.userId))) {
       res.status(403).json({ error: 'Итоги смены доступны после архивации' });
       return;

@@ -8,6 +8,7 @@ import { HexMap, type TeamInfo, MAP_HEX_SIZE, MAP_VIEWBOX_PADDING } from '../map
 import { bbox } from '../map/hex-utils';
 import type { Sector } from '../map/types';
 import { TrophyGrid } from '../trophies/TrophySection';
+import { useTrophiesVisible } from '../trophies/useTrophiesVisible';
 import type { TrophiesResponse } from '../trophies/types';
 import {
   getSeasons,
@@ -27,12 +28,14 @@ type State =
       season: Season;
       sectors: Sector[];
       teamsById: Record<string, TeamInfo>;
-      trophies: TrophiesResponse;
+      /** Null while trophies are hidden from the viewer — nothing is fetched. */
+      trophies: TrophiesResponse | null;
       rosters: SeasonRoster[];
     };
 
 /** Overall place-1 teams — the season champions (usually one, more if tied). */
-function championIds(trophies: TrophiesResponse): Set<string> {
+function championIds(trophies: TrophiesResponse | null): Set<string> {
+  if (!trophies) return new Set();
   const winners = trophies.overall.filter((o) => o.place === 1);
   return new Set(winners.map((w) => w.team_id));
 }
@@ -40,6 +43,7 @@ function championIds(trophies: TrophiesResponse): Set<string> {
 export function SeasonViewPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const { canSee: canSeeTrophies, loading: trophyFlagLoading } = useTrophiesVisible();
   const [state, setState] = useState<State>({ status: 'loading' });
 
   const load = useCallback(async () => {
@@ -50,7 +54,8 @@ export function SeasonViewPage() {
         getSeasons(),
         getSeasonMap(id),
         getSeasonTeams(id),
-        getSeasonTrophies(id),
+        // Hidden trophies are never requested: no cups, no champion crowns.
+        canSeeTrophies ? getSeasonTrophies(id) : Promise.resolve(null),
         getSeasonRosters(id),
       ]);
       const season = seasons.find((s) => s.id === id);
@@ -70,11 +75,14 @@ export function SeasonViewPage() {
         message: err instanceof ApiError ? err.message : 'Не удалось загрузить смену',
       });
     }
-  }, [id]);
+  }, [id, canSeeTrophies]);
 
   useEffect(() => {
+    // Wait for the flag, otherwise the first load could fetch trophies the
+    // viewer must not see (or skip ones an admin should).
+    if (trophyFlagLoading) return;
     void load();
-  }, [load]);
+  }, [load, trophyFlagLoading]);
 
   return (
     <div className="max-w-[1100px] mx-auto px-4 space-y-4">
@@ -117,7 +125,7 @@ function ReadyView({
   season: Season;
   sectors: Sector[];
   teamsById: Record<string, TeamInfo>;
-  trophies: TrophiesResponse;
+  trophies: TrophiesResponse | null;
   rosters: SeasonRoster[];
   viewerUserId: string | null;
 }) {
@@ -142,7 +150,7 @@ function ReadyView({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isArchived && (
+          {isArchived && trophies !== null && (
             <Link
               to={`/seasons/${season.id}/finals`}
               className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-sm bg-brand-700 text-neutral-1000 hover:bg-brand-600 transition-colors"
@@ -212,7 +220,7 @@ function ReadyView({
         </div>
       )}
 
-      {trophies.trophies.length > 0 && (
+      {trophies !== null && trophies.trophies.length > 0 && (
         <section className="space-y-3 pt-2">
           <h2 className="font-display text-heading-sm text-neutral-1000">Кубки</h2>
           <TrophyGrid trophies={trophies.trophies} highlightTeamId={singleChampionId} />

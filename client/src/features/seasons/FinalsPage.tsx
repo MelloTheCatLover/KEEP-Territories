@@ -19,6 +19,7 @@ import { teamPaletteFromColor } from '../../design-system/design-tokens';
 import { ApiError } from '../../shared/api/client';
 import { TimelapsePage } from '../admin/TimelapsePage';
 import type { TrophyKey, TrophyRanking, TrophyEntry } from '../trophies/types';
+import { useTrophiesVisible } from '../trophies/useTrophiesVisible';
 import { getSeasonFinals, type SeasonFinals, type FinalsChampion } from './api';
 
 const TROPHY_ICON: Record<TrophyKey, ComponentType<{ className?: string }>> = {
@@ -62,9 +63,16 @@ export function FinalsPage() {
   const [state, setState] = useState<State>({ status: 'loading' });
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
+  const { canSee: canSeeTrophies, loading: trophyFlagLoading } = useTrophiesVisible();
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || trophyFlagLoading) return;
+    // The ceremony is nothing but trophy reveals — don't even fetch it while
+    // trophies are hidden from this viewer.
+    if (!canSeeTrophies) {
+      setState({ status: 'error', message: 'Итоги смены скрыты администратором' });
+      return;
+    }
     getSeasonFinals(id)
       .then((finals) => setState({ status: 'ready', finals, steps: buildSteps(finals) }))
       .catch((err) =>
@@ -73,7 +81,7 @@ export function FinalsPage() {
           message: err instanceof ApiError ? err.message : 'Не удалось загрузить итоги',
         }),
       );
-  }, [id]);
+  }, [id, canSeeTrophies, trophyFlagLoading]);
 
   const steps = state.status === 'ready' ? state.steps : [];
   const step = steps[index];
