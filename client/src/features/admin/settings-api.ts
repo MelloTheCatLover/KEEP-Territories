@@ -4,7 +4,8 @@ export type GameSettingKey =
   | 'base_exp_threshold'
   | 'exp_step'
   | 'max_fortification_level'
-  | 'reward_multiplier';
+  | 'reward_multiplier'
+  | 'trophies_visible';
 
 export type GameSetting = {
   key: GameSettingKey;
@@ -29,4 +30,9 @@ export function updateSetting(
  */
 export function setRewardBoost(enabled: boolean): Promise<{ enabled: boolean; boosted: number }> {
   return api.put<{ enabled: boolean; boosted: number }>('/settings/reward-boost', { enabled });
+}
+
+/** Show/hide the live trophy standings for participants. Admins always see them. */
+export function setTrophiesVisible(visible: boolean): Promise<{ visible: boolean }> {
+  return api.put<{ visible: boolean }>('/settings/trophies-visible', { visible });
 }

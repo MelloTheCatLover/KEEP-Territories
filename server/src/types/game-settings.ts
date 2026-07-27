@@ -10,7 +10,8 @@ export type GameSettingKey =
   | 'exp_step'
   | 'max_fortification_level'
   | 'reward_multiplier'
-  | 'active_law';
+  | 'active_law'
+  | 'trophies_visible';
 
 /** Mechanical congress laws that can be the single active "generation". */
 export type ActiveLaw = 'none' | 'teleport';

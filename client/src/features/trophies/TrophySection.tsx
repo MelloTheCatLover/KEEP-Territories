@@ -22,6 +22,8 @@ import type {
 type Props = {
   /** Bumped by the parent after sector mutations to force a refetch. */
   refreshKey?: number;
+  /** Admin-only note: the standings are currently hidden from participants. */
+  hiddenFromTeams?: boolean;
 };
 
 type State =
@@ -40,7 +42,7 @@ const TROPHY_ICON: Record<TrophyKey, ComponentType<{ className?: string }>> = {
   champions: Trophy,
 };
 
-export function TrophySection({ refreshKey = 0 }: Props) {
+export function TrophySection({ refreshKey = 0, hiddenFromTeams = false }: Props) {
   const [state, setState] = useState<State>({ status: 'loading' });
 
   useEffect(() => {
@@ -84,7 +86,12 @@ export function TrophySection({ refreshKey = 0 }: Props) {
 
   return (
     <section className="mt-6 space-y-3">
-      <h2 className="font-display text-heading-sm text-neutral-1000">Кубки</h2>
+      <div className="flex items-baseline gap-2">
+        <h2 className="font-display text-heading-sm text-neutral-1000">Кубки</h2>
+        {hiddenFromTeams && (
+          <span className="text-2xs text-neutral-700">— скрыты от участников</span>
+        )}
+      </div>
       <TrophyGrid trophies={trophies} />
     </section>
   );

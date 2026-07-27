@@ -5,7 +5,11 @@ import { getSectorsMap, getActiveLaw, type ActiveLaw } from './api';
 import type { Sector, DifficultySlug, SectorStatus } from './types';
 import { HexMap, type TeamInfo, type MerchantMarker, MERCHANT_MARK } from './HexMap';
 import { getMerchantSectors, type MerchantSector } from '../admin/merchant-api';
-import { getSettings, setRewardBoost as apiSetRewardBoost } from '../admin/settings-api';
+import {
+  getSettings,
+  setRewardBoost as apiSetRewardBoost,
+  setTrophiesVisible as apiSetTrophiesVisible,
+} from '../admin/settings-api';
 import { computeMapLayout } from './map-layout';
 import { movementFromEndurance, hexDistance } from './stat-thresholds';
 import { neighbors, axialKey } from './hex-utils';
@@ -49,6 +53,9 @@ export function MapPage() {
   const [fltTeam, setFltTeam] = useState<string>('');
   const [rewardBoost, setRewardBoost] = useState(false);
   const [rewardBusy, setRewardBusy] = useState(false);
+  // Live trophy standings: hidden from participants until the admin opens them.
+  const [trophiesVisible, setTrophiesVisible] = useState(false);
+  const [trophiesBusy, setTrophiesBusy] = useState(false);
   const [activeLaw, setActiveLaw] = useState<ActiveLaw>('none');
 
   const fetchMap = useCallback(async (silent: boolean) => {
@@ -195,15 +202,17 @@ export function MapPage() {
     };
   }, [isAdmin, showMerchants]);
 
-  // Reflect the current reward-multiplier flag for admins.
+  // Reward multiplier (admin flag) + trophy visibility (everyone needs it to
+  // know whether the trophy section is shown at all).
   useEffect(() => {
-    if (!isAdmin) return;
     let cancelled = false;
     getSettings()
       .then((list) => {
         if (cancelled) return;
-        const s = list.find((x) => x.key === 'reward_multiplier');
-        if (s) setRewardBoost(parseFloat(s.value) > 1);
+        const reward = list.find((x) => x.key === 'reward_multiplier');
+        if (reward) setRewardBoost(parseFloat(reward.value) > 1);
+        const trophies = list.find((x) => x.key === 'trophies_visible');
+        setTrophiesVisible(trophies?.value === '1');
       })
       .catch(() => {
         /* optional — ignore */
@@ -211,7 +220,7 @@ export function MapPage() {
     return () => {
       cancelled = true;
     };
-  }, [isAdmin]);
+  }, []);
 
   const toggleRewardBoost = useCallback(async (next: boolean) => {
     setRewardBusy(true);
@@ -222,6 +231,18 @@ export function MapPage() {
       /* leave the toggle as-is on failure */
     } finally {
       setRewardBusy(false);
+    }
+  }, []);
+
+  const toggleTrophies = useCallback(async (next: boolean) => {
+    setTrophiesBusy(true);
+    try {
+      await apiSetTrophiesVisible(next);
+      setTrophiesVisible(next);
+    } catch {
+      /* leave the toggle as-is on failure */
+    } finally {
+      setTrophiesBusy(false);
     }
   }, []);
 
@@ -536,6 +557,22 @@ export function MapPage() {
                       </p>
                     </div>
 
+                    <div className="border-t border-neutral-300 pt-2">
+                      <label className="flex items-center justify-between gap-2 cursor-pointer">
+                        <span className="text-neutral-800">Кубки видны участникам</span>
+                        <input
+                          type="checkbox"
+                          checked={trophiesVisible}
+                          disabled={trophiesBusy}
+                          onChange={(e) => void toggleTrophies(e.target.checked)}
+                          className="accent-brand-500"
+                        />
+                      </label>
+                      <p className="text-2xs text-neutral-600 mt-1">
+                        Выключено — рейтинг кубков виден только админу.
+                      </p>
+                    </div>
+
                     <div className="border-t border-neutral-300 pt-2 space-y-2">
                       <AdminFilterRow label="Сложность">
                         <select
@@ -622,7 +659,9 @@ export function MapPage() {
         </div>
       )}
 
-      {state.status === 'ready' && <TrophySection />}
+      {state.status === 'ready' && (isAdmin || trophiesVisible) && (
+        <TrophySection hiddenFromTeams={isAdmin && !trophiesVisible} />
+      )}
 
       {createFor && (
         <CreateTeamModal

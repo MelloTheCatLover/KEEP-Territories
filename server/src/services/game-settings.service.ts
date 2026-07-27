@@ -52,6 +52,26 @@ export async function setActiveLaw(law: ActiveLaw): Promise<void> {
   );
 }
 
+/**
+ * Are live trophy standings shown to participants? Admins bypass this flag.
+ * Tolerates a missing row (fresh DB before migration 070) by treating it as
+ * hidden.
+ */
+export async function getTrophiesVisible(): Promise<boolean> {
+  const result = await pool.query<{ value: string }>(
+    `SELECT value FROM game_settings WHERE key = 'trophies_visible'`,
+  );
+  return result.rows[0]?.value === '1';
+}
+
+export async function setTrophiesVisible(visible: boolean): Promise<void> {
+  await pool.query(
+    `INSERT INTO game_settings (key, value) VALUES ('trophies_visible', $1)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [visible ? '1' : '0'],
+  );
+}
+
 export async function getAll(): Promise<GameSettings[]> {
   const result = await pool.query<GameSettings>(
     'SELECT * FROM game_settings ORDER BY key'

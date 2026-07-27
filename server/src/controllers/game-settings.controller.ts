@@ -47,3 +47,13 @@ export async function setRewardBoost(req: Request, res: Response, next: NextFunc
     next(error);
   }
 }
+
+export async function setTrophiesVisible(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const visible = req.body?.visible === true;
+    await gameSettingsService.setTrophiesVisible(visible);
+    res.status(200).json({ visible });
+  } catch (error) {
+    next(error);
+  }
+}
