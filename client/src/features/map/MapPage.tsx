@@ -11,6 +11,7 @@ import {
   setTrophiesVisible as apiSetTrophiesVisible,
 } from '../admin/settings-api';
 import { computeMapLayout } from './map-layout';
+import { difficultyColors } from '../../design-system/design-tokens';
 import { movementFromEndurance, hexDistance } from './stat-thresholds';
 import { neighbors, axialKey } from './hex-utils';
 import { SectorActionModal } from './SectorActionModal';
@@ -269,6 +270,27 @@ export function MapPage() {
     });
     return set;
   }, [isAdmin, state, fltDifficulty, fltStatus, fltTeam]);
+
+  // Reward cheat-sheet for the admin panel: taken from the sectors already on
+  // screen, so it always matches what the server will actually award.
+  const rewardTable = useMemo(() => {
+    if (!isAdmin || state.status !== 'ready') return [];
+    const bySlug = new Map<DifficultySlug, { name: string; influence: number; exp: number }>();
+    state.sectors.forEach((s) => {
+      if (bySlug.has(s.difficulty.slug)) return;
+      bySlug.set(s.difficulty.slug, {
+        name: s.difficulty.name,
+        influence: s.difficulty.influence_reward,
+        exp: s.difficulty.experience_reward,
+      });
+    });
+    const order: DifficultySlug[] = ['easy', 'medium', 'hard', 'core'];
+    return order
+      .map((slug) => ({ slug, ...bySlug.get(slug) }))
+      .filter((d): d is { slug: DifficultySlug; name: string; influence: number; exp: number } =>
+        d.name !== undefined,
+      );
+  }, [isAdmin, state]);
 
   const highlightIds = useMemo(() => {
     if (isObserver) return undefined;
@@ -572,6 +594,49 @@ export function MapPage() {
                         Выключено — рейтинг кубков виден только админу.
                       </p>
                     </div>
+
+                    {rewardTable.length > 0 && (
+                      <div className="border-t border-neutral-300 pt-2">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-neutral-800">Награда за сектор</span>
+                          {rewardBoost && (
+                            <span className="text-2xs text-warning-text">действует ×1.5</span>
+                          )}
+                        </div>
+                        <table className="w-full mt-1 text-2xs">
+                          <thead>
+                            <tr className="text-neutral-600">
+                              <th className="text-left font-normal py-0.5">Сложность</th>
+                              <th className="text-right font-normal py-0.5">Влияние</th>
+                              <th className="text-right font-normal py-0.5">Опыт</th>
+                            </tr>
+                          </thead>
+                          <tbody className="text-neutral-900">
+                            {rewardTable.map((d) => (
+                              <tr key={d.slug}>
+                                <td className="py-0.5 flex items-center gap-1.5">
+                                  <span
+                                    aria-hidden
+                                    className="w-2.5 h-2.5 rounded-xs inline-block border border-neutral-500"
+                                    style={{ backgroundColor: difficultyColors[d.slug] }}
+                                  />
+                                  {d.name}
+                                </td>
+                                <td className="text-right font-mono py-0.5">
+                                  {rewardBoost ? Math.round(d.influence * 1.5) : d.influence}
+                                </td>
+                                <td className="text-right font-mono py-0.5">
+                                  {rewardBoost ? Math.round(d.exp * 1.5) : d.exp}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <p className="text-2xs text-neutral-600 mt-1">
+                          Сброс сектора — штраф в половину его награды.
+                        </p>
+                      </div>
+                    )}
 
                     <div className="border-t border-neutral-300 pt-2 space-y-2">
                       <AdminFilterRow label="Сложность">
