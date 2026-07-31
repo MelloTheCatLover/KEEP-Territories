@@ -5,10 +5,8 @@ import { useAuth } from '../auth/AuthContext';
 import { getSectorsMap } from '../map/api';
 import type { Sector } from '../map/types';
 import { HexMap, type TeamInfo } from '../map/HexMap';
-import { computeMapLayout, type SlotEntry } from '../map/map-layout';
-import { ProjectorTeamCard } from '../map/TeamSidePanel';
-import { getTeams, getTeam } from '../team/api';
-import type { TeamFullStats } from '../team/types';
+import { computeMapLayout } from '../map/map-layout';
+import { getTeams } from '../team/api';
 
 /** How often the display refetches the board. */
 const REFRESH_MS = 5000;
@@ -16,13 +14,12 @@ const REFRESH_MS = 5000;
 // Fixed design canvas. The board is laid out once at these dimensions and then
 // scaled as a whole to the projector's screen, so nothing reflows, wraps or
 // scrolls no matter the resolution (1024x768, 1280x800, 1920x1080 …).
+// The projection shows the map alone — team stats stay off the wall.
 const CANVAS_W = 1600;
 const CANVAS_H = 900;
 const PAD = 20;
-const GAP = 20;
-const COL_W = 320;
 const FOOTER_H = 26;
-const MAP_BOX_W = CANVAS_W - PAD * 2 - (COL_W + GAP) * 2;
+const MAP_BOX_W = CANVAS_W - PAD * 2;
 const MAP_BOX_H = CANVAS_H - PAD * 2 - FOOTER_H;
 
 /** Scale that fits the canvas inside the window, letterboxing the remainder. */
@@ -46,7 +43,6 @@ type LoadState =
       status: 'ready';
       sectors: Sector[];
       teamsById: Record<string, TeamInfo>;
-      fullTeams: TeamFullStats[];
       at: Date;
     };
 
@@ -69,8 +65,7 @@ export function AdminDisplayPage() {
       sorted.forEach((t, i) => {
         teamsById[t.id] = { id: t.id, name: t.name, index: i, color: t.color };
       });
-      const fullTeams = await Promise.all(sorted.map((t) => getTeam(t.id)));
-      setState({ status: 'ready', sectors, teamsById, fullTeams, at: new Date() });
+      setState({ status: 'ready', sectors, teamsById, at: new Date() });
     } catch {
       // Keep the last good board on screen if a refresh fails.
       if (!silent) setState({ status: 'error', message: 'Не удалось загрузить карту' });
@@ -84,30 +79,9 @@ export function AdminDisplayPage() {
     return () => clearInterval(id);
   }, [isAdmin, fetchBoard]);
 
+  // Only the viewbox is needed now that the side columns are gone.
   const mapLayout = useMemo(
-    () =>
-      state.status === 'ready'
-        ? computeMapLayout(state.sectors, state.fullTeams, state.teamsById)
-        : null,
-    [state],
-  );
-
-  const pendingByTeam = useMemo(() => {
-    const map = new Map<string, number>();
-    if (state.status !== 'ready') return map;
-    for (const s of state.sectors) {
-      if (s.active_submission_team_id) {
-        map.set(s.active_submission_team_id, (map.get(s.active_submission_team_id) ?? 0) + 1);
-      }
-    }
-    return map;
-  }, [state]);
-
-  const maxLeadership = useMemo(
-    () =>
-      state.status === 'ready'
-        ? state.fullTeams.reduce((m, t) => Math.max(m, t.stats.leadership), 0)
-        : 0,
+    () => (state.status === 'ready' ? computeMapLayout(state.sectors, [], state.teamsById) : null),
     [state],
   );
 
@@ -128,23 +102,6 @@ export function AdminDisplayPage() {
       </div>
     );
   }
-
-  const column = (entries: SlotEntry[]) => (
-    <div className="flex flex-col justify-center gap-3 min-h-0" style={{ width: COL_W }}>
-      {entries.map((entry) => (
-        <div key={entry.team.id} className="flex-1 min-h-0 max-h-[200px]">
-          <ProjectorTeamCard
-            team={entry.team}
-            index={entry.index}
-            pendingCount={pendingByTeam.get(entry.team.id) ?? 0}
-            isLeadershipLeader={
-              maxLeadership > 0 && entry.team.stats.leadership === maxLeadership
-            }
-          />
-        </div>
-      ))}
-    </div>
-  );
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-neutral-50 text-neutral-900 flex items-center justify-center">
@@ -178,16 +135,10 @@ export function AdminDisplayPage() {
         )}
 
         {state.status === 'ready' && mapLayout && mapSize && (
-          <div className="flex-1 min-h-0 flex items-stretch" style={{ gap: GAP }}>
-            {column(mapLayout.left)}
-
-            <div className="flex-1 min-w-0 flex items-center justify-center">
-              <div className="relative" style={{ width: mapSize.w, height: mapSize.h }}>
-                <HexMap sectors={state.sectors} teamsById={state.teamsById} />
-              </div>
+          <div className="flex-1 min-h-0 flex items-center justify-center">
+            <div className="relative" style={{ width: mapSize.w, height: mapSize.h }}>
+              <HexMap sectors={state.sectors} teamsById={state.teamsById} />
             </div>
-
-            {column(mapLayout.right)}
           </div>
         )}
 
