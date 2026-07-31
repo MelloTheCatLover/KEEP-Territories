@@ -15,3 +15,10 @@ side queue, and manages team rosters by clicking a team card (`TeamManageModal`)
   no team cards, so stats and standings stay off the wall.
 - `team-modals.tsx` — shared team management modals (edit, resources, roster,
   delete), used by `AdminTeamsPage` and the map.
+- `RosterImport.tsx` + `xlsx.ts` — upload of the counselor's shift spreadsheet
+  (ФИО / Искры / КТП / КТБ / Логин / Пароль) into a children list: children are
+  matched by ФИО, КТП becomes the starting distribution category, and the sheet's
+  logins and passwords become accounts. `.xlsx` is unzipped and read in the
+  browser (no library); the sheet goes to the server as text. Every run is
+  previewed first — the server executes the import and rolls it back until
+  "Применить". Same code path as the `import-roster` CLI script.

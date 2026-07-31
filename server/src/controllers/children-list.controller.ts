@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as childrenListService from '../services/children-list.service';
+import * as rosterImportService from '../services/roster-import.service';
 
 export async function list(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -65,6 +66,24 @@ export async function bulkAdd(req: Request<{ id: string }>, res: Response, next:
       return;
     }
     res.status(201).json(await childrenListService.bulkAdd(req.params.id, names));
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Import the counselor's spreadsheet into the list. `apply: true` writes;
+ * anything else is a preview (parsed, executed, rolled back).
+ */
+export async function importRoster(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { text, apply } = req.body ?? {};
+    if (typeof text !== 'string' || text.trim().length === 0) {
+      res.status(400).json({ error: 'Передайте text — содержимое таблицы' });
+      return;
+    }
+    const rows = rosterImportService.parseRoster(text);
+    res.json(await rosterImportService.importRoster(req.params.id, rows, apply === true));
   } catch (error) {
     next(error);
   }

@@ -103,6 +103,46 @@ export interface IssuedAccount {
   child_id: string;
 }
 
+/** One parsed line of the counselor's shift spreadsheet. */
+export interface RosterRow {
+  full_name: string;
+  /** Lifetime points from the sheet — informational. */
+  sparks: number;
+  /** КТП: prior standing that seeds the start-of-season distribution. */
+  category: import('./distribution').ParticipantCategory;
+  login: string;
+  password: string;
+}
+
+/** Outcome of one imported row. */
+export interface RosterImportEntry {
+  full_name: string;
+  code: string;
+  /** The child already existed in the registry and was reused. */
+  matched: boolean;
+  category: import('./distribution').ParticipantCategory;
+  sparks: number;
+  /** Login the child actually has after the import. */
+  login: string;
+  /** Login printed in the sheet — differs from `login` when the account is older. */
+  sheet_login: string;
+  password: string;
+  account: 'created' | 'password_updated';
+}
+
+export interface RosterImportResult {
+  /** False for a preview run: everything below is what *would* happen. */
+  applied: boolean;
+  list_name: string;
+  created: number;
+  matched: number;
+  accounts_created: number;
+  passwords_updated: number;
+  /** Participants of the active season whose category was refreshed. */
+  resynced: number;
+  entries: RosterImportEntry[];
+}
+
 /** One row of the global children dashboard. */
 export interface ChildDashboardRow {
   id: string;

@@ -12,6 +12,7 @@ import {
   type ChildrenList, type ListMember, type AddChildResult,
 } from './children-lists-api';
 import { AccessDenied, AdminPageHeader } from './AdminShell';
+import { RosterImport } from './RosterImport';
 
 type Issued = { login: string; password: string; full_name: string; reset?: boolean };
 
@@ -291,6 +292,13 @@ export function AdminChildrenListsPage() {
             </div>
           )}
 
+          <RosterImport
+            listId={selected.id}
+            listName={selected.name}
+            onApplied={() => void Promise.all([loadMembers(selected.id), refresh()])}
+          />
+
+          <div className="border-t border-neutral-300 pt-4 mt-4">
           {membersLoading ? (
             <Loading />
           ) : members && members.length > 0 ? (
@@ -355,6 +363,7 @@ export function AdminChildrenListsPage() {
           ) : (
             <p className="text-sm text-neutral-700">В списке пока нет детей.</p>
           )}
+          </div>
         </Card>
       )}
 

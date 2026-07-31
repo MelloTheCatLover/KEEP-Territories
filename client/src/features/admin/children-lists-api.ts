@@ -44,6 +44,33 @@ export type ChildDashboardRow = {
   seasons: string[];
 };
 
+export type ParticipantCategory = 'mvp' | 'winner' | 'participant' | 'newbie';
+
+export type RosterImportEntry = {
+  full_name: string;
+  code: string;
+  matched: boolean;
+  category: ParticipantCategory;
+  sparks: number;
+  login: string;
+  /** Login printed in the sheet — differs from `login` when the account is older. */
+  sheet_login: string;
+  password: string;
+  account: 'created' | 'password_updated';
+};
+
+export type RosterImportResult = {
+  /** False for a preview run: the numbers are what would happen. */
+  applied: boolean;
+  list_name: string;
+  created: number;
+  matched: number;
+  accounts_created: number;
+  passwords_updated: number;
+  resynced: number;
+  entries: RosterImportEntry[];
+};
+
 export function getLists(): Promise<ChildrenList[]> {
   return api.get<ChildrenList[]>('/children-lists');
 }
@@ -66,6 +93,14 @@ export function addChild(listId: string, fullName: string): Promise<AddChildResu
 
 export function bulkAdd(listId: string, text: string): Promise<AddChildResult[]> {
   return api.post<AddChildResult[]>(`/children-lists/${listId}/members/bulk`, { text });
+}
+
+/**
+ * Import the counselor's spreadsheet (ФИО / Искры / КТП / КТБ / Логин / Пароль)
+ * into the list. With apply=false the server rolls back and returns a preview.
+ */
+export function importRoster(listId: string, text: string, apply: boolean): Promise<RosterImportResult> {
+  return api.post<RosterImportResult>(`/children-lists/${listId}/import`, { text, apply });
 }
 
 export function removeMember(listId: string, childId: string): Promise<void> {

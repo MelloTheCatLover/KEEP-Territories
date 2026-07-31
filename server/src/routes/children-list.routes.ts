@@ -44,6 +44,7 @@ router.delete('/:id', validateParamId, childrenListController.remove);
 router.get('/:id/members', validateParamId, childrenListController.getMembers);
 router.post('/:id/members', validateParamId, childrenListController.addChild);
 router.post('/:id/members/bulk', validateParamId, childrenListController.bulkAdd);
+router.post('/:id/import', validateParamId, childrenListController.importRoster);
 router.delete('/:id/members/:childId', validateChildParams, childrenListController.removeMember);
 router.post('/:id/members/:childId/account', validateChildParams, childrenListController.issueAccount);
 
