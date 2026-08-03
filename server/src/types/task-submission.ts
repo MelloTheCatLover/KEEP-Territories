@@ -46,6 +46,11 @@ export interface TaskSubmissionWithDetails extends TaskSubmission {
   reroll_count: number;
   /** Reroll cap from the team's luck; remaining = max − reroll_count. */
   rerolls_max: number;
+  /**
+   * Hidden character standing on the sector, if any. Admin-only: the field is
+   * nulled for players so the surprise survives until the capture is approved.
+   */
+  merchant_type: 'master' | 'saboteur' | 'trader' | null;
 }
 
 export interface StartActionDto {

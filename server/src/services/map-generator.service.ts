@@ -363,33 +363,40 @@ async function assignTasksAfterGeneration(client: PoolClient, seasonId: string):
   }
 }
 
-/** Merchant kinds and how many of each land on the medium ring per season. */
-const MERCHANT_DEAL: Array<'master' | 'saboteur' | 'trader'> = [
-  'master', 'master', 'saboteur', 'saboteur', 'trader', 'trader',
+/**
+ * Fixed merchant placement: kind → medium sector number (С9, С14, С15, С10,
+ * С5, С4). The characters sit on known cells so the admin can staff them in
+ * advance instead of chasing a random draw each season.
+ */
+export const MERCHANT_PLACEMENT: ReadonlyArray<{ kind: 'master' | 'saboteur' | 'trader'; number: number }> = [
+  { kind: 'master', number: 9 },
+  { kind: 'master', number: 14 },
+  { kind: 'saboteur', number: 15 },
+  { kind: 'saboteur', number: 10 },
+  { kind: 'trader', number: 5 },
+  { kind: 'trader', number: 4 },
 ];
 
 /**
- * Sprinkle the 6 hidden merchants over random capturable medium sectors. No
- * client-facing flag: capturing one mints a purchase token (see submission
- * service). Silently no-ops if the medium ring somehow has fewer than 6 cells.
+ * Put the 6 hidden merchants on their fixed medium sectors. No client-facing
+ * flag: capturing one mints a purchase token (see submission service). A number
+ * that does not exist on this map (smaller preset) is simply skipped.
  */
 async function assignMerchantsAfterGeneration(client: PoolClient, seasonId: string): Promise<void> {
-  const res = await client.query<{ id: string }>(
-    `SELECT s.id
-       FROM sectors s
-       JOIN difficulty_levels dl ON s.difficulty_id = dl.id
-      WHERE s.season_id = $1
-        AND dl.slug = 'medium'
-        AND s.is_special = false
-        AND s.is_home_base = false`,
-    [seasonId],
-  );
-  const picks = shuffle(res.rows.map((r) => r.id)).slice(0, MERCHANT_DEAL.length);
-  for (let i = 0; i < picks.length; i++) {
-    await client.query('UPDATE sectors SET merchant_type = $1 WHERE id = $2', [
-      MERCHANT_DEAL[i],
-      picks[i],
-    ]);
+  await client.query('UPDATE sectors SET merchant_type = NULL WHERE season_id = $1', [seasonId]);
+  for (const { kind, number } of MERCHANT_PLACEMENT) {
+    await client.query(
+      `UPDATE sectors s
+          SET merchant_type = $1
+         FROM difficulty_levels dl
+        WHERE dl.id = s.difficulty_id
+          AND s.season_id = $2
+          AND dl.slug = 'medium'
+          AND s.number = $3
+          AND s.is_special = false
+          AND s.is_home_base = false`,
+      [kind, seasonId, number],
+    );
   }
 }
 

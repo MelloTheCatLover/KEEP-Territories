@@ -51,6 +51,8 @@ export type TaskSubmissionWithDetails = {
   };
   reroll_count: number;
   rerolls_max: number;
+  /** Hidden character on the sector; admins only, null for players. */
+  merchant_type: MerchantType | null;
 };
 
 export function getPendingSubmissions(): Promise<TaskSubmissionWithDetails[]> {

@@ -178,6 +178,21 @@ function QueueCard({
         <span className="px-1.5 py-0.5 rounded-xs text-2xs font-mono bg-brand-900 text-brand-100 border border-brand-700">
           {ACTION_LABELS[item.action_type]}
         </span>
+        {/* Hidden character on this sector — only the admin queue shows it. */}
+        {item.merchant_type && (
+          <span
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs text-2xs font-mono border"
+            style={{
+              backgroundColor: `${MERCHANT_MARK[item.merchant_type].color}22`,
+              borderColor: MERCHANT_MARK[item.merchant_type].color,
+              color: 'var(--color-neutral-1000)',
+            }}
+            title="На секторе стоит персонаж"
+          >
+            <Store className="w-3 h-3" />
+            {MERCHANT_MARK[item.merchant_type].label}
+          </span>
+        )}
       </div>
 
       {item.task && (

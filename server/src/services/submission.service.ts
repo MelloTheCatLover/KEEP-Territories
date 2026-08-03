@@ -523,7 +523,8 @@ const DETAILS_SELECT = `
     tk.title AS task_title,
     tk.question AS task_question,
     u.id AS user_row_id,
-    u.username AS user_username
+    u.username AS user_username,
+    s.merchant_type AS sector_merchant_type
   FROM task_submissions sub
   JOIN teams t ON t.id = sub.team_id
   JOIN sectors s ON s.id = sub.sector_id
@@ -564,6 +565,7 @@ type DetailsRow = {
   task_question: string | null;
   user_row_id: string;
   user_username: string;
+  sector_merchant_type: string | null;
 };
 
 function rowToDetails(row: DetailsRow): TaskSubmissionWithDetails {
@@ -612,6 +614,8 @@ function rowToDetails(row: DetailsRow): TaskSubmissionWithDetails {
     },
     reroll_count: row.reroll_count,
     rerolls_max: row.rerolls_max ?? 0,
+    // Admin-only: stripped for players in getCurrentForSector below.
+    merchant_type: (row.sector_merchant_type ?? null) as MerchantType | null,
   };
 }
 
@@ -649,7 +653,9 @@ export async function getCurrentForSector(
   if (res.rows.length === 0) return null;
   const row = res.rows[0];
   if (role !== 'admin' && row.team_id !== team_id) return null;
-  return rowToDetails(row);
+  const details = rowToDetails(row);
+  // Merchants stay hidden from teams — only the admin queue sees the marker.
+  return role === 'admin' ? details : { ...details, merchant_type: null };
 }
 
 export async function getPending(): Promise<TaskSubmissionWithDetails[]> {
