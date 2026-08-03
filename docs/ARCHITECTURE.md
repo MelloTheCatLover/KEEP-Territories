@@ -132,9 +132,11 @@ users ──► teams ──► sectors (home_base)
    │         │
    │         ├── team_stat_upgrades   (5 характеристик; row per +1)
    │         ├── team_penalties        (drop-штрафы)
-   │         └── team_adjustments     (админский оверрайд: дельты)
+   │         ├── team_adjustments     (админский оверрайд: дельты)
+   │         └── team_purchase_tokens (жетон за сектор с персонажем)
    │
    └──► task_submissions (sector_id, team_id, user_id, task_id, action_type, status)
+             └──── encounter_instances ── random_encounters (пул 100 + проверки по составу)
 ```
 
 **Производные значения никогда не хранятся**, они вычисляются:
@@ -143,6 +145,10 @@ users ──► teams ──► sectors (home_base)
 - `level` = жадный цикл по порогам `base_exp_threshold + i · exp_step` из `game_settings`.
 - `upgrade_points` = `level − COUNT(team_stat_upgrades) + adjustments` (≥ 0).
 - `stats[name]` = `COUNT(team_stat_upgrades WHERE stat_name = ...)`.
+
+Отсюда же следует, почему случайная встреча, меняющая характеристику, правит и
+`upgrade_points_delta`: строка характеристики — это потраченное очко, так что без
+компенсации обнуление вернуло бы очки в пул, а подарок съел бы одно.
 
 Это даёт **аудит** (каждый бонус — отдельная строка) и **обратимость** (drop удаляет одну случайную строку — без перерасчёта чисел).
 
