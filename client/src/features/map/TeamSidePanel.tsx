@@ -133,6 +133,115 @@ export function TeamSummaryCard({
   );
 }
 
+type ProjectorProps = {
+  team: TeamFullStats;
+  index: number;
+  pendingCount: number;
+  isLeadershipLeader?: boolean;
+};
+
+/** Short stat labels — full words don't fit the projector card's stat row. */
+const SHORT_STAT_LABELS: Array<[keyof TeamFullStats['stats'], string, string]> = [
+  ['leadership', 'ЛИД', 'Лидерство'],
+  ['strength', 'СИЛ', 'Сила'],
+  ['endurance', 'ВЫН', 'Выносливость'],
+  ['intelligence', 'ИНТ', 'Интеллект'],
+  ['luck', 'УДЧ', 'Удача'],
+];
+
+const PROJECTOR_METRICS: Array<[keyof TeamFullStats | 'captured', string]> = [
+  ['influence', 'Влияние'],
+  ['experience', 'Опыт'],
+  ['level', 'Уровень'],
+  ['captured', 'Секторов'],
+];
+
+/**
+ * Team card for the projected board. Sizes are fixed px (not responsive): the
+ * whole board is drawn on a fixed canvas and scaled to the projector, so the
+ * card must never reflow — it only ever gets scaled up or down as a whole.
+ */
+export function ProjectorTeamCard({
+  team,
+  index,
+  pendingCount,
+  isLeadershipLeader = false,
+}: ProjectorProps) {
+  const palette = resolveTeamPalette(team.color, index);
+  const accent = palette.base;
+  const wash = `color-mix(in srgb, ${accent} 18%, transparent)`;
+
+  return (
+    <div
+      className="h-full min-h-0 overflow-hidden flex flex-col justify-center gap-2 border-2 rounded-md bg-glass-medium backdrop-blur-glass px-3 py-2.5"
+      style={{
+        borderColor: accent,
+        backgroundImage: `linear-gradient(135deg, ${wash}, transparent 70%)`,
+      }}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <span
+          aria-hidden
+          className="w-4 h-4 rounded-full flex-shrink-0"
+          style={{ backgroundColor: accent }}
+        />
+        {isLeadershipLeader && (
+          <Crown
+            className="w-5 h-5 flex-shrink-0"
+            style={{ color: GOLD, fill: GOLD }}
+            aria-label="Лидер по лидерству"
+          />
+        )}
+        <span className="font-display font-bold text-[22px] leading-none text-neutral-1000 truncate flex-1">
+          {team.name}
+        </span>
+        {pendingCount > 0 && (
+          <span
+            className="inline-flex items-center gap-1 text-[16px] font-mono text-warning-text leading-none flex-shrink-0"
+            title="Активные действия"
+          >
+            <Activity className="w-4 h-4" />
+            {pendingCount}
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-4 gap-1.5">
+        {PROJECTOR_METRICS.map(([key, label]) => (
+          <div
+            key={label}
+            className="flex flex-col gap-1 px-1.5 py-1.5 rounded-xs border border-neutral-300 bg-neutral-100/40"
+          >
+            <span className="text-[10px] uppercase tracking-wider text-neutral-700 leading-none truncate">
+              {label}
+            </span>
+            <span className="font-display font-bold text-[24px] text-neutral-1000 tabular-nums leading-none">
+              {key === 'captured' ? team.captured_sectors_count : (team[key] as number)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <ul className="grid grid-cols-5 gap-1.5">
+        {SHORT_STAT_LABELS.map(([key, short, full]) => (
+          <li
+            key={key}
+            title={full}
+            className="flex flex-col items-center gap-0.5 py-1 rounded-xs bg-neutral-100/30"
+          >
+            <span className="text-[10px] uppercase tracking-wider text-neutral-700 leading-none">
+              {short}
+            </span>
+            <span className="font-mono text-[18px] text-neutral-1000 tabular-nums leading-none">
+              {team.stats[key]}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function MetricTile({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex flex-col gap-0.5 px-2 py-2 rounded-xs border border-neutral-300 bg-neutral-100/40">
