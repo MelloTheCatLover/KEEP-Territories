@@ -24,6 +24,7 @@ import { useAuth } from '../auth/AuthContext';
 import { CreateTeamModal } from '../team/CreateTeamModal';
 import { TrophySection } from '../trophies/TrophySection';
 import { AdminReviewQueue } from './AdminReviewQueue';
+import { MerchantTokenTray } from './MerchantTokenTray';
 import { TeamManageModal } from '../admin/team-modals';
 
 type LoadState =
@@ -187,21 +188,25 @@ export function MapPage() {
     };
   }, [teamId, state, reachableIds]);
 
-  // Lazily load merchant locations the first time an admin reveals them.
+  // Merchant sectors back two admin features: the reveal overlay and the token
+  // tray, so they load for any admin regardless of the overlay toggle.
+  const [merchantsKey, setMerchantsKey] = useState(0);
+  const reloadMerchants = useCallback(() => setMerchantsKey((k) => k + 1), []);
+
   useEffect(() => {
-    if (!isAdmin || !showMerchants) return;
+    if (!isAdmin) return;
     let cancelled = false;
     getMerchantSectors()
       .then((r) => {
         if (!cancelled) setMerchants(r.sectors);
       })
       .catch(() => {
-        /* overlay is optional — ignore load errors */
+        /* optional — ignore load errors */
       });
     return () => {
       cancelled = true;
     };
-  }, [isAdmin, showMerchants]);
+  }, [isAdmin, merchantsKey]);
 
   // Reward multiplier (admin flag) + trophy visibility (everyone needs it to
   // know whether the trophy section is shown at all).
@@ -718,7 +723,13 @@ export function MapPage() {
 
           {isAdmin && (
             <div className="order-2 flex flex-col lg:order-last lg:col-span-3 xl:order-4 xl:col-span-1">
-              <AdminReviewQueue onActed={() => void fetchMap(true)} />
+              <MerchantTokenTray merchants={merchants} onSpent={reloadMerchants} />
+              <AdminReviewQueue
+                onActed={() => {
+                  void fetchMap(true);
+                  reloadMerchants();
+                }}
+              />
             </div>
           )}
         </div>
