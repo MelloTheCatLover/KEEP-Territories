@@ -3,10 +3,16 @@
 -- С5, С4 — торговцы. Так админ знает заранее, кого куда ставить, а карта
 -- перегенерируется в те же клетки (map-generator.service: MERCHANT_PLACEMENT).
 --
+-- Только активный сезон: карты архивных смен — это история, их персонажи
+-- остаются там, где стояли во время игры.
+--
 -- Уже выданные жетоны покупки не трогаем: они привязаны к сектору и команде,
 -- которая его брала, и остаются в истории.
 
-UPDATE sectors SET merchant_type = NULL WHERE merchant_type IS NOT NULL;
+UPDATE sectors
+   SET merchant_type = NULL
+ WHERE merchant_type IS NOT NULL
+   AND season_id = (SELECT id FROM seasons WHERE status = 'active');
 
 UPDATE sectors s
    SET merchant_type = p.kind
@@ -23,4 +29,5 @@ UPDATE sectors s
    AND dl.slug = 'medium'
    AND s.number = p.number
    AND s.is_special = false
-   AND s.is_home_base = false;
+   AND s.is_home_base = false
+   AND s.season_id = (SELECT id FROM seasons WHERE status = 'active');
