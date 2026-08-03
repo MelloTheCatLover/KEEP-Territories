@@ -304,6 +304,24 @@ export async function adminSetResources(
   return getFullStats(teamId);
 }
 
+/**
+ * Shift the team's upgrade-point pool by `by` points, keeping every other
+ * adjustment intact. Used by random encounters to make stat changes absolute:
+ * a wiped stat burns its points (negative shift) instead of returning them to
+ * the pool, and a gifted stat does not eat a point the team could have spent.
+ */
+export async function adjustUpgradePointsDelta(teamId: string, by: number): Promise<void> {
+  if (by === 0) return;
+  await pool.query(
+    `INSERT INTO team_adjustments (team_id, upgrade_points_delta, updated_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (team_id) DO UPDATE SET
+       upgrade_points_delta = team_adjustments.upgrade_points_delta + EXCLUDED.upgrade_points_delta,
+       updated_at = NOW()`,
+    [teamId, by],
+  );
+}
+
 export type AdminStatsPayload = Partial<Record<StatName, number>>;
 
 export async function adminSetStats(

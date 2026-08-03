@@ -37,6 +37,8 @@ export interface EncounterEval {
   title: string;
   /** Full human-readable rules of the encounter (all branches). */
   description: string;
+  /** Whether the encounter takes from the team or gives to it. */
+  polarity: 'positive' | 'negative';
   /** The stat/aggregate the encounter reads, for display. */
   relevant: { label: string; value: number } | null;
   /** Non-null when a player choice is required before resolving. */
@@ -49,9 +51,9 @@ export interface EncounterInstanceView {
   id: string;
   team_id: string;
   team_name: string | null;
-  /** For swap encounters: the bound team and its captain (the referenced person). */
+  /** For roster checks: the bound team and the champion named in the question. */
   target_team_name: string | null;
-  target_captain_name: string | null;
+  target_person_name: string | null;
   encounter_number: number;
   status: 'pending' | 'resolved';
   choice: string | null;

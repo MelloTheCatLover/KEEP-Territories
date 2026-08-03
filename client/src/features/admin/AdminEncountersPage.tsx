@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Loader2, RefreshCw, Users } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError, api } from '../../shared/api/client';
@@ -9,6 +9,7 @@ import {
   resolveEncounter,
   setEncounterActive,
   setEncounterTarget,
+  syncRosterChecks,
   type EncounterInstance,
   type EncounterPoolRow,
 } from './encounters-api';
@@ -29,6 +30,8 @@ export function AdminEncountersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,6 +81,25 @@ export function AdminEncountersPage() {
     }
   }
 
+  async function syncChecks() {
+    setSyncing(true);
+    setError(null);
+    try {
+      const res = await syncRosterChecks();
+      setPool(res.encounters);
+      setSyncNotice(
+        `Проверок по составу: ${res.teams}` +
+          (res.withoutChampion.length > 0
+            ? ` · без победителей и МВП в реестре: ${res.withoutChampion.join(', ')} (подставлен капитан)`
+            : ''),
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось пересобрать проверки');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function toggle(row: EncounterPoolRow) {
     try {
       const updated = await setEncounterActive(row.number, !row.active);
@@ -86,6 +108,16 @@ export function AdminEncountersPage() {
       setError(err instanceof ApiError ? err.message : 'Не удалось изменить встречу');
     }
   }
+
+  const rosterRows = useMemo(() => pool.filter((r) => r.kind === 'roster'), [pool]);
+  const negativeRows = useMemo(
+    () => pool.filter((r) => r.kind === 'standard' && r.polarity === 'negative'),
+    [pool],
+  );
+  const positiveRows = useMemo(
+    () => pool.filter((r) => r.kind === 'standard' && r.polarity === 'positive'),
+    [pool],
+  );
 
   if (!isAdmin) return <AccessDenied />;
 
@@ -124,65 +156,124 @@ export function AdminEncountersPage() {
             )}
           </Card>
 
+          <Card className="mb-6">
+            <div className="flex flex-wrap items-center gap-3 mb-1">
+              <h2 className="font-display text-heading-sm text-neutral-1000">Проверки по составу</h2>
+              <Button type="button" variant="secondary" onClick={syncChecks} disabled={syncing}>
+                <Users className={`w-4 h-4 ${syncing ? 'animate-pulse' : ''}`} />
+                Пересобрать по командам
+              </Button>
+            </div>
+            <p className="text-xs text-neutral-700 mb-3">
+              По одной встрече на команду. В вопросе называется участник этой команды, который уже
+              побеждал или был МВП; угадавшая команда получает бонус.
+            </p>
+            {syncNotice && <p className="text-xs text-brand-400 mb-2">{syncNotice}</p>}
+            {rosterRows.length === 0 ? (
+              <p className="text-sm text-neutral-700 py-1">
+                Проверок ещё нет — нажмите «Пересобрать по командам».
+              </p>
+            ) : (
+              <ul className="divide-y divide-neutral-200">
+                {rosterRows.map((row) => (
+                  <PoolItem key={row.number} row={row} teams={teams} onToggle={toggle} onBind={bindTarget} />
+                ))}
+              </ul>
+            )}
+          </Card>
+
           <Card>
-            <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Пул встреч</h2>
+            <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">
+              Пул встреч{' '}
+              <span className="text-xs font-sans text-neutral-700">
+                ({negativeRows.length} негативных / {positiveRows.length} позитивных)
+              </span>
+            </h2>
             <p className="text-xs text-neutral-700 mb-3">Отключённые не выпадают при захвате.</p>
-            <ul className="divide-y divide-neutral-200">
-              {pool.map((row) => (
-                <li key={row.number} className="flex items-start gap-3 py-2">
-                  <span className="font-mono text-2xs text-neutral-600 w-6 flex-shrink-0 mt-0.5">{row.number}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm ${row.active ? 'text-neutral-1000' : 'text-neutral-500 line-through'}`}>
-                      {row.title}
-                    </p>
-                    <p className="text-xs text-neutral-600 mt-0.5">{row.description}</p>
-                    {row.supports_target && (
-                      <label className="flex items-center gap-2 mt-1.5">
-                        <span className="text-2xs uppercase tracking-wider text-neutral-700">Команда:</span>
-                        <select
-                          value={row.target_team_id ?? ''}
-                          onChange={(e) => bindTarget(row, e.target.value || null)}
-                          className="px-2 py-1 rounded-sm bg-neutral-50 border border-neutral-500 text-neutral-1000 text-xs focus:outline-none focus:border-brand-500 max-w-[12rem]"
-                        >
-                          <option value="">— не привязана —</option>
-                          {teams.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.name}
-                            </option>
-                          ))}
-                        </select>
-                        {row.target_captain_name && (
-                          <span className="text-2xs text-neutral-700">
-                            капитан: <span className="text-neutral-1000">{row.target_captain_name}</span>
-                          </span>
-                        )}
-                      </label>
-                    )}
-                    {row.supports_target && (
-                      <p className="text-2xs text-neutral-500 italic mt-1">
-                        Игрокам: «Если в вашей команде есть{' '}
-                        {row.target_captain_name ?? 'загаданный игрок'}, то _____.»
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => toggle(row)}
-                    className={`px-2 py-1 rounded-sm text-2xs uppercase tracking-wider border flex-shrink-0 ${
-                      row.active
-                        ? 'border-success text-success-text'
-                        : 'border-neutral-400 text-neutral-600'
-                    }`}
-                  >
-                    {row.active ? 'Активна' : 'Выкл'}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <PoolGroup title="Негативные" rows={negativeRows} teams={teams} onToggle={toggle} onBind={bindTarget} />
+            <PoolGroup title="Позитивные" rows={positiveRows} teams={teams} onToggle={toggle} onBind={bindTarget} />
           </Card>
         </>
       )}
     </div>
+  );
+}
+
+type PoolItemProps = {
+  row: EncounterPoolRow;
+  teams: TeamOption[];
+  onToggle: (row: EncounterPoolRow) => void;
+  onBind: (row: EncounterPoolRow, teamId: string | null) => void;
+};
+
+function PoolGroup({
+  title,
+  rows,
+  ...rest
+}: Omit<PoolItemProps, 'row'> & { title: string; rows: EncounterPoolRow[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="mb-4 last:mb-0">
+      <h3 className="text-2xs uppercase tracking-wider text-neutral-700 mb-1">
+        {title} · {rows.length}
+      </h3>
+      <ul className="divide-y divide-neutral-200">
+        {rows.map((row) => (
+          <PoolItem key={row.number} row={row} {...rest} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function PoolItem({ row, teams, onToggle, onBind }: PoolItemProps) {
+  return (
+    <li className="flex items-start gap-3 py-2">
+      <span className="font-mono text-2xs text-neutral-600 w-7 flex-shrink-0 mt-0.5">{row.number}</span>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm ${row.active ? 'text-neutral-1000' : 'text-neutral-500 line-through'}`}>
+          {row.title}
+        </p>
+        <p className="text-xs text-neutral-600 mt-0.5">{row.description}</p>
+        {row.supports_target && (
+          <>
+            <label className="flex flex-wrap items-center gap-2 mt-1.5">
+              <span className="text-2xs uppercase tracking-wider text-neutral-700">Команда:</span>
+              <select
+                value={row.target_team_id ?? ''}
+                onChange={(e) => onBind(row, e.target.value || null)}
+                className="px-2 py-1 rounded-sm bg-neutral-50 border border-neutral-500 text-neutral-1000 text-xs focus:outline-none focus:border-brand-500 max-w-[12rem]"
+              >
+                <option value="">— не привязана —</option>
+                {teams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              {row.target_person_name && (
+                <span className="text-2xs text-neutral-700">
+                  игрок: <span className="text-neutral-1000">{row.target_person_name}</span>
+                </span>
+              )}
+            </label>
+            <p className="text-2xs text-neutral-500 italic mt-1">
+              Игрокам: «Если в вашей команде есть {row.target_person_name ?? 'загаданный игрок'}, то
+              _____.»
+            </p>
+          </>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => onToggle(row)}
+        className={`px-2 py-1 rounded-sm text-2xs uppercase tracking-wider border flex-shrink-0 ${
+          row.active ? 'border-success text-success-text' : 'border-neutral-400 text-neutral-600'
+        }`}
+      >
+        {row.active ? 'Активна' : 'Выкл'}
+      </button>
+    </li>
   );
 }
 
@@ -205,10 +296,10 @@ function PendingCard({
       <p className="text-sm text-neutral-900 mb-1">{ev.title}</p>
       <p className="text-xs text-neutral-600 mb-2 italic">{ev.description}</p>
 
-      {inst.target_captain_name && (
+      {inst.target_person_name && (
         <p className="text-xs text-neutral-700 mb-2">
-          Речь о капитане{' '}
-          <span className="text-neutral-1000 font-medium">{inst.target_captain_name}</span>
+          Речь об игроке{' '}
+          <span className="text-neutral-1000 font-medium">{inst.target_person_name}</span>
           {inst.target_team_name && <> (команда «{inst.target_team_name}»)</>}
         </p>
       )}

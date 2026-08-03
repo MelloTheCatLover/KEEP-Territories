@@ -42,6 +42,27 @@ export async function setTarget(
   }
 }
 
+/** Rebuild the per-team roster checks from the season roster (winners / MVPs). */
+export async function syncRosterChecks(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const result = await encounterService.syncRosterChecks();
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'encounter.roster_sync',
+      entityType: 'encounter',
+      summary: `Пересобраны проверки по составу: ${result.teams} команд`,
+      metadata: { teams: result.teams, without_champion: result.withoutChampion },
+    });
+    res.status(200).json({ ...result, encounters: await encounterService.listPool() });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getPending(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     res.status(200).json({ instances: await encounterService.listPending() });
