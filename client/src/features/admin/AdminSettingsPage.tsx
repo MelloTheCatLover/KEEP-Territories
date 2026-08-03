@@ -8,12 +8,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner, Input, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
-import {
-  getSettings,
-  updateSetting,
-  type GameSetting,
-  type GameSettingKey,
-} from './settings-api';
+import { getSettings, updateSetting, type GameSetting } from './settings-api';
 import { AccessDenied, AdminPageHeader } from './AdminShell';
 
 type LoadState =
@@ -22,11 +17,19 @@ type LoadState =
   | { status: 'ready'; settings: GameSetting[] };
 
 type ConfirmState =
-  | { key: GameSettingKey; oldValue: string; newValue: string; warning: string }
+  | { key: EditableSettingKey; oldValue: string; newValue: string; warning: string }
   | null;
 
+/**
+ * Keys this page owns: plain numbers the admin types in. The rest of
+ * `game_settings` — reward_multiplier, trophies_visible, active_law — are flags
+ * driven by their own toggles (карта, кубки, съезд) and would break here as raw
+ * number inputs, so they are filtered out below.
+ */
+type EditableSettingKey = 'base_exp_threshold' | 'exp_step' | 'max_fortification_level';
+
 const SETTING_META: Record<
-  GameSettingKey,
+  EditableSettingKey,
   { label: string; hint: string; warning: string; min: number; max: number }
 > = {
   base_exp_threshold: {
@@ -52,6 +55,10 @@ const SETTING_META: Record<
   },
 };
 
+function editableOnly(settings: GameSetting[]): GameSetting[] {
+  return settings.filter((s) => s.key in SETTING_META);
+}
+
 export function AdminSettingsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -59,14 +66,14 @@ export function AdminSettingsPage() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState<ConfirmState>(null);
-  const [saving, setSaving] = useState<GameSettingKey | null>(null);
+  const [saving, setSaving] = useState<EditableSettingKey | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setState({ status: 'loading' });
     try {
-      const settings = await getSettings();
+      const settings = editableOnly(await getSettings());
       setState({ status: 'ready', settings });
       setDrafts(Object.fromEntries(settings.map((s) => [s.key, s.value])));
     } catch (err) {
@@ -88,7 +95,7 @@ export function AdminSettingsPage() {
       return;
     }
     if (draft === setting.value) return;
-    const meta = SETTING_META[setting.key as GameSettingKey];
+    const meta = SETTING_META[setting.key as EditableSettingKey];
     const num = Number(draft);
     if (!Number.isFinite(num) || !Number.isInteger(num)) {
       setActionError(`«${setting.key}»: значение должно быть целым числом`);
@@ -100,7 +107,7 @@ export function AdminSettingsPage() {
     }
     setActionError(null);
     setConfirm({
-      key: setting.key as GameSettingKey,
+      key: setting.key as EditableSettingKey,
       oldValue: setting.value,
       newValue: draft,
       warning: meta?.warning ?? 'Изменение применится сразу.',
@@ -112,7 +119,7 @@ export function AdminSettingsPage() {
     setSaving(confirm.key);
     setActionError(null);
     try {
-      const next = await updateSetting(confirm.key, confirm.newValue);
+      const next = editableOnly(await updateSetting(confirm.key, confirm.newValue));
       setState({ status: 'ready', settings: next });
       setDrafts(Object.fromEntries(next.map((s) => [s.key, s.value])));
       setFlash(`«${confirm.key}» обновлено: ${confirm.oldValue} → ${confirm.newValue}`);
@@ -161,9 +168,16 @@ export function AdminSettingsPage() {
       {state.status === 'error' && <ErrorBanner message={state.message} />}
 
       {state.status === 'ready' && (
+        <p className="text-sm text-neutral-700">
+          Флаги ×1.5 к наградам, видимость кубков и активный закон переключаются на своих страницах
+          (карта, кубки, съезд), а не здесь.
+        </p>
+      )}
+
+      {state.status === 'ready' && (
         <div className="space-y-3">
           {state.settings.map((setting) => {
-            const meta = SETTING_META[setting.key as GameSettingKey];
+            const meta = SETTING_META[setting.key as EditableSettingKey];
             const draft = drafts[setting.key] ?? setting.value;
             const dirty = draft.trim() !== setting.value;
             return (
