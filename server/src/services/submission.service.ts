@@ -683,9 +683,9 @@ async function applyApprovedEffect(
   switch (submission.action_type) {
     case 'capture':
     case 'recapture': {
-      // Укрепление чужой команды не наследуется: захват всегда сбрасывает
-      // уровень и сразу выдаёт новому владельцу базовое укрепление 1.
-      // Дальше уровень поднимается только через fortify.
+      // Захваченный сектор всегда достаётся новому владельцу без укрепления —
+      // укрепление чужой команды не наследуется. Чтобы поднять уровень,
+      // команда должна сама выполнить fortify.
       await client.query(
         `UPDATE sectors SET
            status = 'captured',
@@ -693,7 +693,7 @@ async function applyApprovedEffect(
            capturing_by_team_id = NULL,
            capture_started_at = NULL,
            current_action_type = NULL,
-           fortification_level = 1,
+           fortification_level = 0,
            no_reward = false,
            reward_multiplier = CASE
              WHEN difficulty_id IN (SELECT id FROM difficulty_levels WHERE slug = 'core') THEN 1
