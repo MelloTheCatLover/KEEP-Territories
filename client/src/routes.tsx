@@ -19,6 +19,7 @@ import { AdminAuditPage } from './features/admin/AdminAuditPage';
 import { AdminCongressPage } from './features/admin/AdminCongressPage';
 import { AdminEncountersPage } from './features/admin/AdminEncountersPage';
 import { AdminMerchantsPage } from './features/admin/AdminMerchantsPage';
+import { AdminAwardsPage } from './features/admin/AdminAwardsPage';
 import { AdminDisplayPage } from './features/admin/AdminDisplayPage';
 import { TimelapsePage } from './features/admin/TimelapsePage';
 import { LawsPage } from './features/laws/LawsPage';
@@ -96,6 +97,7 @@ export const router = createBrowserRouter([
       { path: '/admin/congress', element: <AdminCongressPage /> },
       { path: '/admin/encounters', element: <AdminEncountersPage /> },
       { path: '/admin/merchants', element: <AdminMerchantsPage /> },
+      { path: '/admin/awards', element: <AdminAwardsPage /> },
     ],
   },
   {
