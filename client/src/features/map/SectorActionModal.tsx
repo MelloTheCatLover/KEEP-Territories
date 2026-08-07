@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ArrowRight,
   Rocket,
+  Bomb,
 } from 'lucide-react';
 import { Button, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -18,6 +19,7 @@ import { formatSectorLabel } from './types';
 import { Eye } from 'lucide-react';
 import { startAction, peekSector, type StartActionResponse, type TaskBrief } from './api';
 import { resolveEncounter, type EncounterInstance } from '../admin/encounters-api';
+import type { DiversionKind } from '../admin/diversion-api';
 import { TaskWheel } from './TaskWheel';
 import { difficultyColors } from '../../design-system/design-tokens';
 import {
@@ -26,6 +28,12 @@ import {
   checksFromIntelligence,
   hexDistance,
 } from './stat-thresholds';
+
+/** Что показать команде, когда на её действии сработала диверсия соперника. */
+const DIVERSION_FIRED: Partial<Record<DiversionKind, string>> = {
+  hard_reset: 'Диверсия: сектор выдан как сложный, отсчёт хода — от домашней базы.',
+  opponent_move: 'Диверсия: этот ход выбирает команда-диверсант.',
+};
 
 type Props = {
   sector: Sector;
@@ -216,6 +224,8 @@ export function SectorActionModal({
   const [resolving, setResolving] = useState(false);
   const [peeking, setPeeking] = useState(false);
   const [peek, setPeek] = useState<{ pool: TaskBrief[]; remaining: number } | null>(null);
+  // Заряженная диверсия соперника, сработавшая на этом действии.
+  const [diversionNotice, setDiversionNotice] = useState<string | null>(null);
 
   async function handlePeek() {
     setPeeking(true);
@@ -307,6 +317,11 @@ export function SectorActionModal({
     setError(null);
     try {
       const result = await startAction(sector.id, type, userTeamId, viaTeleport);
+      if (result.diversions && result.diversions.length > 0) {
+        setDiversionNotice(
+          result.diversions.map((k) => DIVERSION_FIRED[k] ?? 'Сработала диверсия').join(' '),
+        );
+      }
       const winnerId = result.submission.task_id;
       const showWheel =
         winnerId !== null &&
@@ -381,6 +396,13 @@ export function SectorActionModal({
 
         <div className="p-5 space-y-4">
           {error && <ErrorBanner message={error} />}
+
+          {diversionNotice && (
+            <div className="flex items-start gap-2 rounded-sm border border-danger/50 bg-danger-bg/50 px-3 py-2 text-xs text-neutral-1000">
+              <Bomb className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-danger-text" />
+              <span>{diversionNotice}</span>
+            </div>
+          )}
 
           {wheel && wheel.submission.task_id && (
             <TaskWheel

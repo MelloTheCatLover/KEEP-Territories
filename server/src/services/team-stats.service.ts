@@ -4,19 +4,11 @@ import { Team } from '../types/team';
 import { UserPublic } from '../types/user';
 import { AppError } from '../types/errors';
 import * as gameSettingsService from './game-settings.service';
+import { influenceExpr, experienceExpr } from './score-sql';
 
 export async function getInfluence(teamId: string): Promise<number> {
   const result = await pool.query<{ influence: number }>(
-    `SELECT GREATEST(
-       0,
-       (SELECT COALESCE(ROUND(SUM(dl.influence_reward * s.reward_multiplier)), 0)
-          FROM sectors s
-          JOIN difficulty_levels dl ON s.difficulty_id = dl.id
-         WHERE s.captured_by_team_id = $1 AND s.is_special = false AND s.no_reward = false)
-       + COALESCE((SELECT SUM(influence) FROM special_sector_awards WHERE team_id = $1), 0)
-       - COALESCE((SELECT SUM(influence) FROM team_penalties WHERE team_id = $1), 0)
-       + COALESCE((SELECT influence_delta FROM team_adjustments WHERE team_id = $1), 0)
-     )::int AS influence`,
+    `SELECT ${influenceExpr('$1')} AS influence`,
     [teamId]
   );
   return result.rows[0].influence;
@@ -24,17 +16,7 @@ export async function getInfluence(teamId: string): Promise<number> {
 
 export async function getExperience(teamId: string): Promise<number> {
   const result = await pool.query<{ experience: number }>(
-    `SELECT GREATEST(
-       0,
-       (SELECT COALESCE(ROUND(SUM(dl.experience_reward * s.reward_multiplier)), 0)
-          FROM sector_captures sc
-          JOIN sectors s ON sc.sector_id = s.id
-          JOIN difficulty_levels dl ON dl.id = s.difficulty_id
-         WHERE sc.team_id = $1 AND s.is_special = false)
-       + COALESCE((SELECT SUM(experience) FROM special_sector_awards WHERE team_id = $1), 0)
-       - COALESCE((SELECT SUM(experience) FROM team_penalties WHERE team_id = $1), 0)
-       + COALESCE((SELECT experience_delta FROM team_adjustments WHERE team_id = $1), 0)
-     )::int AS experience`,
+    `SELECT ${experienceExpr('$1')} AS experience`,
     [teamId]
   );
   return result.rows[0].experience;

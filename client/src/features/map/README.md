@@ -13,6 +13,8 @@ the review queue beside the field and team management via the side cards.
 - `HexMap.tsx` — SVG field
 - `SectorActionModal.tsx` — actions, task wheel, encounter resolution
 - `AdminReviewQueue.tsx` — one-click approve/reject beside the map
+- `DiversionPanel.tsx` — товары диверсанта: кинуть диверсию за жетон, снять заряженную, журнал
+- `MerchantTokenTray.tsx` — жетоны покупки мастера / торговца (гасятся вручную)
 - `TeamSidePanel.tsx` — team summary cards (click opens TeamManageModal for admins)
 
 ## Coordinates

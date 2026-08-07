@@ -2,22 +2,14 @@ import { pool } from '../config/db';
 import { AppError } from '../types/errors';
 import { CongressLaw, CongressTeamInfluence, LawStatus } from '../types/congress';
 import { getActiveSeasonId } from './season.service';
+import { influenceExpr } from './score-sql';
 
 /** Teams of the active season with their current influence, highest first. */
 export async function getTeamInfluence(): Promise<CongressTeamInfluence[]> {
   const seasonId = await getActiveSeasonId();
   const res = await pool.query<CongressTeamInfluence>(
     `SELECT t.id, t.name, t.color,
-            GREATEST(
-              0,
-              COALESCE((SELECT ROUND(SUM(dl.influence_reward * s.reward_multiplier))
-                          FROM sectors s
-                          JOIN difficulty_levels dl ON dl.id = s.difficulty_id
-                         WHERE s.captured_by_team_id = t.id AND s.is_special = false AND s.no_reward = false), 0)
-              + COALESCE((SELECT SUM(influence) FROM special_sector_awards WHERE team_id = t.id), 0)
-              - COALESCE((SELECT SUM(influence) FROM team_penalties WHERE team_id = t.id), 0)
-              + COALESCE((SELECT influence_delta FROM team_adjustments WHERE team_id = t.id), 0)
-            )::int AS influence
+            ${influenceExpr('t.id')} AS influence
        FROM teams t
       WHERE t.season_id = $1
       ORDER BY influence DESC, t.name ASC`,

@@ -10,8 +10,11 @@ import {
 } from '../types/task-submission';
 import { Sector, SectorActionType } from '../types/sector';
 import { StatName, MerchantType } from '../types/team-stats';
+import { DiversionKind } from '../types/diversion';
 import * as encounterService from './encounter.service';
+import * as diversionService from './diversion.service';
 import * as seasonService from './season.service';
+import { experienceExpr } from './score-sql';
 import {
   penetrationFromStrength,
   movementFromEndurance,
@@ -86,13 +89,32 @@ async function getTeamAnchor(
   return res.rows[0] ?? null;
 }
 
-/** Whether the sector lies within the team's endurance reach of its anchor. */
+/** The team's home base — the fallback anchor after a «hard_reset» diversion. */
+async function getTeamHomeBase(
+  client: PoolClient,
+  teamId: string,
+): Promise<{ q: number; r: number } | null> {
+  const res = await client.query<{ q: number; r: number }>(
+    'SELECT q, r FROM sectors WHERE home_team_id = $1 AND is_home_base = true LIMIT 1',
+    [teamId],
+  );
+  return res.rows[0] ?? null;
+}
+
+/**
+ * Whether the sector lies within the team's endurance reach of its anchor.
+ * `fromHome` — диверсия «команда отправляется на начальную позицию»: отсчёт
+ * идёт от домашней базы, а не от последнего захвата.
+ */
 async function assertWithinReach(
   client: PoolClient,
   sector: Sector,
   teamId: string,
+  fromHome = false,
 ): Promise<void> {
-  const anchor = await getTeamAnchor(client, teamId);
+  const anchor = fromHome
+    ? (await getTeamHomeBase(client, teamId)) ?? (await getTeamAnchor(client, teamId))
+    : await getTeamAnchor(client, teamId);
   if (!anchor) {
     throw new AppError(400, 'У команды нет захваченных секторов');
   }
@@ -166,19 +188,9 @@ async function assertTeleport(
     );
   }
 
-  // Affordability — mirrors the canonical experience formula (team-stats).
+  // Affordability — canonical experience formula (score-sql).
   const expRes = await client.query<{ experience: number }>(
-    `SELECT GREATEST(
-       0,
-       (SELECT COALESCE(ROUND(SUM(dl.experience_reward * s.reward_multiplier)), 0)
-          FROM sector_captures sc
-          JOIN sectors s ON s.id = sc.sector_id
-          JOIN difficulty_levels dl ON dl.id = s.difficulty_id
-         WHERE sc.team_id = $1 AND s.is_special = false)
-       + COALESCE((SELECT SUM(experience) FROM special_sector_awards WHERE team_id = $1), 0)
-       - COALESCE((SELECT SUM(experience) FROM team_penalties WHERE team_id = $1), 0)
-       + COALESCE((SELECT experience_delta FROM team_adjustments WHERE team_id = $1), 0)
-     )::int AS experience`,
+    `SELECT ${experienceExpr('$1')} AS experience`,
     [teamId],
   );
   const experience = expRes.rows[0].experience;
@@ -289,6 +301,55 @@ async function buildTaskPool(
   return fallback.rows;
 }
 
+/**
+ * Пул сложных заданий — диверсия «следующий сектор выполняется как сложный».
+ * Пустой пул означает, что заданий сложности ещё не завели: тогда действие
+ * идёт по обычному пулу сектора, а не срывается.
+ */
+async function buildHardTaskPool(client: PoolClient): Promise<TaskBrief[]> {
+  const res = await client.query<TaskBrief>(
+    `SELECT t.id, t.title, t.question
+       FROM tasks t
+       JOIN difficulty_levels dl ON dl.id = t.difficulty_id
+      WHERE dl.slug = 'hard'`,
+  );
+  return res.rows;
+}
+
+/** Задания по списку id, в порядке списка — для запомненной ложной разведки. */
+async function tasksByIds(client: PoolClient, ids: string[]): Promise<TaskBrief[]> {
+  const res = await client.query<TaskBrief>(
+    `SELECT t.id, t.title, t.question
+       FROM tasks t
+       JOIN UNNEST($1::uuid[]) WITH ORDINALITY AS o(id, ord) ON o.id = t.id
+      ORDER BY o.ord`,
+    [ids],
+  );
+  return res.rows;
+}
+
+/**
+ * Подставной пул для диверсии «следующая разведка покажет ложь»: столько же
+ * заданий, сколько в настоящем пуле, но других — и по возможности той же
+ * сложности, чтобы ложь выглядела правдоподобно.
+ */
+async function buildFakeTaskPool(
+  client: PoolClient,
+  sector: Sector,
+  real: TaskBrief[],
+): Promise<TaskBrief[]> {
+  const realIds = real.map((t) => t.id);
+  const res = await client.query<TaskBrief>(
+    `SELECT t.id, t.title, t.question
+       FROM tasks t
+      WHERE t.id <> ALL($1::uuid[])
+      ORDER BY (t.difficulty_id = $2) DESC, random()
+      LIMIT $3`,
+    [realIds, sector.difficulty_id, Math.max(1, real.length)],
+  );
+  return res.rows;
+}
+
 function pickRandom<T>(pool: T[]): T | null {
   if (pool.length === 0) return null;
   return pool[Math.floor(Math.random() * pool.length)];
@@ -370,6 +431,16 @@ export async function startAction(
 
     validateActionForSector(actionType, sector, teamId);
 
+    // Заряженные диверсии соперника снимаются в момент его действия.
+    // «hard_reset» меняет и досягаемость (отсчёт от базы), и пул заданий,
+    // поэтому берётся до проверок; «opponent_move» — пометка в журнале о том,
+    // что этот ход выбирала команда-диверсант.
+    const isSectorRun = actionType === 'capture' || actionType === 'recapture';
+    const hardResetId = isSectorRun
+      ? await diversionService.takeArmed(client, teamId, 'hard_reset')
+      : null;
+    const opponentMoveId = await diversionService.takeArmed(client, teamId, 'opponent_move');
+
     if (teleport) {
       // Teleport law ("Телепорт"): the team jumps to a sector of the SAME
       // difficulty as its anchor (last-captured sector), ignoring reach and the
@@ -381,7 +452,7 @@ export async function startAction(
       // must fall within the endurance reach of the team's anchor. This subsumes
       // the old "must border an owned sector" rule and, for fortify too, forces a
       // team to walk its anchor over via waypoint captures ("перевалы").
-      await assertWithinReach(client, sector, teamId);
+      await assertWithinReach(client, sector, teamId, hardResetId !== null);
     }
 
     // Перехват укреплённого сектора: команда должна либо снять всё укрепление
@@ -415,7 +486,8 @@ export async function startAction(
       throw new AppError(409, 'У вашей команды уже есть активное действие — дождитесь модерации');
     }
 
-    const taskPool = await buildTaskPool(client, sector);
+    const hardPool = hardResetId ? await buildHardTaskPool(client) : [];
+    const taskPool = hardPool.length > 0 ? hardPool : await buildTaskPool(client, sector);
     const picked = pickRandom(taskPool);
     const taskId = picked ? picked.id : null;
 
@@ -444,6 +516,25 @@ export async function startAction(
       [sectorId, teamId, userId, taskId, actionType],
     );
 
+    const diversions: DiversionKind[] = [];
+    if (hardResetId) {
+      await diversionService.consume(client, hardResetId, {
+        sectorId,
+        note:
+          hardPool.length > 0
+            ? 'Сектор выдан как сложный, отсчёт от базы'
+            : 'Отсчёт от базы (сложных заданий в пуле нет)',
+      });
+      diversions.push('hard_reset');
+    }
+    if (opponentMoveId) {
+      await diversionService.consume(client, opponentMoveId, {
+        sectorId,
+        note: 'Ход выбран командой-диверсантом',
+      });
+      diversions.push('opponent_move');
+    }
+
     // A capture attempt rolls a random encounter for the acting team; it is
     // shown and resolved inside the capture window.
     let encounterInstanceId: string | null = null;
@@ -463,7 +554,7 @@ export async function startAction(
     const encounter = encounterInstanceId
       ? await encounterService.getInstanceView(encounterInstanceId)
       : null;
-    return { submission, task_pool: taskPool, encounter };
+    return { submission, task_pool: taskPool, encounter, diversions };
   } catch (error) {
     await client.query('ROLLBACK');
     if (
@@ -683,6 +774,16 @@ async function applyApprovedEffect(
   switch (submission.action_type) {
     case 'capture':
     case 'recapture': {
+      // Диверсия «соперник не получает награду за сектор»: сектор достаётся
+      // пустым. Влияние гасит флаг no_reward (его учитывает influenceExpr),
+      // опыт — компенсирующий штраф ниже, потому что опыт считается по журналу
+      // захватов и флаг сектора его не видит.
+      const noRewardId = await diversionService.takeArmed(
+        client,
+        submission.team_id,
+        'no_reward',
+      );
+
       // Захваченный сектор всегда достаётся новому владельцу без укрепления —
       // укрепление чужой команды не наследуется. Чтобы поднять уровень,
       // команда должна сама выполнить fortify.
@@ -694,7 +795,7 @@ async function applyApprovedEffect(
            capture_started_at = NULL,
            current_action_type = NULL,
            fortification_level = 0,
-           no_reward = false,
+           no_reward = $3,
            reward_multiplier = CASE
              WHEN difficulty_id IN (SELECT id FROM difficulty_levels WHERE slug = 'core') THEN 1
              ELSE COALESCE(
@@ -702,12 +803,35 @@ async function applyApprovedEffect(
              )
            END
          WHERE id = $2`,
-        [submission.team_id, submission.sector_id],
+        [submission.team_id, submission.sector_id, noRewardId !== null],
       );
       await client.query(
         'INSERT INTO sector_captures (sector_id, team_id) VALUES ($1, $2)',
         [submission.sector_id, submission.team_id],
       );
+
+      if (noRewardId) {
+        const rewardRes = await client.query<{ experience: number }>(
+          `SELECT ROUND(dl.experience_reward * s.reward_multiplier)::int AS experience
+             FROM sectors s
+             JOIN difficulty_levels dl ON dl.id = s.difficulty_id
+            WHERE s.id = $1`,
+          [submission.sector_id],
+        );
+        const experience = rewardRes.rows[0]?.experience ?? 0;
+        if (experience > 0) {
+          await client.query(
+            `INSERT INTO team_penalties
+               (team_id, influence, experience, reason, sector_id, submission_id)
+             VALUES ($1, 0, $2, 'diversion_no_reward', $3, $4)`,
+            [submission.team_id, experience, submission.sector_id, submission.id],
+          );
+        }
+        await diversionService.consume(client, noRewardId, {
+          sectorId: submission.sector_id,
+          note: `Сектор без награды (опыт −${experience})`,
+        });
+      }
       // A capture refreshes the team's scouting budget: clear its peeks.
       await client.query('DELETE FROM sector_peeks WHERE team_id = $1', [submission.team_id]);
       // A hidden merchant on this sector mints a one-off purchase token for the
@@ -735,6 +859,14 @@ async function applyApprovedEffect(
          WHERE id = $2`,
         [next, submission.sector_id],
       );
+      // Опыт за укрепление не сгорает — пишем в журнал, как захват в
+      // sector_captures. Упёршийся в потолок уровень ничего не приносит.
+      if (next > sector.fortification_level) {
+        await client.query(
+          'INSERT INTO sector_fortification_awards (sector_id, team_id) VALUES ($1, $2)',
+          [submission.sector_id, submission.team_id],
+        );
+      }
       return { merchant: null, tokenMinted: false };
     }
     case 'remove_fortification': {
@@ -885,15 +1017,7 @@ async function calculateLevelInTx(
   teamId: string,
 ): Promise<number> {
   const expRes = await client.query<{ experience: number }>(
-    `SELECT GREATEST(
-       0,
-       (SELECT COALESCE(SUM(dl.experience_reward), 0)
-          FROM sector_captures sc
-          JOIN sectors s ON sc.sector_id = s.id
-          JOIN difficulty_levels dl ON dl.id = s.difficulty_id
-         WHERE sc.team_id = $1)
-       - COALESCE((SELECT SUM(experience) FROM team_penalties WHERE team_id = $1), 0)
-     )::int AS experience`,
+    `SELECT ${experienceExpr('$1')} AS experience`,
     [teamId],
   );
   const experience = expRes.rows[0].experience;
@@ -1156,8 +1280,8 @@ export async function peekSector(
     const intelligence = await getTeamStat(client, teamId, 'intelligence');
     const cap = checksFromIntelligence(intelligence);
 
-    const already = await client.query<{ id: string }>(
-      'SELECT id FROM sector_peeks WHERE team_id = $1 AND sector_id = $2',
+    const already = await client.query<{ id: string; lie_task_ids: string[] | null }>(
+      'SELECT id, lie_task_ids FROM sector_peeks WHERE team_id = $1 AND sector_id = $2',
       [teamId, sectorId],
     );
     const usedRes = await client.query<{ count: number }>(
@@ -1166,7 +1290,16 @@ export async function peekSector(
     );
     const used = usedRes.rows[0]?.count ?? 0;
 
-    if (already.rows.length === 0) {
+    let lie: TaskBrief[] | null = null;
+
+    if (already.rows.length > 0) {
+      // Уже разведанный сектор: если разведку подменила диверсия, повторный
+      // (бесплатный) просмотр обязан показать ту же ложь.
+      const stored = already.rows[0].lie_task_ids;
+      if (stored && stored.length > 0) {
+        lie = await tasksByIds(client, stored);
+      }
+    } else {
       if (used >= cap) {
         throw new AppError(
           400,
@@ -1175,14 +1308,30 @@ export async function peekSector(
             : `Проверки закончились (использовано ${used} из ${cap})`,
         );
       }
+
+      // Диверсия «следующая разведка покажет ложь»: проверка тратится как
+      // обычно, но пул подменяется — и подмена запоминается.
+      const lieId = await diversionService.takeArmed(client, teamId, 'false_scouting');
+      if (lieId) {
+        const real = await buildTaskPool(client, sector);
+        const fake = await buildFakeTaskPool(client, sector, real);
+        if (fake.length > 0) {
+          lie = fake;
+          await diversionService.consume(client, lieId, {
+            sectorId,
+            note: 'Разведка показала ложный пул',
+          });
+        }
+      }
+
       await client.query(
-        `INSERT INTO sector_peeks (team_id, sector_id) VALUES ($1, $2)
+        `INSERT INTO sector_peeks (team_id, sector_id, lie_task_ids) VALUES ($1, $2, $3)
          ON CONFLICT (team_id, sector_id) DO NOTHING`,
-        [teamId, sectorId],
+        [teamId, sectorId, lie ? lie.map((t) => t.id) : null],
       );
     }
 
-    const taskPool = await buildTaskPool(client, sector);
+    const taskPool = lie ?? (await buildTaskPool(client, sector));
     await client.query('COMMIT');
 
     const nowUsed = already.rows.length === 0 ? used + 1 : used;

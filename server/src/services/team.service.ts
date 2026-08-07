@@ -271,6 +271,10 @@ export async function leave(userId: string): Promise<void> {
         [team_id]
       );
       await client.query(
+        'DELETE FROM sector_fortification_awards WHERE team_id = $1',
+        [team_id]
+      );
+      await client.query(
         `UPDATE sectors
          SET status = 'free',
              captured_by_team_id = NULL,

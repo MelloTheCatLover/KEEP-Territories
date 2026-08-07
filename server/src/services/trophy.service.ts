@@ -1,6 +1,7 @@
 import { pool } from '../config/db';
 import { AppError } from '../types/errors';
 import { getActiveSeasonId } from './season.service';
+import { influenceExpr, experienceExpr } from './score-sql';
 import {
   OverallEntry,
   TrophiesResponse,
@@ -120,31 +121,8 @@ const METRICS_QUERY = `
     t.id,
     t.name,
     t.color,
-    GREATEST(
-      0,
-      COALESCE((
-        SELECT ROUND(SUM(dl.influence_reward * s.reward_multiplier))
-          FROM sectors s
-          JOIN difficulty_levels dl ON dl.id = s.difficulty_id
-         WHERE s.captured_by_team_id = t.id AND s.is_special = false AND s.no_reward = false
-      ), 0)
-      + COALESCE((SELECT SUM(influence) FROM special_sector_awards WHERE team_id = t.id), 0)
-      - COALESCE((SELECT SUM(influence) FROM team_penalties WHERE team_id = t.id), 0)
-      + COALESCE((SELECT influence_delta FROM team_adjustments WHERE team_id = t.id), 0)
-    )::int AS influence,
-    GREATEST(
-      0,
-      COALESCE((
-        SELECT ROUND(SUM(dl.experience_reward * s.reward_multiplier))
-          FROM sector_captures sc
-          JOIN sectors s ON sc.sector_id = s.id
-          JOIN difficulty_levels dl ON dl.id = s.difficulty_id
-         WHERE sc.team_id = t.id AND s.is_special = false
-      ), 0)
-      + COALESCE((SELECT SUM(experience) FROM special_sector_awards WHERE team_id = t.id), 0)
-      - COALESCE((SELECT SUM(experience) FROM team_penalties WHERE team_id = t.id), 0)
-      + COALESCE((SELECT experience_delta FROM team_adjustments WHERE team_id = t.id), 0)
-    )::int AS experience,
+    ${influenceExpr('t.id')} AS influence,
+    ${experienceExpr('t.id')} AS experience,
     COALESCE((
       SELECT COUNT(*) FROM sectors WHERE captured_by_team_id = t.id
     ), 0)::int AS captured_count,

@@ -25,6 +25,7 @@ import { CreateTeamModal } from '../team/CreateTeamModal';
 import { TrophySection } from '../trophies/TrophySection';
 import { AdminReviewQueue } from './AdminReviewQueue';
 import { MerchantTokenTray } from './MerchantTokenTray';
+import { DiversionPanel } from './DiversionPanel';
 import { TeamManageModal } from '../admin/team-modals';
 
 type LoadState =
@@ -723,6 +724,15 @@ export function MapPage() {
 
           {isAdmin && (
             <div className="order-2 flex flex-col lg:order-last lg:col-span-3 xl:order-4 xl:col-span-1">
+              <DiversionPanel
+                casterTeam={state.fullTeams.find((t) => t.id === teamId) ?? null}
+                teams={state.fullTeams}
+                sectors={state.sectors}
+                onChanged={() => {
+                  void fetchMap(true);
+                  reloadMerchants();
+                }}
+              />
               <MerchantTokenTray merchants={merchants} onSpent={reloadMerchants} />
               <AdminReviewQueue
                 onActed={() => {

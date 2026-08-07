@@ -1,6 +1,7 @@
 import { DifficultyLevel } from './difficulty';
 import { SectorActionType } from './sector';
 import { EncounterInstanceView } from './encounter';
+import { DiversionKind } from './diversion';
 
 export type SubmissionStatus = 'pending' | 'approved' | 'rejected';
 
@@ -67,6 +68,8 @@ export interface StartActionResponse {
   submission: TaskSubmissionWithDetails;
   task_pool: TaskBrief[];
   encounter?: EncounterInstanceView | null;
+  /** Заряженные диверсии соперника, сработавшие на этом действии. */
+  diversions?: DiversionKind[];
 }
 
 export interface ApproveSubmissionDto {
