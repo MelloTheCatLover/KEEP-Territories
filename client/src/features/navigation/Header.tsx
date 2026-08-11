@@ -144,11 +144,10 @@ export function Header() {
 
         {mobileOpen && (
           <div className="absolute right-0 top-full mt-1 w-64 bg-glass-strong backdrop-blur-glass border border-glass rounded-md shadow-3 p-1.5 z-[1000]">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-glass mb-1">
-              <span className="bg-brand-700 text-neutral-1000 w-8 h-8 rounded-full font-semibold text-sm flex items-center justify-center flex-shrink-0">
-                {user?.username?.charAt(0).toUpperCase() ?? '?'}
-              </span>
-              <span className="text-sm text-neutral-900 truncate">
+            {/* Ник, без аватара: картинку всё равно поставить нельзя, а кружок
+                с буквой только занимал место в узком меню. */}
+            <div className="px-4 py-3 border-b border-glass mb-1">
+              <span className="text-sm font-medium text-neutral-1000 truncate block">
                 {user?.username ?? ''}
               </span>
             </div>
@@ -165,16 +164,6 @@ export function Header() {
             ))}
 
             <div className="border-t border-glass mt-1 pt-1">
-              <button
-                onClick={() => {
-                  navigate('/profile');
-                  setMobileOpen(false);
-                }}
-                className="w-full px-4 py-3.5 text-base text-left text-neutral-900 hover:bg-neutral-300 transition-colors flex items-center gap-3 rounded-sm"
-              >
-                <User className="w-5 h-5" />
-                Профиль
-              </button>
               <button
                 onClick={() => {
                   logout();

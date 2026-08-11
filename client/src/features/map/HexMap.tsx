@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { Sector, DifficultySlug } from './types';
 import { formatSectorLabel } from './types';
@@ -15,8 +15,13 @@ const VIEWBOX_PADDING = 16;
 
 export const MAP_HEX_SIZE = HEX_SIZE;
 export const MAP_VIEWBOX_PADDING = VIEWBOX_PADDING;
-const BADGE_RADIUS = 4;
-const CAPTURE_RING_SCALE = 0.92;
+// Difficulty is the sector's border, not a corner dot: a 3px ring drawn just
+// inside the hex edge, so it stays readable at any zoom and over any team fill.
+const DIFFICULTY_BORDER_WIDTH = 3.2;
+const DIFFICULTY_BORDER_INSET = DIFFICULTY_BORDER_WIDTH / 2;
+// A team with an open submission on a sector hatches it in its own colour.
+const HATCH_TILE = 9;
+const HATCH_STROKE = 3.4;
 // Fortification is drawn as concentric inset outlines ("walls"), one per level,
 // so the sector number stays readable — no filled hexes covering the centre.
 const FORT_INSETS = [0.78, 0.58, 0.38];
@@ -66,6 +71,41 @@ export const MERCHANT_MARK: Record<MerchantKind, { letter: string; color: string
   saboteur: { letter: 'Д', color: '#EF4444', label: 'Диверсант' },
   trader: { letter: 'Т', color: '#22C55E', label: 'Торговец' },
 };
+
+/** Lucide "trophy" glyph, drawn inline so it scales with the hex geometry. */
+function TrophyMark({
+  x,
+  y,
+  size,
+  color,
+  opacity,
+}: {
+  x: number;
+  y: number;
+  size: number;
+  color: string;
+  opacity: number;
+}) {
+  const scale = size / 24;
+  return (
+    <g
+      transform={`translate(${x - size / 2} ${y - size / 2}) scale(${scale})`}
+      fill="none"
+      stroke={color}
+      strokeOpacity={opacity}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M4 22h16" />
+      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+    </g>
+  );
+}
 
 type HexMapProps = {
   sectors: Sector[];
@@ -165,6 +205,21 @@ export function HexMap({
     // Reset the view whenever the map (and therefore the fitted base) changes.
     setView(base);
   }, [base]);
+
+  // One hatch pattern per distinct acting-team colour. The instance prefix keeps
+  // ids unique when several maps share a page (map + admin preview).
+  const instanceId = useId().replace(/:/g, '');
+  const hatchIds = useMemo(() => {
+    const ids = new Map<string, string>();
+    for (const s of sectors) {
+      const teamId = s.active_submission_team_id;
+      if (!teamId) continue;
+      const team = teamsById[teamId];
+      const color = team ? resolveTeamPalette(team).bright : 'var(--color-brand-300)';
+      if (!ids.has(color)) ids.set(color, `hatch-${instanceId}-${ids.size}`);
+    }
+    return ids;
+  }, [sectors, teamsById, instanceId]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   // Active pointers in client coords, keyed by pointerId.
@@ -285,6 +340,28 @@ export function HexMap({
       preserveAspectRatio="xMidYMid meet"
       className="w-full h-full block"
     >
+      <defs>
+        {[...hatchIds].map(([color, id]) => (
+          <pattern
+            key={id}
+            id={id}
+            width={HATCH_TILE}
+            height={HATCH_TILE}
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"
+          >
+            <line
+              x1={0}
+              y1={0}
+              x2={0}
+              y2={HATCH_TILE}
+              stroke={color}
+              strokeWidth={HATCH_STROKE}
+            />
+          </pattern>
+        ))}
+      </defs>
+
       {/* 1) Outline grid */}
       <g className="hex-grid" pointerEvents="none">
         {sectors.map((s) => {
@@ -301,16 +378,11 @@ export function HexMap({
         })}
       </g>
 
-      {/* 2) Sector fill + difficulty badge */}
+      {/* 2) Sector fill + difficulty border */}
       <g className="hex-fill-layer" pointerEvents="none">
         {sectors.map((s) => {
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
           const style = resolveStyle(s, teamsById);
-          const badgeColor = s.is_special
-            ? specialSectorColor
-            : DIFFICULTY_BADGE[s.difficulty.slug];
-          const badgeX = x - HEX_SIZE * 0.55;
-          const badgeY = y - HEX_SIZE * 0.55;
           const fortLevel = Math.max(0, Math.min(3, s.fortification_level | 0));
           const fortInTitle = fortLevel > 0 && s.captured_by_team_id != null;
           return (
@@ -329,15 +401,37 @@ export function HexMap({
                   }`}
                 </title>
               </polygon>
-              <circle
-                cx={badgeX}
-                cy={badgeY}
-                r={BADGE_RADIUS}
-                fill={badgeColor}
-                stroke="var(--color-neutral-0)"
-                strokeWidth={0.8}
+              {/* Difficulty ring — inset by half its width so it never spills
+                  onto the neighbouring hex and stays a property of this cell. */}
+              <polygon
+                points={hexPoints(x, y, HEX_SIZE - DIFFICULTY_BORDER_INSET)}
+                fill="none"
+                stroke={DIFFICULTY_BADGE[s.difficulty.slug]}
+                strokeWidth={DIFFICULTY_BORDER_WIDTH}
+                strokeLinejoin="round"
               />
             </g>
+          );
+        })}
+      </g>
+
+      {/* 2.5) Special-event mark — a trophy in the centre of every special
+          sector, so the event squares stay recognisable after a team paints
+          one in its own colour. */}
+      <g className="hex-special-layer" pointerEvents="none">
+        {sectors.map((s) => {
+          if (!s.is_special) return null;
+          const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
+          const owned = s.captured_by_team_id != null;
+          return (
+            <TrophyMark
+              key={s.id}
+              x={x}
+              y={y}
+              size={HEX_SIZE * 0.86}
+              color={owned ? 'var(--color-neutral-1000)' : 'var(--color-neutral-0)'}
+              opacity={owned ? 0.75 : 0.95}
+            />
           );
         })}
       </g>
@@ -383,7 +477,28 @@ export function HexMap({
         })}
       </g>
 
-      {/* 3.5) Sector labels — drawn above fort hexes so the number stays visible */}
+      {/* 3.5) Sectors under an open submission — hatched in the acting team's
+          colour. Hatching reads as "work in progress" without competing with
+          the solid fill that marks actual ownership. */}
+      <g className="hex-hatch-layer" pointerEvents="none">
+        {sectors.map((s) => {
+          const teamId = s.active_submission_team_id;
+          if (!teamId) return null;
+          const team = teamsById[teamId];
+          const color = team ? resolveTeamPalette(team).bright : 'var(--color-brand-300)';
+          const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
+          return (
+            <polygon
+              key={s.id}
+              points={hexPoints(x, y, HEX_SIZE - DIFFICULTY_BORDER_WIDTH)}
+              fill={`url(#${hatchIds.get(color)})`}
+              stroke="none"
+            />
+          );
+        })}
+      </g>
+
+      {/* 3.6) Sector labels — drawn above fort hexes so the number stays visible */}
       <g className="hex-label-layer" pointerEvents="none">
         {sectors.map((s) => {
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
@@ -406,28 +521,6 @@ export function HexMap({
             >
               {style.label}
             </text>
-          );
-        })}
-      </g>
-
-      {/* 4) Capture rings — sit on top of fortification hexes */}
-      <g className="hex-ring-layer" pointerEvents="none">
-        {sectors.map((s) => {
-          const teamId = s.active_submission_team_id;
-          if (!teamId) return null;
-          const team = teamsById[teamId];
-          const palette = team ? resolveTeamPalette(team) : null;
-          const stroke = palette ? palette.bright : 'var(--color-brand-300)';
-          const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
-          return (
-            <polygon
-              key={s.id}
-              points={hexPoints(x, y, HEX_SIZE * CAPTURE_RING_SCALE)}
-              fill="none"
-              stroke={stroke}
-              strokeWidth={3.5}
-              strokeLinejoin="round"
-            />
           );
         })}
       </g>
