@@ -2,6 +2,8 @@ import { pool } from '../config/db';
 import { AppError } from '../types/errors';
 import { getActiveSeasonId } from './season.service';
 import { influenceExpr, experienceExpr } from './score-sql';
+import { thresholdCoverage } from './stat-thresholds';
+import { StatName } from '../types/team-stats';
 import {
   OverallEntry,
   TrophiesResponse,
@@ -10,28 +12,38 @@ import {
   TrophyRanking,
 } from '../types/trophy';
 
-interface TeamMetric {
+export interface TeamMetric {
   id: string;
   name: string;
   color: string | null;
   influence: number;
   experience: number;
   captured_count: number;
+  /** Сырая сумма вложенных очков — тайбрейк «Универсальных» и справочная цифра. */
   stat_sum: number;
+  stat_strength: number;
+  stat_intelligence: number;
+  stat_endurance: number;
+  stat_leadership: number;
+  stat_luck: number;
   owns_core: boolean;
   streak: number;
   recaptures: number;
-  special_events: number;
+  /** Число первых мест в особых событиях — метрика «Чемпионов». */
+  special_wins: number;
+  /** Очки за места (1-е → 8 … 8-е → 1) — тайбрейк «Чемпионов». */
+  special_points: number;
 }
 
-type NumericMetric =
-  | 'influence'
-  | 'experience'
-  | 'captured_count'
-  | 'stat_sum'
-  | 'streak'
-  | 'recaptures'
-  | 'special_events';
+export function statsOf(team: TeamMetric): Record<StatName, number> {
+  return {
+    strength: team.stat_strength,
+    intelligence: team.stat_intelligence,
+    endurance: team.stat_endurance,
+    leadership: team.stat_leadership,
+    luck: team.stat_luck,
+  };
+}
 
 type TrophyDef =
   | {
@@ -40,7 +52,10 @@ type TrophyDef =
       description: string;
       private_value: boolean;
       type: 'value';
-      metric: NumericMetric;
+      /** Основная метрика — она же показывается в колонке «Значение». */
+      value: (t: TeamMetric) => number;
+      /** Разводит команды с равной метрикой; на показ не идёт. */
+      tiebreak?: (t: TeamMetric) => number;
     }
   | {
       key: TrophyKey;
@@ -57,7 +72,7 @@ const TROPHY_DEFS: TrophyDef[] = [
     description: 'Команда с наибольшим влиянием',
     private_value: false,
     type: 'value',
-    metric: 'influence',
+    value: (t) => t.influence,
   },
   {
     key: 'core_keepers',
@@ -72,7 +87,7 @@ const TROPHY_DEFS: TrophyDef[] = [
     description: 'Команда с наибольшим опытом',
     private_value: false,
     type: 'value',
-    metric: 'experience',
+    value: (t) => t.experience,
   },
   {
     key: 'rulers',
@@ -80,23 +95,24 @@ const TROPHY_DEFS: TrophyDef[] = [
     description: 'Команда с наибольшим числом захваченных секторов',
     private_value: false,
     type: 'value',
-    metric: 'captured_count',
+    value: (t) => t.captured_count,
   },
   {
     key: 'universal',
     name: 'Универсальные',
-    description: 'Сумма характеристик команды',
+    description: 'Число открытых порогов характеристик',
     private_value: false,
     type: 'value',
-    metric: 'stat_sum',
+    value: (t) => thresholdCoverage(statsOf(t)),
+    tiebreak: (t) => t.stat_sum,
   },
   {
     key: 'unbreakable',
     name: 'Несгибаемые',
-    description: 'Самый длинный стрик одобренных захватов без drop-сброса',
+    description: 'Самый длинный ряд успехов без сброса захвата',
     private_value: true,
     type: 'value',
-    metric: 'streak',
+    value: (t) => t.streak,
   },
   {
     key: 'conquerors',
@@ -104,17 +120,56 @@ const TROPHY_DEFS: TrophyDef[] = [
     description: 'Сколько раз команда отобрала сектор у другой',
     private_value: true,
     type: 'value',
-    metric: 'recaptures',
+    value: (t) => t.recaptures,
   },
   {
     key: 'champions',
     name: 'Чемпионы',
-    description: 'Очки за места в захватах особых секторов',
+    description: 'Число побед (первых мест) в особых событиях',
     private_value: false,
     type: 'value',
-    metric: 'special_events',
+    value: (t) => t.special_wins,
+    tiebreak: (t) => t.special_points,
   },
 ];
+
+export function trophyDefs(): ReadonlyArray<{
+  key: TrophyKey;
+  name: string;
+  description: string;
+  private_value: boolean;
+}> {
+  return TROPHY_DEFS.map(({ key, name, description, private_value }) => ({
+    key,
+    name,
+    description,
+    private_value,
+  }));
+}
+
+/**
+ * Поток «успехов» команды для стрика: одобренные захваты и перехваты, поднятые
+ * уровни укрепления и первые места в особых событиях. Один и тот же SQL читают
+ * и метрика кубка, и детальная статистика — расхождение между ними означало бы,
+ * что журнал не объясняет цифру.
+ */
+export const STREAK_EVENTS_SQL = (team: string) => `
+  SELECT COALESCE(sub.reviewed_at, sub.created_at) AS ts,
+         sub.action_type AS kind,
+         sub.sector_id
+    FROM task_submissions sub
+   WHERE sub.team_id = ${team}
+     AND sub.status = 'approved'
+     AND sub.action_type IN ('capture', 'recapture')
+  UNION ALL
+  SELECT fa.awarded_at AS ts, 'fortify' AS kind, fa.sector_id
+    FROM sector_fortification_awards fa
+   WHERE fa.team_id = ${team}
+  UNION ALL
+  SELECT ssa.created_at AS ts, 'special_win' AS kind, ssa.sector_id
+    FROM special_sector_awards ssa
+   WHERE ssa.team_id = ${team} AND ssa.place = 1
+`;
 
 const METRICS_QUERY = `
   SELECT
@@ -129,15 +184,24 @@ const METRICS_QUERY = `
     COALESCE((
       SELECT COUNT(*) FROM team_stat_upgrades WHERE team_id = t.id
     ), 0)::int AS stat_sum,
+    COALESCE((SELECT COUNT(*) FROM team_stat_upgrades u
+               WHERE u.team_id = t.id AND u.stat_name = 'strength'), 0)::int AS stat_strength,
+    COALESCE((SELECT COUNT(*) FROM team_stat_upgrades u
+               WHERE u.team_id = t.id AND u.stat_name = 'intelligence'), 0)::int AS stat_intelligence,
+    COALESCE((SELECT COUNT(*) FROM team_stat_upgrades u
+               WHERE u.team_id = t.id AND u.stat_name = 'endurance'), 0)::int AS stat_endurance,
+    COALESCE((SELECT COUNT(*) FROM team_stat_upgrades u
+               WHERE u.team_id = t.id AND u.stat_name = 'leadership'), 0)::int AS stat_leadership,
+    COALESCE((SELECT COUNT(*) FROM team_stat_upgrades u
+               WHERE u.team_id = t.id AND u.stat_name = 'luck'), 0)::int AS stat_luck,
     EXISTS(
       SELECT 1 FROM sectors s
        JOIN difficulty_levels dl ON dl.id = s.difficulty_id
        WHERE s.captured_by_team_id = t.id AND dl.slug = 'core'
     ) AS owns_core,
-    -- Стрик = самый длинный ряд одобренных захватов за сезон. Дропы делят
-    -- таймлайн на сегменты (seg = число дропов до события); дроп фиксирует
-    -- прошлый максимум и начинает новый сегмент, а не обнуляет достижение.
-    -- 1-е место в спец-событии засчитывается как захват.
+    -- Стрик = самый длинный ряд успехов за сезон. Дропы делят таймлайн на
+    -- сегменты (seg = число дропов до события); дроп фиксирует прошлый максимум
+    -- и начинает новый сегмент, а не обнуляет достижение.
     COALESCE((
       SELECT MAX(seg_count) FROM (
         SELECT COUNT(*) AS seg_count
@@ -146,17 +210,7 @@ const METRICS_QUERY = `
             SELECT COUNT(*) FROM team_penalties p
              WHERE p.team_id = t.id AND p.reason = 'drop' AND p.created_at < ev.ts
           ) AS seg
-          FROM (
-            SELECT COALESCE(sub.reviewed_at, sub.created_at) AS ts
-              FROM task_submissions sub
-             WHERE sub.team_id = t.id
-               AND sub.status = 'approved'
-               AND sub.action_type IN ('capture', 'recapture')
-            UNION ALL
-            SELECT ssa.created_at AS ts
-              FROM special_sector_awards ssa
-             WHERE ssa.team_id = t.id AND ssa.place = 1
-          ) ev
+          FROM (${STREAK_EVENTS_SQL('t.id')}) ev
         ) tagged
         GROUP BY seg
       ) segs
@@ -168,35 +222,51 @@ const METRICS_QUERY = `
          AND action_type = 'recapture'
     ), 0)::int AS recaptures,
     COALESCE((
-      -- "Champions" points: better place = more points (1st→8 … 8th→1).
+      SELECT COUNT(*) FROM special_sector_awards ssa
+       WHERE ssa.team_id = t.id AND ssa.place = 1
+    ), 0)::int AS special_wins,
+    COALESCE((
       SELECT SUM(9 - ssa.place) FROM special_sector_awards ssa WHERE ssa.team_id = t.id
-    ), 0)::int AS special_events
+    ), 0)::int AS special_points
   FROM teams t
   WHERE t.season_id = $1
   ORDER BY t.created_at ASC
 `;
 
+/**
+ * Competition rank по паре (метрика, тайбрейк): одинаковое место получают только
+ * команды, совпавшие по обоим значениям.
+ */
 function competitionRank(
   teams: TeamMetric[],
   getValue: (t: TeamMetric) => number,
+  getTiebreak: (t: TeamMetric) => number,
 ): Map<string, number> {
-  const sorted = [...teams].sort((a, b) => getValue(b) - getValue(a));
+  const sorted = [...teams].sort(
+    (a, b) => getValue(b) - getValue(a) || getTiebreak(b) - getTiebreak(a),
+  );
   const places = new Map<string, number>();
-  let lastValue: number | null = null;
+  let lastKey: string | null = null;
   let lastPlace = 0;
   sorted.forEach((team, index) => {
-    const value = getValue(team);
+    const key = `${getValue(team)}:${getTiebreak(team)}`;
     let place: number;
-    if (lastValue !== null && value === lastValue) {
+    if (lastKey !== null && key === lastKey) {
       place = lastPlace;
     } else {
       place = index + 1;
       lastPlace = place;
-      lastValue = value;
+      lastKey = key;
     }
     places.set(team.id, place);
   });
   return places;
+}
+
+export interface TrophyOverride {
+  trophy_key: TrophyKey;
+  team_id: string;
+  note: string | null;
 }
 
 function buildTrophy(
@@ -204,6 +274,7 @@ function buildTrophy(
   teams: TeamMetric[],
   viewerTeamId: string | null,
   showAllValues: boolean,
+  override: TrophyOverride | null,
 ): TrophyRanking {
   const totalTeams = teams.length;
 
@@ -216,11 +287,27 @@ function buildTrophy(
       valueMap.set(t.id, t.owns_core ? 1 : 0);
     });
   } else {
-    const ranks = competitionRank(teams, (t) => t[def.metric]);
+    const getValue = def.value;
+    const getTiebreak = def.tiebreak ?? (() => 0);
+    const ranks = competitionRank(teams, getValue, getTiebreak);
     teams.forEach((t) => {
       placeMap.set(t.id, ranks.get(t.id) ?? totalTeams);
-      valueMap.set(t.id, t[def.metric]);
+      valueMap.set(t.id, getValue(t));
     });
+  }
+
+  // Ручной победитель: назначенная команда встаёт на 1-е место, остальные
+  // пересчитываются между собой по обычной метрике и сдвигаются на позицию вниз.
+  const forcedTeamId =
+    override && teams.some((t) => t.id === override.team_id) ? override.team_id : null;
+  if (forcedTeamId) {
+    const rest = teams.filter((t) => t.id !== forcedTeamId);
+    const restRanks =
+      def.type === 'core'
+        ? new Map(rest.map((t) => [t.id, t.owns_core ? 1 : Math.max(1, rest.length)]))
+        : competitionRank(rest, def.value, def.tiebreak ?? (() => 0));
+    placeMap.set(forcedTeamId, 1);
+    rest.forEach((t) => placeMap.set(t.id, (restRanks.get(t.id) ?? rest.length) + 1));
   }
 
   const entries: TrophyEntry[] = teams
@@ -243,6 +330,9 @@ function buildTrophy(
     description: def.description,
     private_value: def.private_value,
     entries,
+    override: forcedTeamId
+      ? { team_id: forcedTeamId, note: override?.note ?? null }
+      : null,
   };
 }
 
@@ -298,9 +388,56 @@ function buildOverall(
   });
 }
 
-async function loadTeamMetrics(seasonId: string): Promise<TeamMetric[]> {
+export async function loadTeamMetrics(seasonId: string): Promise<TeamMetric[]> {
   const res = await pool.query<TeamMetric>(METRICS_QUERY, [seasonId]);
   return res.rows;
+}
+
+export async function loadOverrides(
+  seasonId: string,
+): Promise<Map<TrophyKey, TrophyOverride>> {
+  const res = await pool.query<{ trophy_key: TrophyKey; team_id: string; note: string | null }>(
+    'SELECT trophy_key, team_id, note FROM trophy_overrides WHERE season_id = $1',
+    [seasonId],
+  );
+  return new Map(res.rows.map((row) => [row.trophy_key, row]));
+}
+
+/** Назначить или снять (team_id = null) ручного победителя кубка. */
+export async function setOverride(
+  seasonId: string,
+  trophyKey: TrophyKey,
+  teamId: string | null,
+  note: string | null,
+  adminId: string,
+): Promise<void> {
+  if (!TROPHY_DEFS.some((def) => def.key === trophyKey)) {
+    throw new AppError(400, 'Неизвестный кубок');
+  }
+  if (teamId === null) {
+    await pool.query(
+      'DELETE FROM trophy_overrides WHERE season_id = $1 AND trophy_key = $2',
+      [seasonId, trophyKey],
+    );
+    return;
+  }
+  const teamRes = await pool.query<{ id: string }>(
+    'SELECT id FROM teams WHERE id = $1 AND season_id = $2',
+    [teamId, seasonId],
+  );
+  if (teamRes.rows.length === 0) {
+    throw new AppError(400, 'Команда не найдена в этом сезоне');
+  }
+  await pool.query(
+    `INSERT INTO trophy_overrides (season_id, trophy_key, team_id, note, created_by)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (season_id, trophy_key) DO UPDATE SET
+       team_id = EXCLUDED.team_id,
+       note = EXCLUDED.note,
+       created_by = EXCLUDED.created_by,
+       updated_at = NOW()`,
+    [seasonId, trophyKey, teamId, note, adminId],
+  );
 }
 
 /**
@@ -309,9 +446,14 @@ async function loadTeamMetrics(seasonId: string): Promise<TeamMetric[]> {
  * child's "winner" category from past seasons.
  */
 export async function computeOverall(seasonId: string): Promise<OverallEntry[]> {
-  const teams = await loadTeamMetrics(seasonId);
+  const [teams, overrides] = await Promise.all([
+    loadTeamMetrics(seasonId),
+    loadOverrides(seasonId),
+  ]);
   if (teams.length === 0) return [];
-  const trophies = TROPHY_DEFS.map((def) => buildTrophy(def, teams, null, true));
+  const trophies = TROPHY_DEFS.map((def) =>
+    buildTrophy(def, teams, null, true, overrides.get(def.key) ?? null),
+  );
   return buildOverall(teams, trophies);
 }
 
@@ -321,16 +463,20 @@ export async function computeOverall(seasonId: string): Promise<OverallEntry[]> 
  * (including the normally-private streak/recapture counts). For a still-active or
  * draft season the private values stay hidden.
  */
-/** Trophies for a season with an explicit reveal flag (no viewer context). */
 export async function computeSeasonTrophies(
   seasonId: string,
   revealAll: boolean,
 ): Promise<TrophiesResponse> {
-  const teams = await loadTeamMetrics(seasonId);
+  const [teams, overrides] = await Promise.all([
+    loadTeamMetrics(seasonId),
+    loadOverrides(seasonId),
+  ]);
   if (teams.length === 0) {
     return { trophies: [], overall: [] };
   }
-  const trophies = TROPHY_DEFS.map((def) => buildTrophy(def, teams, null, revealAll));
+  const trophies = TROPHY_DEFS.map((def) =>
+    buildTrophy(def, teams, null, revealAll, overrides.get(def.key) ?? null),
+  );
   const overall = buildOverall(teams, trophies);
   return { trophies, overall };
 }
@@ -358,13 +504,16 @@ export async function getTrophies(userId: string): Promise<TrophiesResponse> {
   const showAllValues = role === 'admin';
 
   const seasonId = await getActiveSeasonId();
-  const teams = await loadTeamMetrics(seasonId);
+  const [teams, overrides] = await Promise.all([
+    loadTeamMetrics(seasonId),
+    loadOverrides(seasonId),
+  ]);
   if (teams.length === 0) {
     return { trophies: [], overall: [] };
   }
 
   const trophies = TROPHY_DEFS.map((def) =>
-    buildTrophy(def, teams, viewerTeamId, showAllValues),
+    buildTrophy(def, teams, viewerTeamId, showAllValues, overrides.get(def.key) ?? null),
   );
   const overall = buildOverall(teams, trophies);
   return { trophies, overall };
