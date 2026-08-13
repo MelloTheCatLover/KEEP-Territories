@@ -298,6 +298,12 @@ export function MapPage() {
       );
   }, [isAdmin, state]);
 
+  // Loud highlight only while the team is actually picking a sector — creating
+  // a base, or watching its own open submission. The reachable frontier is a
+  // standing fact, not a prompt, so it gets the quiet dashed outline.
+  const highlightTone: 'strong' | 'subtle' =
+    canCreateTeam || userActiveSectorId ? 'strong' : 'subtle';
+
   const highlightIds = useMemo(() => {
     if (isObserver) return undefined;
     if (canCreateTeam && state.status === 'ready') {
@@ -492,6 +498,7 @@ export function MapPage() {
                 teamsById={state.teamsById}
                 onSectorClick={!isObserver && (canCreateTeam || teamId || isAdmin) ? handleClick : undefined}
                 highlightIds={highlightIds}
+                highlightTone={highlightTone}
                 anchorId={
                   teamId
                     ? state.fullTeams.find((t) => t.id === teamId)?.anchor?.sector_id ?? null

@@ -15,16 +15,23 @@ const VIEWBOX_PADDING = 16;
 
 export const MAP_HEX_SIZE = HEX_SIZE;
 export const MAP_VIEWBOX_PADDING = VIEWBOX_PADDING;
-// Difficulty is the sector's border, not a corner dot: a 3px ring drawn just
-// inside the hex edge, so it stays readable at any zoom and over any team fill.
-const DIFFICULTY_BORDER_WIDTH = 3.2;
-const DIFFICULTY_BORDER_INSET = DIFFICULTY_BORDER_WIDTH / 2;
+
+// COLOUR BUDGET — the map only ever spends saturated colour on team identity:
+// a solid fill means "this team owns it", hatching means "this team is acting
+// on it". Everything else is neutral. Difficulty keeps its four hues but is
+// demoted to a small chip on a dark plate near the bottom of the hex, so the
+// silhouette of every cell is identical and the grid stops flickering.
+const DIFF_PLATE_W = HEX_SIZE * 0.60;
+const DIFF_PLATE_H = 8.6;
+const DIFF_BAR_W = HEX_SIZE * 0.44;
+const DIFF_BAR_H = 3.6;
+const DIFF_CHIP_CY = HEX_SIZE * 0.50;
 // A team with an open submission on a sector hatches it in its own colour.
 const HATCH_TILE = 9;
 const HATCH_STROKE = 3.4;
 // Fortification is drawn as concentric inset outlines ("walls"), one per level,
 // so the sector number stays readable — no filled hexes covering the centre.
-const FORT_INSETS = [0.78, 0.58, 0.38];
+const FORT_INSETS = [0.80, 0.62, 0.44];
 
 // Pan/zoom: max zoom-in factor relative to the fitted view, and the
 // pointer-travel (in px) above which a gesture counts as a drag, not a tap.
@@ -72,6 +79,37 @@ export const MERCHANT_MARK: Record<MerchantKind, { letter: string; color: string
   trader: { letter: 'Т', color: '#22C55E', label: 'Торговец' },
 };
 
+/**
+ * Difficulty chip — a coloured bar on a dark plate, low in the hex. The plate
+ * is what makes this work: the difficulty hue always sits on the same dark
+ * ground, so it reads identically over a dark free cell and over a bright team
+ * fill of a near-identical hue (mint on emerald, gold on gold).
+ */
+function DifficultyChip({ x, y, slug }: { x: number; y: number; slug: DifficultySlug }) {
+  const cy = y + DIFF_CHIP_CY;
+  return (
+    <g>
+      <rect
+        x={x - DIFF_PLATE_W / 2}
+        y={cy - DIFF_PLATE_H / 2}
+        width={DIFF_PLATE_W}
+        height={DIFF_PLATE_H}
+        rx={DIFF_PLATE_H / 2}
+        fill="var(--color-neutral-0)"
+        fillOpacity={0.82}
+      />
+      <rect
+        x={x - DIFF_BAR_W / 2}
+        y={cy - DIFF_BAR_H / 2}
+        width={DIFF_BAR_W}
+        height={DIFF_BAR_H}
+        rx={DIFF_BAR_H / 2}
+        fill={DIFFICULTY_BADGE[slug]}
+      />
+    </g>
+  );
+}
+
 /** Lucide "trophy" glyph, drawn inline so it scales with the hex geometry. */
 function TrophyMark({
   x,
@@ -112,6 +150,13 @@ type HexMapProps = {
   teamsById: Record<string, TeamInfo>;
   onSectorClick?: (sector: Sector) => void;
   highlightIds?: ReadonlySet<string>;
+  /**
+   * How loud the highlight is. 'strong' — the team is actually picking a
+   * sector right now (creating a base, or waiting on its own submission).
+   * 'subtle' — merely "you could reach these", drawn as a dashed outline so a
+   * whole reachable frontier doesn't wash the map in brand purple.
+   */
+  highlightTone?: 'strong' | 'subtle';
   /** Acting team's movement anchor (last captured sector) — marked with a pin. */
   anchorId?: string | null;
   /** Admin merchant overlay — hidden NPC locations, drawn when provided. */
@@ -125,22 +170,29 @@ type HexStyle = {
   fillOpacity: number;
   label: string;
   labelFill: string;
+  /** Contrast colour for anything drawn ON the fill (walls, trophy, star). */
+  ink: string;
   titleExtra: string;
 };
 
+// Ink over a dark cell and over a light (team `bright`) cell. Team fills are
+// pastel-light, free cells are near-black, so one flag decides every overlay.
+const INK_ON_DARK = 'var(--color-neutral-1000)';
+const INK_ON_LIGHT = 'var(--color-neutral-0)';
+
 function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle {
-  const diffBadge = DIFFICULTY_BADGE[s.difficulty.slug];
   const numberLabel = s.number != null ? formatSectorLabel(s.difficulty.slug, s.number) : '';
 
-  // Uncaptured special sector — dark grey. Once an admin runs the event, the
-  // 1st place owns it and it paints in that team's colour (handled below); the
-  // grey corner badge still marks it as a special sector.
+  // Uncaptured special sector — deep blue with the trophy mark. Once an admin
+  // runs the event the 1st place owns it and it paints in that team's colour
+  // (handled below); the trophy stays either way.
   if (s.is_special && !s.captured_by_team_id) {
     return {
       fill: specialSectorColor,
       fillOpacity: 1,
       label: '',
-      labelFill: 'var(--color-neutral-0)',
+      labelFill: INK_ON_DARK,
+      ink: INK_ON_DARK,
       titleExtra: ' · особое событие',
     };
   }
@@ -152,7 +204,8 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
       fill: color ? color.muted : 'var(--color-neutral-300)',
       fillOpacity: 1,
       label: 'K',
-      labelFill: 'var(--color-neutral-1000)',
+      labelFill: INK_ON_DARK,
+      ink: INK_ON_DARK,
       titleExtra: team ? ` · база ${team.name}` : ' · база',
     };
   }
@@ -161,10 +214,11 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
     const team = teamsById[s.captured_by_team_id];
     const color = team ? resolveTeamPalette(team) : null;
     return {
-      fill: color ? color.bright : diffBadge,
+      fill: color ? color.bright : 'var(--color-neutral-300)',
       fillOpacity: 1,
       label: numberLabel,
-      labelFill: color ? color.textOnBase : 'var(--color-neutral-0)',
+      labelFill: color ? color.textOnBase : INK_ON_DARK,
+      ink: color ? INK_ON_LIGHT : INK_ON_DARK,
       titleExtra: team ? ` · ${team.name}` : '',
     };
   }
@@ -174,6 +228,7 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
     fillOpacity: 1,
     label: numberLabel,
     labelFill: 'var(--color-neutral-800)',
+    ink: INK_ON_DARK,
     titleExtra: '',
   };
 }
@@ -183,6 +238,7 @@ export function HexMap({
   teamsById,
   onSectorClick,
   highlightIds,
+  highlightTone = 'strong',
   anchorId,
   merchantMarkers,
   filterIds,
@@ -362,23 +418,10 @@ export function HexMap({
         ))}
       </defs>
 
-      {/* 1) Outline grid */}
-      <g className="hex-grid" pointerEvents="none">
-        {sectors.map((s) => {
-          const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
-          return (
-            <polygon
-              key={s.id}
-              points={hexPoints(x, y, HEX_SIZE)}
-              fill="none"
-              stroke="var(--color-neutral-500)"
-              strokeWidth={1}
-            />
-          );
-        })}
-      </g>
-
-      {/* 2) Sector fill + difficulty border */}
+      {/* 1) Sector fill. The hex outline is one neutral tone everywhere — the
+          grid is structure, never a signal, so it no longer competes with the
+          fills for attention. The gap stroke in the page background keeps
+          adjacent same-team cells legible as separate tiles. */}
       <g className="hex-fill-layer" pointerEvents="none">
         {sectors.map((s) => {
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
@@ -391,8 +434,8 @@ export function HexMap({
                 points={hexPoints(x, y, HEX_SIZE)}
                 fill={style.fill}
                 fillOpacity={style.fillOpacity}
-                stroke="var(--color-neutral-50)"
-                strokeWidth={0.8}
+                stroke="var(--color-neutral-0)"
+                strokeWidth={1.6}
                 strokeLinejoin="round"
               >
                 <title>
@@ -401,13 +444,11 @@ export function HexMap({
                   }`}
                 </title>
               </polygon>
-              {/* Difficulty ring — inset by half its width so it never spills
-                  onto the neighbouring hex and stays a property of this cell. */}
               <polygon
-                points={hexPoints(x, y, HEX_SIZE - DIFFICULTY_BORDER_INSET)}
+                points={hexPoints(x, y, HEX_SIZE - 1)}
                 fill="none"
-                stroke={DIFFICULTY_BADGE[s.difficulty.slug]}
-                strokeWidth={DIFFICULTY_BORDER_WIDTH}
+                stroke="var(--color-neutral-400)"
+                strokeWidth={1}
                 strokeLinejoin="round"
               />
             </g>
@@ -415,69 +456,58 @@ export function HexMap({
         })}
       </g>
 
-      {/* 2.5) Special-event mark — a trophy in the centre of every special
-          sector, so the event squares stay recognisable after a team paints
-          one in its own colour. */}
+      {/* 2) Special-event mark — a trophy in the centre of every special
+          sector, so the event cells stay recognisable after a team paints one
+          in its own colour. */}
       <g className="hex-special-layer" pointerEvents="none">
         {sectors.map((s) => {
           if (!s.is_special) return null;
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
-          const owned = s.captured_by_team_id != null;
+          const style = resolveStyle(s, teamsById);
           return (
             <TrophyMark
               key={s.id}
               x={x}
-              y={y}
-              size={HEX_SIZE * 0.86}
-              color={owned ? 'var(--color-neutral-1000)' : 'var(--color-neutral-0)'}
-              opacity={owned ? 0.75 : 0.95}
+              y={y - HEX_SIZE * 0.10}
+              size={HEX_SIZE * 0.62}
+              color={style.ink}
+              opacity={0.9}
             />
           );
         })}
       </g>
 
-      {/* 3) Fortification walls — concentric inset outlines on captured sectors.
-          Each level adds one ring; a dark halo under a light stroke keeps them
-          crisp over any team colour, and the centre stays clear for the number. */}
+      {/* 3) Fortification walls — concentric inset outlines on captured
+          sectors, one ring per level, drawn in the cell's own ink. No second
+          halo stroke: the ink already contrasts with the fill it sits on, and
+          the doubled stroke was reading as a thick coloured band. */}
       <g className="hex-fort-layer" pointerEvents="none">
         {sectors.map((s) => {
           if (s.status !== 'captured') return null;
           const fortLevel = Math.max(0, Math.min(3, s.fortification_level | 0));
           if (fortLevel === 0) return null;
-          const ownerId = s.captured_by_team_id;
-          if (!ownerId) return null;
-          const team = teamsById[ownerId];
-          const palette = team ? resolveTeamPalette(team) : null;
-          const ringColor = palette ? palette.textOnBase : 'var(--color-neutral-0)';
+          if (!s.captured_by_team_id) return null;
+          const style = resolveStyle(s, teamsById);
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
           return (
             <g key={s.id}>
               {FORT_INSETS.slice(0, fortLevel).map((scale, i) => (
-                <g key={i}>
-                  <polygon
-                    points={hexPoints(x, y, HEX_SIZE * scale)}
-                    fill="none"
-                    stroke="var(--color-neutral-1000)"
-                    strokeOpacity={0.35}
-                    strokeWidth={3}
-                    strokeLinejoin="round"
-                  />
-                  <polygon
-                    points={hexPoints(x, y, HEX_SIZE * scale)}
-                    fill="none"
-                    stroke={ringColor}
-                    strokeOpacity={0.85}
-                    strokeWidth={1.5}
-                    strokeLinejoin="round"
-                  />
-                </g>
+                <polygon
+                  key={i}
+                  points={hexPoints(x, y, HEX_SIZE * scale)}
+                  fill="none"
+                  stroke={style.ink}
+                  strokeOpacity={0.5}
+                  strokeWidth={1.6}
+                  strokeLinejoin="round"
+                />
               ))}
             </g>
           );
         })}
       </g>
 
-      {/* 3.5) Sectors under an open submission — hatched in the acting team's
+      {/* 4) Sectors under an open submission — hatched in the acting team's
           colour. Hatching reads as "work in progress" without competing with
           the solid fill that marks actual ownership. */}
       <g className="hex-hatch-layer" pointerEvents="none">
@@ -490,7 +520,7 @@ export function HexMap({
           return (
             <polygon
               key={s.id}
-              points={hexPoints(x, y, HEX_SIZE - DIFFICULTY_BORDER_WIDTH)}
+              points={hexPoints(x, y, HEX_SIZE - 2)}
               fill={`url(#${hatchIds.get(color)})`}
               stroke="none"
             />
@@ -498,39 +528,64 @@ export function HexMap({
         })}
       </g>
 
-      {/* 3.6) Sector labels — drawn above fort hexes so the number stays visible */}
+      {/* 5) Difficulty chips — drawn above the fills and the hatching so the
+          one thing a team reads before choosing a sector is never obscured. */}
+      <g className="hex-difficulty-layer" pointerEvents="none">
+        {sectors.map((s) => {
+          const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
+          return <DifficultyChip key={s.id} x={x} y={y} slug={s.difficulty.slug} />;
+        })}
+      </g>
+
+      {/* 6) Sector labels — above the walls so the number stays visible. The
+          movement anchor rides here as a star in front of the label instead of
+          a floating badge of its own. */}
       <g className="hex-label-layer" pointerEvents="none">
         {sectors.map((s) => {
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
           const style = resolveStyle(s, teamsById);
-          if (!style.label) return null;
-          const fortLevel = Math.max(0, Math.min(3, s.fortification_level | 0));
-          const fortified = fortLevel > 0 && s.status === 'captured' && s.captured_by_team_id != null;
-          const labelFill = fortified ? 'var(--color-neutral-1000)' : style.labelFill;
+          const isAnchor = s.id === anchorId;
+          if (!style.label && !isAnchor) return null;
           return (
             <text
               key={s.id}
               x={x}
-              y={y + 4}
+              y={y - 1}
               textAnchor="middle"
               fontSize={s.is_home_base ? 14 : 11}
               fontFamily="var(--font-mono)"
-              fontWeight={s.is_home_base ? 700 : 400}
-              fill={labelFill}
+              fontWeight={s.is_home_base || isAnchor ? 700 : 400}
+              fill={style.labelFill}
               fillOpacity={0.95}
             >
+              {isAnchor && <tspan fontSize={9}>★ </tspan>}
               {style.label}
             </text>
           );
         })}
       </g>
 
-      {/* 5) Reachability — a translucent fill marks where the team can act, with
-          an animated outline on top so the set is obvious, not just a thin ring. */}
+      {/* 7) Highlight. 'strong' fills the cell — used when the team is picking
+          a sector right now. 'subtle' is a dashed outline for the reachable
+          frontier: present when you look for it, invisible when you don't. */}
       <g className="hex-pulse-layer" pointerEvents="none">
         {sectors.map((s) => {
           if (!highlightIds?.has(s.id)) return null;
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
+          if (highlightTone === 'subtle') {
+            return (
+              <polygon
+                key={s.id}
+                points={hexPoints(x, y, HEX_SIZE - 2)}
+                fill="none"
+                stroke="var(--color-brand-200)"
+                strokeOpacity={0.55}
+                strokeWidth={1.6}
+                strokeDasharray="5 4"
+                strokeLinejoin="round"
+              />
+            );
+          }
           return (
             <g key={s.id}>
               <polygon
@@ -551,40 +606,6 @@ export function HexMap({
           );
         })}
       </g>
-
-      {/* Movement anchor — a pin on the acting team's last captured sector */}
-      {anchorId && (
-        <g className="hex-anchor-layer" pointerEvents="none">
-          {sectors
-            .filter((s) => s.id === anchorId)
-            .map((s) => {
-              const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
-              return (
-                <g key={s.id}>
-                  <circle
-                    cx={x}
-                    cy={y - HEX_SIZE * 0.5}
-                    r={HEX_SIZE * 0.24}
-                    fill="var(--color-brand-500)"
-                    stroke="var(--color-neutral-0)"
-                    strokeWidth={1.5}
-                  />
-                  <text
-                    x={x}
-                    y={y - HEX_SIZE * 0.5 + 3}
-                    textAnchor="middle"
-                    fontSize={9}
-                    fontFamily="var(--font-mono)"
-                    fontWeight={700}
-                    fill="var(--color-neutral-0)"
-                  >
-                    ★
-                  </text>
-                </g>
-              );
-            })}
-        </g>
-      )}
 
       {/* Admin filter dim — sectors outside the active filter fade back */}
       {filterIds && (
@@ -611,7 +632,8 @@ export function HexMap({
           {merchantMarkers.map((m) => {
             const { x, y } = axialToPixel(m.q, m.r, HEX_SIZE);
             const mark = MERCHANT_MARK[m.kind];
-            const cy = y + HEX_SIZE * 0.44;
+            // Top of the hex — the bottom belongs to the difficulty chip.
+            const cy = y - HEX_SIZE * 0.46;
             return (
               <g key={`${m.q}:${m.r}`} opacity={m.spent ? 0.45 : 1}>
                 <circle
