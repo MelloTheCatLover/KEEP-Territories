@@ -149,7 +149,7 @@ export function AdminMapPage() {
       {presets.length > 0 && (
         <Card>
           <h2 className="font-display text-heading-sm text-neutral-1000 mb-3">Пресет</h2>
-          <div className="grid sm:grid-cols-2 gap-2 mb-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-4">
             {presets.map((p) => {
               const active = p.id === selected;
               return (

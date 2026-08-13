@@ -6,7 +6,7 @@ import { DifficultyLevel, DifficultySlug } from '../types/difficulty';
 import { getActiveSeasonId } from './season.service';
 
 /**
- * Fixed camp map presets. Two canonical worlds, both with the 6 special-event
+ * Fixed camp map presets. Three canonical worlds, all with the 6 special-event
  * sectors alternating on ring 2:
  *
  * classic6 — radius 4, 61 sectors:
@@ -19,12 +19,14 @@ import { getActiveSeasonId } from './season.service';
  *   r5 partial: only the cells hugging each base from outside — easy petals,
  *      the rest of the outer ring stays empty
  *
+ * compact8 — ring8 without the petals: a clean radius-4 hexagon, 61 sectors,
+ *   the same 8 bases on ring 4. Nothing sits behind a base, so every team
+ *   starts on the edge of the board with the whole map in front of it.
+ *
  * Ring 4 has 24 cells, so 8 bases land exactly every 3 cells — the hex
- * distance between neighbouring bases is 3 everywhere. Each base carries its
- * own cluster of easy sectors behind it; the map outline is deliberately not
- * a regular hexagon.
+ * distance between neighbouring bases is 3 everywhere.
  */
-export const MAP_PRESET_IDS = ['classic6', 'ring8'] as const;
+export const MAP_PRESET_IDS = ['classic6', 'ring8', 'compact8'] as const;
 export type MapPresetId = (typeof MAP_PRESET_IDS)[number];
 
 export const DEFAULT_PRESET: MapPresetId = 'ring8';
@@ -124,10 +126,10 @@ const AXIAL_NEIGHBORS: ReadonlyArray<{ q: number; r: number }> = [
 ];
 
 /**
- * ring8: radius-4 hexagon with 8 home bases evenly on the outer ring, plus a
- * partial fifth ring — easy petals hugging each base from outside.
+ * The 8-base body: radius-4 hexagon with 8 home bases evenly on the outer
+ * ring. `petals` adds the partial fifth ring hugging each base from outside.
  */
-function buildRing8Cells(): PresetCell[] {
+function buildEightBaseCells(petals: boolean): PresetCell[] {
   const radius = 4;
   const corners = cornerSets(radius);
   const homeSet = new Set(RING8_HOME_COORDS.map((c) => `${c.q},${c.r}`));
@@ -152,6 +154,8 @@ function buildRing8Cells(): PresetCell[] {
       cells.push({ q, r, slug: 'easy', isHome: homeSet.has(`${q},${r}`), isSpecial: false });
     }
   }
+
+  if (!petals) return cells;
 
   // Easy petals: each base's outside neighbours (ring 5), gaps in between.
   const seen = new Set<string>();
@@ -192,7 +196,15 @@ export const MAP_PRESETS: Record<MapPresetId, MapPresetInfo & { build: () => Pre
     description: '79 секторов. Базы равномерно по внешнему кольцу, у каждой — свой лепесток лёгких снаружи.',
     radius: 4,
     teams: 8,
-    build: buildRing8Cells,
+    build: () => buildEightBaseCells(true),
+  },
+  compact8: {
+    id: 'compact8',
+    title: 'Компакт · 8 команд',
+    description: '61 сектор. Те же 8 баз по внешнему кольцу, но без лепестков лёгких — ровный шестиугольник.',
+    radius: 4,
+    teams: 8,
+    build: () => buildEightBaseCells(false),
   },
 };
 
