@@ -8,6 +8,7 @@ import {
 } from '../types/diversion';
 import { Sector } from '../types/sector';
 import { getActiveSeasonId } from './season.service';
+import * as purchaseService from './purchase.service';
 
 /**
  * Диверсант. Захват его сектора чеканит жетон покупки
@@ -15,7 +16,7 @@ import { getActiveSeasonId } from './season.service';
  * превращает жетон в игровой эффект: одна диверсия — один жетон.
  *
  * Мгновенные диверсии меняют состояние сразу, «заряженные» ложатся на
- * команду-жертву и ждут её следующего действия (захват / разведка / ход);
+ * команду-жертву и ждут её следующего действия (захват / проверка / ход);
  * снимает их движок захватов через `takeArmed` + `consume`.
  *
  * Влияние и опыт диверсии не считают сами: минус идёт в `team_penalties`,
@@ -66,9 +67,9 @@ export const DIVERSIONS: ReadonlyArray<DiversionDef> = [
   },
   {
     kind: 'false_scouting',
-    title: 'Следующая разведка покажет ложь',
+    title: 'Следующая проверка покажет ложь',
     description:
-      'Следующая разведка соперника вернёт подставной пул заданий. Ложь запоминается: повторный просмотр того же сектора покажет её же.',
+      'Следующая проверка соперника вернёт подставной пул заданий. Ложь запоминается: повторный просмотр того же сектора покажет её же.',
     timing: 'armed',
     needs_target: true,
     needs_sector: false,
@@ -137,7 +138,7 @@ async function getView(db: Db, id: string): Promise<DiversionView> {
 export interface DiversionsResponse {
   /** Заряженные диверсии, ждущие события у жертвы. */
   armed: DiversionView[];
-  /** Последние сработавшие / отменённые — журнал для админа. */
+  /** Последние сработавшие / отменённые — журнал для председателя. */
   history: DiversionView[];
 }
 
@@ -305,6 +306,35 @@ export async function cast(params: CastParams): Promise<DiversionView> {
 
     const tokenId = await spendSaboteurToken(client, params.casterTeamId);
 
+    // Товар мастера «ЩИТ» у жертвы гасит диверсию целиком: эффект не
+    // срабатывает, но жетон диверсанта уже потрачен — щит стоит жетона.
+    const shieldId = targetTeamId
+      ? await purchaseService.takeArmed(client, targetTeamId, 'shield')
+      : null;
+    if (shieldId) {
+      await purchaseService.consume(client, shieldId, {
+        note: `ЩИТ погасил диверсию «${def.title}»`,
+      });
+      const blocked = await client.query<{ id: string }>(
+        `INSERT INTO team_diversions
+           (season_id, kind, caster_team_id, target_team_id, sector_id, token_id, status, note, resolved_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'cancelled', $7, NOW())
+         RETURNING id`,
+        [
+          seasonId,
+          kind,
+          params.casterTeamId,
+          targetTeamId,
+          sectorId,
+          tokenId,
+          'Погашена ЩИТом соперника',
+        ],
+      );
+      const view = await getView(client, blocked.rows[0].id);
+      await client.query('COMMIT');
+      return view;
+    }
+
     let note: string | null = null;
     let finalTarget = targetTeamId;
     let finalSector = sectorId;
@@ -366,7 +396,7 @@ export async function cast(params: CastParams): Promise<DiversionView> {
 export async function cancel(id: string): Promise<DiversionView> {
   const res = await pool.query(
     `UPDATE team_diversions
-        SET status = 'cancelled', resolved_at = NOW(), note = COALESCE(note, 'Снята админом')
+        SET status = 'cancelled', resolved_at = NOW(), note = COALESCE(note, 'Снята председателем')
       WHERE id = $1 AND status = 'armed'`,
     [id],
   );

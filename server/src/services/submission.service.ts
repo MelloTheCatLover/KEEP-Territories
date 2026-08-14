@@ -11,8 +11,10 @@ import {
 import { Sector, SectorActionType } from '../types/sector';
 import { StatName, MerchantType } from '../types/team-stats';
 import { DiversionKind } from '../types/diversion';
+import { PurchaseKind } from '../types/purchase';
 import * as encounterService from './encounter.service';
 import * as diversionService from './diversion.service';
+import * as purchaseService from './purchase.service';
 import * as seasonService from './season.service';
 import { experienceExpr } from './score-sql';
 import {
@@ -104,14 +106,18 @@ async function getTeamHomeBase(
 /**
  * Whether the sector lies within the team's endurance reach of its anchor.
  * `fromHome` — диверсия «команда отправляется на начальную позицию»: отсчёт
- * идёт от домашней базы, а не от последнего захвата.
+ * идёт от домашней базы, а не от последнего захвата. `canJump` — товар
+ * торговца «батут»: правило соседства пропускается, досягаемость — нет.
+ * Возвращает `true`, если прыжок действительно понадобился, — заряд батута
+ * тратится только тогда.
  */
 async function assertWithinReach(
   client: PoolClient,
   sector: Sector,
   teamId: string,
   fromHome = false,
-): Promise<void> {
+  canJump = false,
+): Promise<boolean> {
   const anchor = fromHome
     ? (await getTeamHomeBase(client, teamId)) ?? (await getTeamAnchor(client, teamId))
     : await getTeamAnchor(client, teamId);
@@ -135,12 +141,16 @@ async function assertWithinReach(
   // jump into empty space that merely sits within the anchor radius.
   if (sector.captured_by_team_id !== teamId) {
     if (!(await bordersOwnTerritory(client, sector, teamId))) {
-      throw new AppError(
-        400,
-        'Сектор не граничит с вашей территорией — ходить можно только на сектора рядом с захваченными.',
-      );
+      if (!canJump) {
+        throw new AppError(
+          400,
+          'Сектор не граничит с вашей территорией — ходить можно только на сектора рядом с захваченными.',
+        );
+      }
+      return true;
     }
   }
+  return false;
 }
 
 /**
@@ -157,7 +167,7 @@ async function assertTeleport(
   actionType: SectorActionType,
 ): Promise<void> {
   if (actionType !== 'capture' && actionType !== 'recapture') {
-    throw new AppError(400, 'Телепорт доступен только при захвате или перехвате');
+    throw new AppError(400, 'Телепорт доступен только при захвате или перезахвате');
   }
 
   const lawRes = await client.query<{ value: string }>(
@@ -243,7 +253,7 @@ async function resolveActingTeam(
     throw new AppError(404, 'User not found');
   }
   if (userRes.rows[0].role !== 'admin') {
-    throw new AppError(403, 'Только администратор может играть за команду');
+    throw new AppError(403, 'Только председатель КТП может играть за команду');
   }
   const teamRes = await client.query<{ id: string }>(
     'SELECT id FROM teams WHERE id = $1',
@@ -316,7 +326,25 @@ async function buildHardTaskPool(client: PoolClient): Promise<TaskBrief[]> {
   return res.rows;
 }
 
-/** Задания по списку id, в порядке списка — для запомненной ложной разведки. */
+/**
+ * Пул для товара мастера «К.И.П.»: последнее задание, которое команда уже сдала
+ * и которое ей одобрили. Пустой пул (первое действие смены) означает, что копия
+ * не удалась — сектор выдаст задание обычным порядком.
+ */
+async function buildKipTaskPool(client: PoolClient, teamId: string): Promise<TaskBrief[]> {
+  const res = await client.query<TaskBrief>(
+    `SELECT t.id, t.title, t.question
+       FROM task_submissions sub
+       JOIN tasks t ON t.id = sub.task_id
+      WHERE sub.team_id = $1 AND sub.status = 'approved' AND sub.task_id IS NOT NULL
+      ORDER BY sub.reviewed_at DESC NULLS LAST
+      LIMIT 1`,
+    [teamId],
+  );
+  return res.rows;
+}
+
+/** Задания по списку id, в порядке списка — для запомненной ложной проверки. */
 async function tasksByIds(client: PoolClient, ids: string[]): Promise<TaskBrief[]> {
   const res = await client.query<TaskBrief>(
     `SELECT t.id, t.title, t.question
@@ -329,7 +357,7 @@ async function tasksByIds(client: PoolClient, ids: string[]): Promise<TaskBrief[
 }
 
 /**
- * Подставной пул для диверсии «следующая разведка покажет ложь»: столько же
+ * Подставной пул для диверсии «следующая проверка покажет ложь»: столько же
  * заданий, сколько в настоящем пуле, но других — и по возможности той же
  * сложности, чтобы ложь выглядела правдоподобно.
  */
@@ -367,10 +395,10 @@ function validateActionForSector(action: SectorActionType, sector: Sector, teamI
       return;
     case 'recapture':
       if (sector.is_home_base) {
-        throw new AppError(400, 'Домашний сектор нельзя перехватить');
+        throw new AppError(400, 'Домашний сектор нельзя перезахватить');
       }
       if (sector.status !== 'captured' || sector.captured_by_team_id === teamId) {
-        throw new AppError(400, 'Нельзя перехватить этот сектор');
+        throw new AppError(400, 'Нельзя перезахватить этот сектор');
       }
       return;
     case 'fortify':
@@ -441,6 +469,11 @@ export async function startAction(
       : null;
     const opponentMoveId = await diversionService.takeArmed(client, teamId, 'opponent_move');
 
+    // Товар торговца «батут»: заряд берётся заранее, но тратится только если
+    // сектор действительно не граничит с территорией команды.
+    const trampolineId = await purchaseService.takeArmed(client, teamId, 'trampoline');
+    let jumped = false;
+
     if (teleport) {
       // Teleport law ("Телепорт"): the team jumps to a sector of the SAME
       // difficulty as its anchor (last-captured sector), ignoring reach and the
@@ -452,10 +485,16 @@ export async function startAction(
       // must fall within the endurance reach of the team's anchor. This subsumes
       // the old "must border an owned sector" rule and, for fortify too, forces a
       // team to walk its anchor over via waypoint captures ("перевалы").
-      await assertWithinReach(client, sector, teamId, hardResetId !== null);
+      jumped = await assertWithinReach(
+        client,
+        sector,
+        teamId,
+        hardResetId !== null,
+        trampolineId !== null,
+      );
     }
 
-    // Перехват укреплённого сектора: команда должна либо снять всё укрепление
+    // Перезахват укреплённого сектора: команда должна либо снять всё укрепление
     // вручную, либо пробить его силой. Пробитие покрывает fortification_level
     // до уровня, заданного силой (см. penetrationFromStrength).
     if (actionType === 'recapture' && sector.fortification_level > 0) {
@@ -478,16 +517,36 @@ export async function startAction(
       throw new AppError(409, 'По этому сектору уже есть заявка на рассмотрении');
     }
 
-    const teamPending = await client.query<{ id: string }>(
-      `SELECT id FROM task_submissions WHERE team_id = $1 AND status = 'pending'`,
+    // Одно действие на команду — кроме заряженного «раздвоения» мастера: оно
+    // разрешает ровно вторую параллельную заявку и на ней же тратится.
+    const teamPending = await client.query<{ count: number }>(
+      `SELECT COUNT(*)::int AS count
+         FROM task_submissions WHERE team_id = $1 AND status = 'pending'`,
       [teamId],
     );
-    if (teamPending.rows.length > 0) {
-      throw new AppError(409, 'У вашей команды уже есть активное действие — дождитесь модерации');
+    const pendingCount = teamPending.rows[0]?.count ?? 0;
+    let splitId: string | null = null;
+    if (pendingCount > 0) {
+      splitId =
+        pendingCount === 1 ? await purchaseService.takeArmed(client, teamId, 'split_capture') : null;
+      if (!splitId) {
+        throw new AppError(409, 'У вашей команды уже есть активное действие — дождитесь модерации');
+      }
     }
 
+    // Товар мастера «К.И.П.»: сектор выдаёт уже сданное командой задание.
+    // Побеждает диверсию «сектор как сложный» — товар куплен за жетон, — но
+    // отсчёт от базы у той диверсии остаётся.
+    const kipId = await purchaseService.takeArmed(client, teamId, 'kip');
+    const kipPool = kipId ? await buildKipTaskPool(client, teamId) : [];
+
     const hardPool = hardResetId ? await buildHardTaskPool(client) : [];
-    const taskPool = hardPool.length > 0 ? hardPool : await buildTaskPool(client, sector);
+    const taskPool =
+      kipPool.length > 0
+        ? kipPool
+        : hardPool.length > 0
+          ? hardPool
+          : await buildTaskPool(client, sector);
     const picked = pickRandom(taskPool);
     const taskId = picked ? picked.id : null;
 
@@ -535,6 +594,31 @@ export async function startAction(
       diversions.push('opponent_move');
     }
 
+    // Импланты команды: батут тратится только на реальном прыжке, раздвоение —
+    // на второй параллельной заявке, К.И.П. — на скопированном задании.
+    const purchases: PurchaseKind[] = [];
+    if (trampolineId && jumped) {
+      await purchaseService.consume(client, trampolineId, {
+        sectorId,
+        note: 'Прыжок через сектор',
+      });
+      purchases.push('trampoline');
+    }
+    if (splitId) {
+      await purchaseService.consume(client, splitId, {
+        sectorId,
+        note: 'Второй сектор начат параллельно',
+      });
+      purchases.push('split_capture');
+    }
+    if (kipId && kipPool.length > 0) {
+      await purchaseService.consume(client, kipId, {
+        sectorId,
+        note: 'Задание скопировано с прошлого действия',
+      });
+      purchases.push('kip');
+    }
+
     // A capture attempt rolls a random encounter for the acting team; it is
     // shown and resolved inside the capture window.
     let encounterInstanceId: string | null = null;
@@ -554,7 +638,7 @@ export async function startAction(
     const encounter = encounterInstanceId
       ? await encounterService.getInstanceView(encounterInstanceId)
       : null;
-    return { submission, task_pool: taskPool, encounter, diversions };
+    return { submission, task_pool: taskPool, encounter, diversions, purchases };
   } catch (error) {
     await client.query('ROLLBACK');
     if (
@@ -1061,7 +1145,7 @@ export async function dropPending(
     }
     const submission = subRes.rows[0];
 
-    // Админ дропает сектора за любую команду; обычный игрок — только свои.
+    // Председатель дропает сектора за любую команду; обычный игрок — только свои.
     // В обоих случаях штраф ложится на команду-автора заявки.
     const userRes = await client.query<{ team_id: string | null; role: string }>(
       'SELECT team_id, role FROM users WHERE id = $1',
@@ -1096,23 +1180,33 @@ export async function dropPending(
     }
     const { influence_reward, experience_reward } = sectorRewardsRes.rows[0];
 
-    const penaltyInfluence = Math.floor(influence_reward / 2);
-    const penaltyExperience = Math.floor(experience_reward / 2);
+    // Товар торговца «подушка безопасности» гасит штраф за сброс целиком.
+    // Стрик она не спасает — полоса всё равно сбивается.
+    const airbagId = await purchaseService.takeArmed(client, teamId, 'airbag');
+    const penaltyInfluence = airbagId ? 0 : Math.floor(influence_reward / 2);
+    const penaltyExperience = airbagId ? 0 : Math.floor(experience_reward / 2);
 
     const levelBefore = await calculateLevelInTx(client, teamId);
 
-    await client.query(
-      `INSERT INTO team_penalties
-         (team_id, influence, experience, reason, sector_id, submission_id)
-       VALUES ($1, $2, $3, 'drop', $4, $5)`,
-      [
-        teamId,
-        penaltyInfluence,
-        penaltyExperience,
-        submission.sector_id,
-        submission.id,
-      ],
-    );
+    if (airbagId) {
+      await purchaseService.consume(client, airbagId, {
+        sectorId: submission.sector_id,
+        note: 'Сброс без штрафа',
+      });
+    } else {
+      await client.query(
+        `INSERT INTO team_penalties
+           (team_id, influence, experience, reason, sector_id, submission_id)
+         VALUES ($1, $2, $3, 'drop', $4, $5)`,
+        [
+          teamId,
+          penaltyInfluence,
+          penaltyExperience,
+          submission.sector_id,
+          submission.id,
+        ],
+      );
+    }
 
     await revertPendingEffect(client, submission);
 
@@ -1253,7 +1347,7 @@ export interface PeekResponse {
 }
 
 /**
- * Check / разведка (интеллект): preview a sector's task pool before committing.
+ * Check / проверка (интеллект): preview a sector's task pool before committing.
  * Each distinct peeked sector costs one check; the budget comes from intelligence
  * and refreshes on capture. Re-peeking an already-scouted sector is free.
  */
@@ -1274,7 +1368,7 @@ export async function peekSector(
     }
     const sector = sectorRes.rows[0];
     if (sector.is_special) {
-      throw new AppError(400, 'Особый сектор — разведка недоступна');
+      throw new AppError(400, 'Особый сектор — проверка недоступна');
     }
 
     const intelligence = await getTeamStat(client, teamId, 'intelligence');
@@ -1291,9 +1385,10 @@ export async function peekSector(
     const used = usedRes.rows[0]?.count ?? 0;
 
     let lie: TaskBrief[] | null = null;
+    let spyglassId: string | null = null;
 
     if (already.rows.length > 0) {
-      // Уже разведанный сектор: если разведку подменила диверсия, повторный
+      // Уже проверенный сектор: если проверку подменила диверсия, повторный
       // (бесплатный) просмотр обязан показать ту же ложь.
       const stored = already.rows[0].lie_task_ids;
       if (stored && stored.length > 0) {
@@ -1301,15 +1396,20 @@ export async function peekSector(
       }
     } else {
       if (used >= cap) {
-        throw new AppError(
-          400,
-          cap === 0
-            ? 'Разведка недоступна — нужен интеллект'
-            : `Проверки закончились (использовано ${used} из ${cap})`,
-        );
+        // Товар торговца «подзорная труба» держит три проверки сверх интеллекта:
+        // когда бюджет исчерпан, следующая уходит с неё.
+        spyglassId = await purchaseService.takeArmed(client, teamId, 'spyglass');
+        if (!spyglassId) {
+          throw new AppError(
+            400,
+            cap === 0
+              ? 'Проверка недоступна — нужен интеллект'
+              : `Проверки закончились (использовано ${used} из ${cap})`,
+          );
+        }
       }
 
-      // Диверсия «следующая разведка покажет ложь»: проверка тратится как
+      // Диверсия «следующая проверка покажет ложь»: проверка тратится как
       // обычно, но пул подменяется — и подмена запоминается.
       const lieId = await diversionService.takeArmed(client, teamId, 'false_scouting');
       if (lieId) {
@@ -1319,7 +1419,7 @@ export async function peekSector(
           lie = fake;
           await diversionService.consume(client, lieId, {
             sectorId,
-            note: 'Разведка показала ложный пул',
+            note: 'Проверка показала ложный пул',
           });
         }
       }
@@ -1331,11 +1431,23 @@ export async function peekSector(
       );
     }
 
+    if (spyglassId) {
+      await purchaseService.consume(client, spyglassId, {
+        sectorId,
+        note: 'Проверка с подзорной трубы',
+      });
+    }
+
     const taskPool = lie ?? (await buildTaskPool(client, sector));
+    // Остаток проверок — бюджет интеллекта плюс невыработанные заряды трубы.
+    const spyglass = await purchaseService.chargesLeft(client, teamId, 'spyglass');
     await client.query('COMMIT');
 
     const nowUsed = already.rows.length === 0 ? used + 1 : used;
-    return { task_pool: taskPool, checks_remaining: Math.max(0, cap - nowUsed) };
+    return {
+      task_pool: taskPool,
+      checks_remaining: Math.max(0, cap - nowUsed) + spyglass,
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

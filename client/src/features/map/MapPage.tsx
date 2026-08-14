@@ -26,6 +26,7 @@ import { TrophySection } from '../trophies/TrophySection';
 import { AdminReviewQueue } from './AdminReviewQueue';
 import { MerchantTokenTray } from './MerchantTokenTray';
 import { DiversionPanel } from './DiversionPanel';
+import { PurchasePanel } from './PurchasePanel';
 import { TeamManageModal } from '../admin/team-modals';
 
 type LoadState =
@@ -456,7 +457,7 @@ export function MapPage() {
 
       {state.status === 'empty' && (
         <div className="text-neutral-700 text-sm">
-          Карта не сгенерирована. Обратитесь к администратору.
+          Карта не сгенерирована. Обратитесь к председателю КТП.
         </div>
       )}
 
@@ -539,7 +540,7 @@ export function MapPage() {
                 >
                   <span className="flex items-center gap-1.5">
                     <SlidersHorizontal className="w-3.5 h-3.5 text-brand-400" />
-                    Админ-панель
+                    Панель председателя
                   </span>
                   <ChevronDown
                     className={`w-3.5 h-3.5 text-neutral-700 transition-transform ${
@@ -604,7 +605,7 @@ export function MapPage() {
                         />
                       </label>
                       <p className="text-2xs text-neutral-600 mt-1">
-                        Выключено — рейтинг кубков виден только админу.
+                        Выключено — рейтинг кубков виден только председателю.
                       </p>
                     </div>
 
@@ -733,6 +734,15 @@ export function MapPage() {
             <div className="order-2 flex flex-col lg:order-last lg:col-span-3 xl:order-4 xl:col-span-1">
               <DiversionPanel
                 casterTeam={state.fullTeams.find((t) => t.id === teamId) ?? null}
+                teams={state.fullTeams}
+                sectors={state.sectors}
+                onChanged={() => {
+                  void fetchMap(true);
+                  reloadMerchants();
+                }}
+              />
+              <PurchasePanel
+                buyerTeam={state.fullTeams.find((t) => t.id === teamId) ?? null}
                 teams={state.fullTeams}
                 sectors={state.sectors}
                 onChanged={() => {

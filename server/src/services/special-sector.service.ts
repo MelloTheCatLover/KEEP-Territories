@@ -2,6 +2,7 @@ import { pool } from '../config/db';
 import { AppError } from '../types/errors';
 import { Sector, SectorPublic } from '../types/sector';
 import { getById } from './sector.service';
+import * as purchaseService from './purchase.service';
 
 /**
  * Fixed reward bundle per final place in a special-sector event. Sized for a
@@ -65,8 +66,10 @@ export function parseAssignments(raw: unknown): PlaceAssignment[] {
  */
 export async function captureSpecialSector(
   sectorId: string,
-  assignments: PlaceAssignment[],
+  requested: PlaceAssignment[],
 ): Promise<SpecialCaptureResult> {
+  // «Высокий старт» может поднять место команды — итоговая раскладка ниже.
+  let assignments = requested;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -93,6 +96,30 @@ export async function captureSpecialSector(
 
     // Replace prior standings for this sector (editable / idempotent).
     await client.query('DELETE FROM special_sector_awards WHERE sector_id = $1', [sectorId]);
+
+    // Товар мастера «высокий старт»: команда начинает событие с преимуществом —
+    // итоговое место поднимается на ступень. Имплант тратится здесь, поэтому
+    // повторная правка результатов того же сектора преимущество уже не даст.
+    const effective: PlaceAssignment[] = [];
+    for (const a of assignments) {
+      const highStartId = await purchaseService.takeArmed(client, a.team_id, 'high_start');
+      if (highStartId && a.place > 1) {
+        await purchaseService.consume(client, highStartId, {
+          sectorId,
+          note: `Высокий старт: место ${a.place} → ${a.place - 1}`,
+        });
+        effective.push({ team_id: a.team_id, place: a.place - 1 });
+      } else {
+        if (highStartId) {
+          await purchaseService.consume(client, highStartId, {
+            sectorId,
+            note: 'Высокий старт: команда и так первая',
+          });
+        }
+        effective.push(a);
+      }
+    }
+    assignments = effective;
 
     const awards: SpecialCaptureResult['awards'] = [];
     for (const { team_id, place } of assignments) {

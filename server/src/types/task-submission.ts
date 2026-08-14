@@ -2,6 +2,7 @@ import { DifficultyLevel } from './difficulty';
 import { SectorActionType } from './sector';
 import { EncounterInstanceView } from './encounter';
 import { DiversionKind } from './diversion';
+import { PurchaseKind } from './purchase';
 
 export type SubmissionStatus = 'pending' | 'approved' | 'rejected';
 
@@ -70,6 +71,8 @@ export interface StartActionResponse {
   encounter?: EncounterInstanceView | null;
   /** Заряженные диверсии соперника, сработавшие на этом действии. */
   diversions?: DiversionKind[];
+  /** Собственные импланты команды, сработавшие на этом действии. */
+  purchases?: PurchaseKind[];
 }
 
 export interface ApproveSubmissionDto {
