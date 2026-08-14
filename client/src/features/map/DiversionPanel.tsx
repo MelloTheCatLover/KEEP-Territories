@@ -14,7 +14,7 @@ import type { TeamFullStats } from '../team/types';
 import { ApiError } from '../../shared/api/client';
 
 type Props = {
-  /** Команда, за которую играет админ, — она и кидает диверсию. */
+  /** Команда, за которую играет председатель, — она и кидает диверсию. */
   casterTeam: TeamFullStats | null;
   teams: TeamFullStats[];
   sectors: Sector[];
@@ -26,7 +26,7 @@ type Props = {
  * Диверсант прямо на карте: жетон диверсанта превращается в эффект здесь, а не
  * отыгрывается на словах. Мгновенные диверсии срабатывают сразу, «заряженные»
  * висят на команде-жертве и снимаются её следующим действием — они перечислены
- * ниже, чтобы админ видел, кто под чем ходит.
+ * ниже, чтобы председатель видел, кто под чем ходит.
  */
 export function DiversionPanel({ casterTeam, teams, sectors, onChanged }: Props) {
   const [catalog, setCatalog] = useState<DiversionDef[]>([]);

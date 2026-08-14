@@ -110,7 +110,7 @@ client/src/
 5. Сервер возвращает { submission, task_pool }
 6. Клиент крутит TaskWheel (Web Animations API), останавливается на победителе
 7. Клиент → /sectors/:id — команда видит задание
-8. Команда показывает решение преподавателю-админу
+8. Команда показывает решение преподавателю-председателю
 9. Админ: POST /api/submissions/:id/approve  ИЛИ  /reject { comment }
    ▸ approve → applyApprovedEffect
    ▸ reject → revertPendingEffect

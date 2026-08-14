@@ -113,7 +113,7 @@ function Hub() {
 
   return (
     <div className="max-w-xl mx-auto px-4">
-      <h1 className="font-display text-heading-md text-neutral-1000 mb-8">Админ</h1>
+      <h1 className="font-display text-heading-md text-neutral-1000 mb-8">Председатель КТП</h1>
 
       <div className="space-y-8">
         {SECTIONS.map((section) => (

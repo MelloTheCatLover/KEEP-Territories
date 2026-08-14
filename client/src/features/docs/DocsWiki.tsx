@@ -135,6 +135,108 @@ export function ThresholdTable({
   );
 }
 
+/** Таблица на произвольное число колонок — награды, места, пороги. */
+export function Table({ head, rows }: { head: string[]; rows: string[][] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm border border-neutral-300 rounded-sm">
+        <thead>
+          <tr className="bg-neutral-200">
+            {head.map((h, i) => (
+              <th
+                key={h}
+                className={`font-medium text-neutral-800 px-3 py-1.5 ${
+                  i === 0 ? 'text-left' : 'text-right'
+                }`}
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row[0]} className="border-t border-neutral-300">
+              {row.map((cell, i) => (
+                <td
+                  key={i}
+                  className={`px-3 py-1.5 whitespace-nowrap ${
+                    i === 0
+                      ? 'text-neutral-1000'
+                      : 'text-right font-mono text-neutral-700'
+                  }`}
+                >
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * Лестница порогов характеристики: ступени растут слева направо, поэтому
+ * «сколько ещё вкладывать до следующего права» читается без таблицы.
+ */
+export function StatLadder({
+  steps,
+  unit,
+}: {
+  steps: Array<{ points: string; value: number }>;
+  unit: string;
+}) {
+  const max = Math.max(...steps.map((s) => s.value), 1);
+  return (
+    <ul className="space-y-1.5">
+      {steps.map((s) => (
+        <li key={s.points} className="flex items-center gap-2">
+          <span className="w-14 flex-shrink-0 text-2xs font-mono text-neutral-600">
+            {s.points}
+          </span>
+          <span className="flex-1 h-2 rounded-full bg-neutral-200 overflow-hidden">
+            <span
+              className="block h-full rounded-full bg-brand-500"
+              style={{ width: `${Math.max(4, (s.value / max) * 100)}%` }}
+            />
+          </span>
+          <span className="w-16 flex-shrink-0 text-2xs text-right text-neutral-1000">
+            <b className="font-mono">{s.value}</b> {unit}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Карточка характеристики: право, которое она даёт, и лестница порогов. */
+export function StatCard({
+  title,
+  right,
+  icon,
+  steps,
+  unit,
+}: {
+  title: string;
+  right: ReactNode;
+  icon: ReactNode;
+  steps: Array<{ points: string; value: number }>;
+  unit: string;
+}) {
+  return (
+    <div className="border border-neutral-300 rounded-md p-4 bg-neutral-100">
+      <div className="flex items-center gap-2 mb-1">
+        {icon}
+        <div className="font-display text-base text-neutral-1000">{title}</div>
+      </div>
+      <p className="text-sm text-neutral-700 mb-3">{right}</p>
+      <StatLadder steps={steps} unit={unit} />
+    </div>
+  );
+}
+
 export function Callout({ children, tone = 'info' }: { children: ReactNode; tone?: 'info' | 'warn' }) {
   const cls =
     tone === 'warn'
@@ -255,31 +357,144 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-/**
- * Map layout scheme: concentric difficulty rings from the core outward, using
- * the same tier colours as the real board. A few medium-ring cells are marked
- * "special" and the outer easy ring carries the home bases.
- */
-export function MapRingsDiagram() {
-  const SIZE = 15;
-  // Tier by distance from centre: 0 core, 1 hard, 2 medium, 3 easy.
-  const tierColor = [
-    difficultyColors.core,
-    difficultyColors.hard,
-    difficultyColors.medium,
-    difficultyColors.easy,
-  ];
-  // Deterministic accents: a couple of special sectors on the medium ring and
-  // home bases spread around the outer easy ring.
-  const specials = new Set(['2:-3', '-1:3']);
-  const bases = new Set(['3:-3', '-3:0', '0:3', '3:0', '-3:3', '0:-3']);
+/* ── Готовые карты смены ──────────────────────────────────────────────────── */
 
-  const cells: Array<{ q: number; r: number }> = [];
-  for (let q = -3; q <= 3; q++) {
-    for (let r = -3; r <= 3; r++) {
-      if (hexDistance(0, 0, q, r) <= 3) cells.push({ q, r });
+export type MapPresetId = 'classic6' | 'ring8' | 'compact8';
+
+type PresetCell = {
+  q: number;
+  r: number;
+  slug: 'core' | 'hard' | 'medium' | 'easy';
+  isHome: boolean;
+  isSpecial: boolean;
+};
+
+/** ring8/compact8: каждая третья клетка 24-клеточного кольца 4, старт с (4, 0). */
+const RING8_HOME: ReadonlyArray<{ q: number; r: number }> = [
+  { q: 4, r: 0 },
+  { q: 4, r: -3 },
+  { q: 2, r: -4 },
+  { q: -1, r: -3 },
+  { q: -4, r: 0 },
+  { q: -4, r: 3 },
+  { q: -2, r: 4 },
+  { q: 1, r: 3 },
+];
+
+const AXIAL_STEPS: ReadonlyArray<{ q: number; r: number }> = [
+  { q: 1, r: 0 }, { q: -1, r: 0 }, { q: 0, r: 1 },
+  { q: 0, r: -1 }, { q: 1, r: -1 }, { q: -1, r: 1 },
+];
+
+function cornersOfRing(radius: number): Set<string> {
+  if (radius < 1) return new Set();
+  return new Set(
+    [
+      [radius, 0], [radius, -radius], [0, -radius],
+      [-radius, 0], [-radius, radius], [0, radius],
+    ].map(([q, r]) => `${q},${r}`),
+  );
+}
+
+function hexArea(radius: number): Array<{ q: number; r: number }> {
+  const out: Array<{ q: number; r: number }> = [];
+  for (let q = -radius; q <= radius; q++) {
+    const rMin = Math.max(-radius, -q - radius);
+    const rMax = Math.min(radius, -q + radius);
+    for (let r = rMin; r <= rMax; r++) out.push({ q, r });
+  }
+  return out;
+}
+
+/**
+ * Те же три карты, что генерирует сервер (map-generator.service): вики
+ * показывает не абстрактную схему, а поле, которое реально может выпасть смене.
+ */
+function buildPresetCells(preset: MapPresetId): PresetCell[] {
+  const radius = 4;
+  const cornersByRing = new Map<number, Set<string>>();
+  for (let i = 1; i <= radius; i++) cornersByRing.set(i, cornersOfRing(i));
+  const homes = new Set(
+    preset === 'classic6'
+      ? [...cornersOfRing(radius)]
+      : RING8_HOME.map((c) => `${c.q},${c.r}`),
+  );
+
+  const cells: PresetCell[] = [];
+  for (const { q, r } of hexArea(radius)) {
+    const ringIndex = ring(q, r);
+    const isCorner = cornersByRing.get(ringIndex)?.has(`${q},${r}`) ?? false;
+    if (ringIndex === 0) {
+      cells.push({ q, r, slug: 'core', isHome: false, isSpecial: false });
+    } else if (ringIndex === 1) {
+      cells.push({ q, r, slug: 'hard', isHome: false, isSpecial: false });
+    } else if (ringIndex === 2) {
+      // Углы — обычный medium, рёбра — особые сектора.
+      cells.push({ q, r, slug: 'medium', isHome: false, isSpecial: !isCorner });
+    } else if (ringIndex === 3) {
+      cells.push({
+        q,
+        r,
+        slug: preset === 'classic6' && isCorner ? 'easy' : 'medium',
+        isHome: false,
+        isSpecial: false,
+      });
+    } else {
+      cells.push({ q, r, slug: 'easy', isHome: homes.has(`${q},${r}`), isSpecial: false });
     }
   }
+
+  if (preset !== 'ring8') return cells;
+
+  // Лепестки кольца 5: только клетки, обнимающие базу снаружи.
+  const seen = new Set<string>();
+  for (const base of RING8_HOME) {
+    for (const step of AXIAL_STEPS) {
+      const q = base.q + step.q;
+      const r = base.r + step.r;
+      const key = `${q},${r}`;
+      if (ring(q, r) === radius + 1 && !seen.has(key)) {
+        seen.add(key);
+        cells.push({ q, r, slug: 'easy', isHome: false, isSpecial: false });
+      }
+    }
+  }
+  return cells;
+}
+
+const MAP_PRESETS: Record<
+  MapPresetId,
+  { title: string; teams: number; note: string }
+> = {
+  classic6: {
+    title: 'Классика',
+    teams: 6,
+    note: 'Базы в шести углах внешнего кольца, между ними — лёгкие сектора.',
+  },
+  compact8: {
+    title: 'Компакт',
+    teams: 8,
+    note: 'Ровный шестиугольник: восемь баз по внешнему кольцу, за спиной у команды ничего нет.',
+  },
+  ring8: {
+    title: 'Кольцо',
+    teams: 8,
+    note: 'Те же восемь баз, но у каждой снаружи свой лепесток лёгких секторов.',
+  },
+};
+
+/** Одна карта смены: клетки красятся по сложности, базы обведены. */
+export function MapPresetDiagram({ preset }: { preset: MapPresetId }) {
+  const SIZE = 13;
+  const meta = MAP_PRESETS[preset];
+  const cells = buildPresetCells(preset);
+  const tierColor: Record<PresetCell['slug'], string> = {
+    core: difficultyColors.core,
+    hard: difficultyColors.hard,
+    medium: difficultyColors.medium,
+    easy: difficultyColors.easy,
+  };
+
   const pts = cells.map((c) => ({ ...c, ...axialToPixel(c.q, c.r, SIZE) }));
   const xs = pts.map((p) => p.x);
   const ys = pts.map((p) => p.y);
@@ -291,47 +506,76 @@ export function MapRingsDiagram() {
 
   return (
     <div className="border border-neutral-300 rounded-md p-4 bg-neutral-100">
+      <div className="flex items-baseline gap-2 mb-2">
+        <span className="font-display text-base text-neutral-1000">{meta.title}</span>
+        <span className="text-2xs text-neutral-600">
+          {meta.teams} команд · {cells.length} секторов
+        </span>
+      </div>
       <svg
         viewBox={`${minX} ${minY} ${w} ${h}`}
-        className="w-full max-w-sm mx-auto block"
+        className="w-full block"
         role="img"
-        aria-label="Схема колец сложности карты"
+        aria-label={`Карта «${meta.title}» на ${meta.teams} команд`}
       >
-        {pts.map((p) => {
-          const key = `${p.q}:${p.r}`;
-          const isBase = bases.has(key);
-          const isSpecial = specials.has(key);
-          const fill = isSpecial ? specialSectorColor : tierColor[ring(p.q, p.r)];
-          return (
-            <g key={key}>
-              <polygon
-                points={hexPoints(p.x, p.y, SIZE - 1.5)}
-                fill={fill}
-                stroke={isBase ? 'var(--color-neutral-1000)' : 'rgba(0,0,0,.25)'}
-                strokeWidth={isBase ? 2 : 1}
-              />
-              {p.q === 0 && p.r === 0 && (
-                <text x={0} y={5} textAnchor="middle" fontSize={15} fill="#fff">
-                  ★
-                </text>
-              )}
-              {isBase && (
-                <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize={12} fill="var(--color-neutral-1000)">
-                  ⌂
-                </text>
-              )}
-            </g>
-          );
-        })}
+        {pts.map((p) => (
+          <g key={`${p.q}:${p.r}`}>
+            <polygon
+              points={hexPoints(p.x, p.y, SIZE - 1.5)}
+              fill={p.isSpecial ? specialSectorColor : tierColor[p.slug]}
+              stroke={p.isHome ? 'var(--color-neutral-1000)' : 'rgba(0,0,0,.25)'}
+              strokeWidth={p.isHome ? 2 : 1}
+            />
+            {p.q === 0 && p.r === 0 && (
+              <text x={0} y={5} textAnchor="middle" fontSize={14} fill="#fff">
+                ★
+              </text>
+            )}
+            {p.isHome && (
+              <text
+                x={p.x}
+                y={p.y + 4}
+                textAnchor="middle"
+                fontSize={11}
+                fill="var(--color-neutral-1000)"
+              >
+                ⌂
+              </text>
+            )}
+            {p.isSpecial && (
+              <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize={11} fill="#fff">
+                ◆
+              </text>
+            )}
+          </g>
+        ))}
       </svg>
-      <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-3 text-xs text-neutral-700">
+      <p className="text-2xs text-neutral-600 mt-2">{meta.note}</p>
+    </div>
+  );
+}
+
+/** Все карты, которые может выставить председатель, с общей легендой. */
+export function MapPresetGallery() {
+  return (
+    <div>
+      <div className="grid gap-3 lg:grid-cols-3">
+        <MapPresetDiagram preset="classic6" />
+        <MapPresetDiagram preset="compact8" />
+        <MapPresetDiagram preset="ring8" />
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-neutral-700">
         <LegendDot color={difficultyColors.core} label="★ ядро" />
-        <LegendDot color={difficultyColors.hard} label="hard" />
-        <LegendDot color={difficultyColors.medium} label="medium" />
-        <LegendDot color={difficultyColors.easy} label="easy" />
-        <LegendDot color={specialSectorColor} label="особый" />
+        <LegendDot color={difficultyColors.hard} label="сложный" />
+        <LegendDot color={difficultyColors.medium} label="средний" />
+        <LegendDot color={difficultyColors.easy} label="лёгкий" />
+        <LegendDot color={specialSectorColor} label="◆ особый" />
         <span className="inline-flex items-center gap-1.5">⌂ домашняя база</span>
       </div>
+      <p className="text-2xs text-neutral-600 mt-2">
+        Здесь клетки покрашены по сложности — это план мира. На живой карте цвет
+        показывает владельца, а сложность видна рамкой сектора.
+      </p>
     </div>
   );
 }

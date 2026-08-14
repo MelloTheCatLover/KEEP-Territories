@@ -55,7 +55,7 @@ export async function captureSpecial(
       action: 'sector.special_capture',
       entityType: 'sector',
       entityId: req.params.id,
-      summary: `Админ провёл особый захват сектора (${result.awards.length} мест)`,
+      summary: `Председатель провёл особый захват сектора (${result.awards.length} мест)`,
       metadata: { sector_id: req.params.id, awards: result.awards },
     });
     res.status(200).json(result);
@@ -173,7 +173,7 @@ export async function attachSectorTask(
       action: 'sector_task.attach',
       entityType: 'sector',
       entityId: req.params.id,
-      summary: 'Админ привязал задание к сектору',
+      summary: 'Председатель привязал задание к сектору',
       metadata: { sector_id: req.params.id, task_id: taskId },
     });
     res.status(200).json({ tasks });
@@ -194,7 +194,7 @@ export async function detachSectorTask(
       action: 'sector_task.detach',
       entityType: 'sector',
       entityId: req.params.id,
-      summary: 'Админ отвязал задание от сектора',
+      summary: 'Председатель отвязал задание от сектора',
       metadata: { sector_id: req.params.id, task_id: req.params.taskId },
     });
     res.status(200).json({ tasks });

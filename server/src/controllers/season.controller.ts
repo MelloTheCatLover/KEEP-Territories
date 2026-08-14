@@ -131,7 +131,7 @@ export async function archive(req: Request<{ id: string }>, res: Response, next:
 export async function getTrophies(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
   try {
     if (!(await canSeeTrophies(req.user!.userId))) {
-      res.status(403).json({ error: 'Кубки скрыты администратором' });
+      res.status(403).json({ error: 'Кубки скрыты председателем КТП' });
       return;
     }
     res.json(await trophyService.getSeasonTrophies(req.params.id));
@@ -161,7 +161,7 @@ export async function getFinals(req: Request<{ id: string }>, res: Response, nex
     // The ceremony is one long trophy reveal, so it follows the same flag as the
     // standings themselves — and, for participants, still only after archiving.
     if (!(await canSeeTrophies(req.user!.userId))) {
-      res.status(403).json({ error: 'Итоги смены скрыты администратором' });
+      res.status(403).json({ error: 'Итоги смены скрыты председателем КТП' });
       return;
     }
     const finals = await seasonService.getFinals(req.params.id);

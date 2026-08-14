@@ -29,7 +29,7 @@ export async function applyProportional(
       actorUserId: req.user!.userId,
       action: 'team.proportional_award',
       entityType: 'team',
-      summary: `Админ раздал по баллам ${parts.join(' и ') || '0'} на ${result.shares.length} команд`,
+      summary: `Председатель раздал по баллам ${parts.join(' и ') || '0'} на ${result.shares.length} команд`,
       metadata: {
         resources: req.body?.resources,
         totals: req.body?.totals,

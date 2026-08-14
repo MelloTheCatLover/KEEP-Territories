@@ -133,7 +133,7 @@ export function TimelapsePage({ seasonId }: { seasonId?: string } = {}) {
   if (!allowed) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center text-neutral-700">
-        Доступно только администраторам.
+        Доступно только председателю КТП.
         <Link to="/map" className="ml-2 text-brand-500 underline">
           На карту
         </Link>

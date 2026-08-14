@@ -70,7 +70,7 @@ const TELEPORT_COST = 75;
 
 const ACTION_LABELS: Record<ActionType, string> = {
   capture: 'Захват',
-  recapture: 'Перехват',
+  recapture: 'Перезахват',
   fortify: 'Укрепление',
   remove_fortification: 'Снятие укрепления',
 };
@@ -167,7 +167,7 @@ function computeAvailable(
     if (canPierce) {
       actions.push({
         type: 'recapture',
-        label: 'Перехватить',
+        label: 'Перезахватить',
         description:
           sector.fortification_level > 0
             ? `Пробить укрепление (ур. ${sector.fortification_level}) и отобрать сектор`
@@ -234,7 +234,7 @@ export function SectorActionModal({
       const res = await peekSector(sector.id, userTeamId);
       setPeek({ pool: res.task_pool, remaining: res.checks_remaining });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Не удалось разведать сектор');
+      setError(err instanceof ApiError ? err.message : 'Не удалось проверить сектор');
     } finally {
       setPeeking(false);
     }
@@ -446,7 +446,7 @@ export function SectorActionModal({
               <div className="flex items-center gap-2 mb-1">
                 <Rocket className="w-4 h-4 text-brand-500" />
                 <span className="font-display text-sm text-neutral-1000">
-                  Телепорт · {teleport.type === 'capture' ? 'захват' : 'перехват'}
+                  Телепорт · {teleport.type === 'capture' ? 'захват' : 'перезахват'}
                 </span>
               </div>
               <p className="text-xs text-neutral-700 mb-2">
@@ -619,7 +619,7 @@ function PeekPanel({
     <div className="border border-neutral-400 rounded-sm p-3 bg-neutral-100">
       <div className="flex items-center justify-between gap-2 mb-2">
         <span className="text-2xs uppercase tracking-wider text-neutral-700">
-          Разведка (интеллект)
+          Проверка (интеллект)
         </span>
         <Button
           variant="secondary"

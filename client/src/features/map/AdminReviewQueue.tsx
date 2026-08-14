@@ -12,7 +12,7 @@ import { MERCHANT_MARK } from './HexMap';
 
 const ACTION_LABELS: Record<SubmissionActionType, string> = {
   capture: 'Захват',
-  recapture: 'Перехват',
+  recapture: 'Перезахват',
   fortify: 'Укрепление',
   remove_fortification: 'Снос укр.',
 };

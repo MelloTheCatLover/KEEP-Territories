@@ -498,7 +498,7 @@ function TeamSetupCard({
         <form onSubmit={handleSubmit} className="flex-1 space-y-3">
           <div>
             <h2 className="font-display text-heading-sm text-neutral-1000 mb-1">Настройте команду</h2>
-            <p className="text-sm text-neutral-700">Вас распределил администратор. Выберите название и цвет.</p>
+            <p className="text-sm text-neutral-700">Вас распределил председатель КТП. Выберите название и цвет.</p>
           </div>
 
           {error && <ErrorBanner message={error} />}

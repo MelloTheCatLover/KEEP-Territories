@@ -20,7 +20,7 @@ type State =
 
 const ACTION_LABELS: Record<string, string> = {
   capture: 'Захват',
-  recapture: 'Перехват',
+  recapture: 'Перезахват',
   fortify: 'Укрепление',
   remove_fortification: 'Снятие укрепления',
 };
@@ -191,7 +191,7 @@ function SubmissionPanel({
         </>
       ) : (
         <p className="text-sm text-neutral-700">
-          Задание не назначено. Обратитесь к администратору.
+          Задание не назначено. Обратитесь к председателю КТП.
         </p>
       )}
 
@@ -219,7 +219,7 @@ function SubmissionPanel({
 
       {submission.status === 'pending' && (
         <div className="mt-4 bg-info-bg border border-info/40 text-info-text text-sm px-3 py-2 rounded-sm">
-          Решите задание вместе с командой и покажите ответ администратору для проверки.
+          Решите задание вместе с командой и покажите ответ председателю КТП для проверки.
         </div>
       )}
 

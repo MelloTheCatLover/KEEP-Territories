@@ -104,7 +104,7 @@ export function JoinOrCreateView() {
       {noMap ? (
         <Card>
           <p className="text-sm text-neutral-700">
-            Карта ещё не сгенерирована. Дождитесь администратора.
+            Карта ещё не сгенерирована. Дождитесь председателя КТП.
           </p>
         </Card>
       ) : (

@@ -4,7 +4,7 @@
 
 import { StatName } from '../types/team-stats';
 
-/** Сила → пробитие уровней укрепления при перехвате. */
+/** Сила → пробитие уровней укрепления при перезахвате. */
 export function penetrationFromStrength(strength: number): number {
   if (strength >= 10) return 3;
   if (strength >= 8) return 2;

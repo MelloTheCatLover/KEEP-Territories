@@ -86,7 +86,7 @@ export async function adminSetResources(
       action: 'team.set_resources',
       entityType: 'team',
       entityId: req.params.teamId,
-      summary: `Админ задал ресурсы команде «${stats.name}»`,
+      summary: `Председатель задал ресурсы команде «${stats.name}»`,
       metadata: { payload, result: { influence: stats.influence, experience: stats.experience } },
     });
     res.status(200).json(stats);
@@ -113,7 +113,7 @@ export async function adminSetStats(
       action: 'team.set_stats',
       entityType: 'team',
       entityId: req.params.teamId,
-      summary: `Админ задал характеристики команде «${stats.name}»`,
+      summary: `Председатель задал характеристики команде «${stats.name}»`,
       metadata: { payload },
     });
     res.status(200).json(stats);

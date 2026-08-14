@@ -206,7 +206,7 @@ export async function adminUpdate(
       action: 'team.update',
       entityType: 'team',
       entityId: team.id,
-      summary: `Админ изменил команду «${team.name}»${changed ? `: ${changed}` : ''}`,
+      summary: `Председатель изменил команду «${team.name}»${changed ? `: ${changed}` : ''}`,
       metadata: { patch, by: 'admin' },
     });
     res.status(200).json(team);
@@ -228,7 +228,7 @@ export async function adminDelete(
       action: 'team.delete',
       entityType: 'team',
       entityId: req.params.id,
-      summary: `Админ удалил команду${doomed ? ` «${doomed.name}»` : ''}`,
+      summary: `Председатель удалил команду${doomed ? ` «${doomed.name}»` : ''}`,
       metadata: { name: doomed?.name ?? null },
     });
     res.status(204).send();
@@ -279,7 +279,7 @@ export async function adminAssignMember(
       action: 'team.assign',
       entityType: 'team',
       entityId: req.params.id,
-      summary: `Админ перевёл участника в команду «${result.name}»`,
+      summary: `Председатель перевёл участника в команду «${result.name}»`,
       metadata: { assigned_user_id: userId },
     });
     res.status(200).json(result);
@@ -302,8 +302,8 @@ export async function adminKick(
       entityType: 'team',
       entityId: req.params.id,
       summary: result === null
-        ? 'Админ исключил участника — команда расформирована (не осталось игроков)'
-        : `Админ исключил участника из команды «${result.name}»`,
+        ? 'Председатель исключил участника — команда расформирована (не осталось игроков)'
+        : `Председатель исключил участника из команды «${result.name}»`,
       metadata: { kicked_user_id: req.params.userId, team_deleted: result === null },
     });
     if (result === null) {

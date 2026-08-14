@@ -7,7 +7,7 @@ import { validateParamId } from '../middleware/validate.middleware';
 const router = Router();
 
 router.use(authenticate);
-// Диверсант скрыт от команд, как и остальные персонажи: кидает админ.
+// Диверсант скрыт от команд, как и остальные персонажи: кидает председатель КТП.
 router.use(requireAdmin);
 
 router.get('/catalog', diversionController.getCatalog);

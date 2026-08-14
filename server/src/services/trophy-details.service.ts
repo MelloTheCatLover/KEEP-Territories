@@ -77,7 +77,7 @@ function penaltyLabel(reason: string): string {
 
 export const TROPHY_RULES: Record<TrophyKey, string> = {
   influential:
-    'Сумма влияния: награда каждого удерживаемого сектора (с учётом множителя награды) + половина награды за каждый уровень укрепления на нём + бандлы за места в особых событиях − штрафы (сброс захвата, телепорт, диверсии) + ручные корректировки админа и случайных встреч. Потеря сектора снимает и базу, и бонус за укрепление.',
+    'Сумма влияния: награда каждого удерживаемого сектора (с учётом множителя награды) + половина награды за каждый уровень укрепления на нём + бандлы за места в особых событиях − штрафы (сброс захвата, телепорт, диверсии) + ручные корректировки председателя и случайных встреч. Потеря сектора снимает и базу, и бонус за укрепление.',
   core_keepers:
     'Владелец сектора-ядра — 1-е место, все остальные — последнее (равно числу команд). Если ядро свободно, первого места нет ни у кого.',
   experienced:
@@ -86,9 +86,9 @@ export const TROPHY_RULES: Record<TrophyKey, string> = {
     'Число секторов, которыми команда владеет прямо сейчас (captured_by_team_id). Считаются и обычные, и база, и захваченные особые.',
   universal: `Число открытых порогов характеристик из ${TROPHY_LADDER_TOTAL} возможных. Пороги — те же, что дают игровые эффекты: сила ${TROPHY_STAT_LADDERS.strength.join('/')}, выносливость ${TROPHY_STAT_LADDERS.endurance.join('/')}, интеллект ${TROPHY_STAT_LADDERS.intelligence.join('/')}, удача ${TROPHY_STAT_LADDERS.luck.join('/')}; у лидерства механических порогов нет, поэтому берутся сложности его проверок в случайных встречах (${TROPHY_STAT_LADDERS.leadership.join('/')}). Кубок награждает разносторонность, а не объём: вложенные в одну характеристику очки быстро упираются в потолок её лестницы. Тайбрейк — общее число вложенных очков.`,
   unbreakable:
-    'Самый длинный ряд успехов подряд без сброса захвата. Успех = одобренный захват, одобренный перехват, поднятый уровень укрепления или 1-е место в особом событии. Сброс захвата (drop) закрывает текущий ряд и открывает новый; ранее достигнутый максимум сохраняется.',
+    'Самый длинный ряд успехов подряд без сброса захвата. Успех = одобренный захват, одобренный перезахват, поднятый уровень укрепления или 1-е место в особом событии. Сброс захвата (drop) закрывает текущий ряд и открывает новый; ранее достигнутый максимум сохраняется.',
   conquerors:
-    'Число одобренных перехватов — сколько раз команда отобрала сектор у другой. Сброс захвата счётчик не обнуляет.',
+    'Число одобренных перезахватов — сколько раз команда отобрала сектор у другой. Сброс захвата счётчик не обнуляет.',
   champions:
     'Число побед в особых событиях — сколько особых секторов команда взяла первым местом. Тайбрейк — очки за все занятые места (1-е → 8 … 8-е → 1).',
 };
@@ -100,7 +100,7 @@ const VALUE_LABEL: Record<TrophyKey, string> = {
   rulers: 'Секторов',
   universal: 'Порогов',
   unbreakable: 'Лучший ряд',
-  conquerors: 'Перехватов',
+  conquerors: 'Перезахватов',
   champions: 'Побед',
 };
 
@@ -391,7 +391,7 @@ async function influentialDetails(
         at: null,
         kind: 'adjustment',
         label: 'Корректировка',
-        detail: 'ручная выдача админа и результаты случайных встреч',
+        detail: 'ручная выдача председателя и результаты случайных встреч',
         value: p.adjustments,
       });
     }
@@ -401,7 +401,7 @@ async function influentialDetails(
         { label: 'Укрепления', value: p.fortification },
         { label: 'Особые события', value: p.special },
         { label: 'Штрафы', value: -p.penalties },
-        { label: 'Корректировки', value: p.adjustments, hint: 'админ + случайные встречи' },
+        { label: 'Корректировки', value: p.adjustments, hint: 'председатель + случайные встречи' },
       ],
       events,
     });
@@ -479,7 +479,7 @@ async function experiencedDetails(
         at: null,
         kind: 'adjustment',
         label: 'Корректировка',
-        detail: 'ручная выдача админа и результаты случайных встреч',
+        detail: 'ручная выдача председателя и результаты случайных встреч',
         value: p.adjustments,
       });
     }
@@ -490,7 +490,7 @@ async function experiencedDetails(
         { label: 'Укрепления', value: p.fortification },
         { label: 'Особые события', value: p.special },
         { label: 'Штрафы', value: -p.penalties },
-        { label: 'Корректировки', value: p.adjustments, hint: 'админ + случайные встречи' },
+        { label: 'Корректировки', value: p.adjustments, hint: 'председатель + случайные встречи' },
       ],
       events,
     });
@@ -650,7 +650,7 @@ async function unbreakableDetails(
 
   const KIND_LABEL: Record<string, string> = {
     capture: 'Захват',
-    recapture: 'Перехват',
+    recapture: 'Перезахват',
     fortify: 'Укрепление',
     special_win: '1-е место в особом событии',
   };
@@ -768,7 +768,7 @@ async function conquerorsDetails(
       events: rows.map<TrophyDetailEvent>((r) => ({
         at: iso(r.ts),
         kind: 'recapture',
-        label: `Перехват · ${sectorLabel(r)}`,
+        label: `Перезахват · ${sectorLabel(r)}`,
         detail: `${r.difficulty_name}${r.previous_owner ? ` · отобран у «${r.previous_owner}»` : ''}`,
         value: 1,
       })),
@@ -884,7 +884,7 @@ export async function getTrophyDetails(
   };
 }
 
-/** Ручные победители текущего сезона — для админской страницы. */
+/** Ручные победители текущего сезона — для председательской страницы. */
 export async function getOverrides(seasonId: string) {
   const overrides = await loadOverrides(seasonId);
   return [...overrides.values()];

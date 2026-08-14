@@ -28,7 +28,7 @@ export async function list(
     // Live standings are the admin's call: participants see them only while the
     // trophies_visible flag is on. Admins always see them.
     if (!admin && !(await gameSettingsService.getTrophiesVisible())) {
-      throw new AppError(403, 'Кубки скрыты администратором');
+      throw new AppError(403, 'Кубки скрыты председателем КТП');
     }
 
     const result = await trophyService.getTrophies(userId);
@@ -38,7 +38,7 @@ export async function list(
   }
 }
 
-/** Полная раскладка одного кубка. Только админ: журнал раскрывает чужие метрики. */
+/** Полная раскладка одного кубка. Только председатель: журнал раскрывает чужие метрики. */
 export async function details(
   req: Request,
   res: Response,

@@ -16,7 +16,7 @@ export function AccessDenied() {
               Доступ запрещён
             </h1>
             <p className="text-sm text-neutral-700">
-              Эта страница доступна только администраторам.
+              Эта страница доступна только председателю КТП.
             </p>
           </div>
         </div>
@@ -50,7 +50,7 @@ export function AdminPageHeader({ title, actions }: HeaderProps) {
         className="inline-flex items-center gap-1 text-xs text-neutral-700 hover:text-neutral-1000 transition-colors"
       >
         <ArrowLeft className="w-3 h-3" />
-        Админ
+        Председатель КТП
       </Link>
       <div className="flex flex-wrap items-center justify-between gap-3 mt-0.5">
         <h1 className="font-display text-heading-sm sm:text-heading-md text-neutral-1000">

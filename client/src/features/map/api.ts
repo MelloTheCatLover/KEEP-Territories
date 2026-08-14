@@ -62,7 +62,7 @@ export function rerollTask(submissionId: string, teamId?: string): Promise<Rerol
 
 export type PeekResponse = { task_pool: TaskBrief[]; checks_remaining: number };
 
-/** Check / разведка (интеллект): preview a sector's task pool before committing. */
+/** Check / проверка (интеллект): preview a sector's task pool before committing. */
 export function peekSector(sectorId: string, teamId?: string): Promise<PeekResponse> {
   return api.post<PeekResponse>(`/sectors/${sectorId}/peek`, {
     ...(teamId ? { team_id: teamId } : {}),

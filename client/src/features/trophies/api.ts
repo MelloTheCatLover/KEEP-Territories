@@ -5,7 +5,7 @@ export function getTrophies(): Promise<TrophiesResponse> {
   return api.get<TrophiesResponse>('/trophies');
 }
 
-/** Полная раскладка метрики кубка по командам. Только для админа. */
+/** Полная раскладка метрики кубка по командам. Только для председателя. */
 export function getTrophyDetails(key: TrophyKey): Promise<TrophyDetails> {
   return api.get<TrophyDetails>(`/trophies/${key}/details`);
 }

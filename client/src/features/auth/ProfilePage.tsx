@@ -3,7 +3,7 @@ import { Card, Button } from '../../shared/ui';
 
 const roleLabels: Record<string, string> = {
   student: 'Участник',
-  admin: 'Администратор',
+  admin: 'Председатель КТП',
 };
 
 const teamRoleLabels: Record<string, string> = {

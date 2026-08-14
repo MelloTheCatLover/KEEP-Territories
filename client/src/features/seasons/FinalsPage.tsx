@@ -70,7 +70,7 @@ export function FinalsPage() {
     // The ceremony is nothing but trophy reveals — don't even fetch it while
     // trophies are hidden from this viewer.
     if (!canSeeTrophies) {
-      setState({ status: 'error', message: 'Итоги смены скрыты администратором' });
+      setState({ status: 'error', message: 'Итоги смены скрыты председателем КТП' });
       return;
     }
     getSeasonFinals(id)

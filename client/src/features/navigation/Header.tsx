@@ -9,7 +9,7 @@ const navLinks = [
   { to: '/laws', label: 'Законы' },
   { to: '/seasons', label: 'Смены' },
   { to: '/docs', label: 'Правила' },
-  { to: '/admin', label: 'Админ', adminOnly: true },
+  { to: '/admin', label: 'Председатель', adminOnly: true },
 ];
 
 function navLinkClass({ isActive }: { isActive: boolean }) {

@@ -6,12 +6,12 @@ import { requireAdmin } from '../middleware/admin.middleware';
 const router = Router();
 
 router.use(authenticate);
-// Кубки всегда видны админу; участникам — только при включённом флаге
+// Кубки всегда видны председателю; участникам — только при включённом флаге
 // trophies_visible (переключается на карте). Проверка внутри контроллера.
 router.get('/', trophyController.list);
 
-// Ручные победители и полная раскладка метрик — только админу: журнал
-// показывает чужие приватные показатели (стрик, перехваты).
+// Ручные победители и полная раскладка метрик — только председателю: журнал
+// показывает чужие приватные показатели (стрик, перезахваты).
 router.get('/overrides', requireAdmin, trophyController.listOverrides);
 router.put('/overrides/:key', requireAdmin, trophyController.setOverride);
 router.get('/:key/details', requireAdmin, trophyController.details);

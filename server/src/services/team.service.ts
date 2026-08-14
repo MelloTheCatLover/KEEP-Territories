@@ -72,7 +72,7 @@ export async function create(dto: CreateTeamDto, userId: string): Promise<TeamFu
     // Admins skip the roster check so they can join any active season to test it.
     if (userCheck.rows[0].role !== 'admin') {
       if (await seasonHasDistribution(client, seasonId)) {
-        throw new AppError(403, 'Команды формирует администратор в начале сезона');
+        throw new AppError(403, 'Команды формирует председатель КТП в начале сезона');
       }
       await assertEnrolled(client, userId, seasonId);
     }
@@ -196,7 +196,7 @@ export async function join(teamId: string, userId: string): Promise<TeamFullStat
     }
     // Admins run the field via the "play as team" selector — they never join.
     if (userCheck.rows[0].role === 'admin') {
-      throw new AppError(403, 'Администратор не вступает в команды — используйте режим «играю за команду» на карте');
+      throw new AppError(403, 'Председатель КТП не вступает в команды — используйте режим «играю за команду» на карте');
     }
 
     const teamCheck = await client.query<{ season_id: string }>(
@@ -213,7 +213,7 @@ export async function join(teamId: string, userId: string): Promise<TeamFullStat
     // Admins skip the roster check so they can join any active season to test it.
     if (userCheck.rows[0].role !== 'admin') {
       if (await seasonHasDistribution(client, seasonId)) {
-        throw new AppError(403, 'Команды формирует администратор в начале сезона');
+        throw new AppError(403, 'Команды формирует председатель КТП в начале сезона');
       }
       await assertEnrolled(client, userId, seasonId);
     }
@@ -679,7 +679,7 @@ export async function adminAssignMember(targetTeamId: string, userId: string): P
       throw new AppError(404, 'User not found');
     }
     if (user.rows[0].role === 'admin') {
-      throw new AppError(400, 'Администратор не состоит в командах');
+      throw new AppError(400, 'Председатель КТП не состоит в командах');
     }
     const { team_id: sourceTeamId, team_role: sourceRole } = user.rows[0];
     if (sourceTeamId === targetTeamId) {

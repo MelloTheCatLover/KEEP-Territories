@@ -78,7 +78,7 @@ export interface TrophyDetailTeam {
 export interface TrophyDetails {
   key: TrophyKey;
   name: string;
-  /** Человекочитаемое правило подсчёта — то же, что видит админ в карточке. */
+  /** Человекочитаемое правило подсчёта — то же, что видит председатель в карточке. */
   rule: string;
   /** Подпись к колонке «Значение». */
   value_label: string;

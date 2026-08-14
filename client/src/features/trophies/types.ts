@@ -27,7 +27,7 @@ export type TrophyRanking = {
   description: string;
   private_value: boolean;
   entries: TrophyEntry[];
-  /** Победитель назначен админом вручную, а не посчитан по метрике. */
+  /** Победитель назначен председателем вручную, а не посчитан по метрике. */
   override: TrophyOverrideInfo | null;
 };
 

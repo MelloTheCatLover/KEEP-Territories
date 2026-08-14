@@ -18,7 +18,7 @@ export async function generateMap(
       actorUserId: req.user!.userId,
       action: 'map.generate',
       entityType: 'map',
-      summary: `Админ сгенерировал карту «${mapGeneratorService.MAP_PRESETS[raw].title}» (${result.length} секторов)`,
+      summary: `Председатель сгенерировал карту «${mapGeneratorService.MAP_PRESETS[raw].title}» (${result.length} секторов)`,
       metadata: { count: result.length, preset: raw },
     });
     res.status(201).json({ sectors: result, count: result.length });
@@ -55,7 +55,7 @@ export async function deleteAll(
       actorUserId: req.user!.userId,
       action: 'map.clear',
       entityType: 'map',
-      summary: `Админ удалил карту (${result.deleted_count} секторов, ${result.deleted_teams_count} команд)`,
+      summary: `Председатель удалил карту (${result.deleted_count} секторов, ${result.deleted_teams_count} команд)`,
       metadata: result,
     });
     res.status(200).json(result);
