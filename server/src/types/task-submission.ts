@@ -53,6 +53,16 @@ export interface TaskSubmissionWithDetails extends TaskSubmission {
    * nulled for players so the surprise survives until the capture is approved.
    */
   merchant_type: 'master' | 'saboteur' | 'trader' | null;
+  /**
+   * Команда выкрутила на колесе фортуны «Без очереди»: заявка идёт первой в
+   * очереди сдачи и гасит плюшку, как только председатель её разберёт.
+   */
+  queue_priority: boolean;
+  /**
+   * Закон «Рука помощи»: у команды лежит неистраченный доп. реролл, который
+   * тратится как обычный, когда свои (от удачи) кончились.
+   */
+  extra_reroll: boolean;
 }
 
 export interface StartActionDto {

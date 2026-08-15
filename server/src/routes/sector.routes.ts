@@ -11,6 +11,7 @@ const router = Router();
 router.use(authenticate);
 
 router.post('/generate-map', requireAdmin, mapGeneratorController.generateMap);
+router.post('/reroll-tasks', requireAdmin, mapGeneratorController.rerollTasks);
 router.delete('/all', requireAdmin, mapGeneratorController.deleteAll);
 router.get('/admin/status', requireAdmin, mapGeneratorController.getStatus);
 router.get('/admin/presets', requireAdmin, mapGeneratorController.listPresets);

@@ -270,6 +270,8 @@ function rowToSectorPublic(row: SectorRow): SectorPublic {
     home_team_id: row.home_team_id,
     current_action_type: row.current_action_type,
     is_special: row.is_special,
+    // Свежесгенерированная карта краски не несёт.
+    graffiti_team_id: null,
     difficulty,
     active_submission_team_id: null,
   };
@@ -376,27 +378,236 @@ async function assignTasksAfterGeneration(client: PoolClient, seasonId: string):
 }
 
 /**
- * Fixed merchant placement: kind → medium sector number (С9, С14, С15, С10,
- * С5, С4). The characters sit on known cells so the admin can staff them in
- * advance instead of chasing a random draw each season.
+ * «Номерные» испытания живут группой в одном секторе: колесо на нём всегда
+ * выдаёт номер отряда (мигр. 061). Реролл такие секторы не трогает и не тащит
+ * их задания в общий банк — иначе группа снова размажется по карте.
  */
-export const MERCHANT_PLACEMENT: ReadonlyArray<{ kind: 'master' | 'saboteur' | 'trader'; number: number }> = [
-  { kind: 'master', number: 9 },
-  { kind: 'master', number: 14 },
-  { kind: 'saboteur', number: 15 },
-  { kind: 'saboteur', number: 10 },
-  { kind: 'trader', number: 5 },
-  { kind: 'trader', number: 4 },
+const GROUP_TASK_PREFIXES: ReadonlyArray<string> = ['Рассмешить ', 'Нарисовать номер '];
+
+function isGroupTask(title: string): boolean {
+  return GROUP_TASK_PREFIXES.some((prefix) => title.startsWith(prefix));
+}
+
+/** Сколько заданий несёт сектор: hard — весь пул, core — одно. */
+function tasksPerSector(slug: DifficultySlug): number {
+  return slug === 'easy' ? 6 : slug === 'medium' ? 5 : 1;
+}
+
+/**
+ * Раздатчик «по кругу»: сдаёт задания из перетасованной колоды и берёт новую,
+ * только когда прежняя кончилась. Каждое задание банка уходит в дело раньше,
+ * чем повторится хоть одно, — это и есть минимум повторов. Внутри сектора
+ * дубля не будет: свежая колода собирается без уже выданных карт.
+ */
+function makeDealer(bank: string[]): (n: number) => string[] {
+  let deck = shuffle(bank);
+  return (n: number): string[] => {
+    const picked: string[] = [];
+    while (picked.length < n && bank.length > 0) {
+      if (deck.length === 0) {
+        const rest = bank.filter((id) => !picked.includes(id));
+        deck = shuffle(rest.length > 0 ? rest : bank);
+      }
+      picked.push(deck.pop() as string);
+    }
+    return picked;
+  };
+}
+
+export interface TaskRerollResult {
+  /** Сколько секторов получили новый набор заданий. */
+  sectors: number;
+  /** Сколько привязок создано. */
+  bindings: number;
+  /** Сколько секторов оставлено под номерные группы. */
+  group_sectors: number;
+  /** По сложностям: размер банка, задействовано заданий, слотов роздано. */
+  by_difficulty: Array<{
+    slug: DifficultySlug;
+    bank: number;
+    used: number;
+    slots: number;
+  }>;
+}
+
+/**
+ * Перетасовать задания по секторам активной смены, не трогая карту.
+ *
+ * Банк — всё, что лежит в `tasks`: задания прошлых смен остаются в базе, а
+ * снятые с игры удалялись отдельными миграциями, поэтому «использовать весь
+ * банк, кроме забаненного» = раздать то, что есть. Раздача идёт по кругу
+ * (`makeDealer`), поэтому повторов ровно столько, сколько требует нехватка
+ * заданий, и распределены они равномерно.
+ *
+ * Секторы номерных групп (см. `GROUP_TASK_PREFIXES`) сохраняются как есть.
+ */
+export async function rerollSectorTasks(): Promise<TaskRerollResult> {
+  const seasonId = await getActiveSeasonId();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const sectorsRes = await client.query<{
+      id: string;
+      difficulty_id: string;
+    }>(
+      `SELECT id, difficulty_id FROM sectors
+        WHERE season_id = $1 AND is_special = false AND is_home_base = false`,
+      [seasonId],
+    );
+    const tasksRes = await client.query<{
+      id: string;
+      difficulty_id: string;
+      title: string;
+    }>('SELECT id, difficulty_id, title FROM tasks');
+    const diffsRes = await client.query<{ id: string; slug: DifficultySlug }>(
+      'SELECT id, slug FROM difficulty_levels',
+    );
+
+    const slugById: Record<string, DifficultySlug> = {};
+    for (const d of diffsRes.rows) slugById[d.id] = d.slug;
+
+    // Групповой сектор — тот, где лежит **только** номерная группа и ничего
+    // больше (мигр. 061): колесо на нём всегда выдаёт номер отряда. Сектор, куда
+    // номерное задание попало вперемешку с обычными, групповым не считается —
+    // иначе одно «Рассмешить» замораживало бы пол-карты.
+    const groupTaskIds = new Set(
+      tasksRes.rows.filter((t) => isGroupTask(t.title)).map((t) => t.id),
+    );
+    const groupSectorIds = new Set<string>();
+    if (groupTaskIds.size > 0) {
+      const bound = await client.query<{ sector_id: string }>(
+        `SELECT st.sector_id
+           FROM sector_tasks st
+           JOIN sectors s ON s.id = st.sector_id
+          WHERE s.season_id = $1
+          GROUP BY st.sector_id
+         HAVING bool_and(st.task_id = ANY($2::uuid[]))`,
+        [seasonId, [...groupTaskIds]],
+      );
+      for (const row of bound.rows) groupSectorIds.add(row.sector_id);
+    }
+
+    // Банк по сложностям — без номерных групп, они закреплены за своими клетками.
+    const bankByDiff: Record<string, string[]> = {};
+    for (const task of tasksRes.rows) {
+      if (groupTaskIds.has(task.id)) continue;
+      (bankByDiff[task.difficulty_id] ??= []).push(task.id);
+    }
+
+    const targets = sectorsRes.rows.filter((s) => !groupSectorIds.has(s.id));
+    const targetIds = targets.map((s) => s.id);
+    if (targetIds.length > 0) {
+      await client.query('DELETE FROM sector_tasks WHERE sector_id = ANY($1::uuid[])', [
+        targetIds,
+      ]);
+      await client.query(
+        'UPDATE sectors SET task_id = NULL WHERE id = ANY($1::uuid[])',
+        [targetIds],
+      );
+    }
+
+    const dealers: Record<string, (n: number) => string[]> = {};
+    const usage: Record<string, Set<string>> = {};
+    const slots: Record<string, number> = {};
+    let bindings = 0;
+
+    for (const sector of targets) {
+      const slug = slugById[sector.difficulty_id];
+      const bank = bankByDiff[sector.difficulty_id] ?? [];
+      if (bank.length === 0) continue;
+
+      // Сложный сектор несёт весь свой пул — выбирать там нечего.
+      const picked =
+        slug === 'hard'
+          ? bank
+          : (dealers[sector.difficulty_id] ??= makeDealer(bank))(
+              Math.min(tasksPerSector(slug), bank.length),
+            );
+
+      usage[slug] ??= new Set();
+      for (const id of picked) usage[slug].add(id);
+      slots[slug] = (slots[slug] ?? 0) + picked.length;
+
+      if (slug === 'core') {
+        await client.query('UPDATE sectors SET task_id = $1 WHERE id = $2', [
+          picked[0],
+          sector.id,
+        ]);
+        bindings += 1;
+        continue;
+      }
+
+      const values: string[] = [];
+      const params: string[] = [];
+      picked.forEach((taskId, i) => {
+        values.push(`($${i * 2 + 1}, $${i * 2 + 2})`);
+        params.push(sector.id, taskId);
+      });
+      await client.query(
+        `INSERT INTO sector_tasks (sector_id, task_id) VALUES ${values.join(', ')}`,
+        params,
+      );
+      bindings += picked.length;
+    }
+
+    await client.query('COMMIT');
+
+    const bankBySlug: Record<string, number> = {};
+    for (const [diffId, ids] of Object.entries(bankByDiff)) {
+      bankBySlug[slugById[diffId]] = ids.length;
+    }
+    const by_difficulty = (['easy', 'medium', 'hard', 'core'] as DifficultySlug[]).map(
+      (slug) => ({
+        slug,
+        bank: bankBySlug[slug] ?? 0,
+        used: usage[slug]?.size ?? 0,
+        slots: slots[slug] ?? 0,
+      }),
+    );
+
+    return {
+      sectors: targets.length,
+      bindings,
+      group_sectors: groupSectorIds.size,
+      by_difficulty,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Клетки персонажей — фиксированные средние сектора (С18, С19, С13, С7, С6,
+ * С12). Ведущий знает заранее, на каких клетках стоят персонажи, и готовит их
+ * заранее, вместо погони за случайной раздачей по всей карте.
+ */
+export const MERCHANT_SECTOR_NUMBERS: ReadonlyArray<number> = [18, 19, 13, 7, 6, 12];
+
+/** Кто именно стоит: по двое на вид. Раскладка по клеткам — случайная. */
+export const MERCHANT_KINDS: ReadonlyArray<'master' | 'saboteur' | 'trader'> = [
+  'master',
+  'master',
+  'saboteur',
+  'saboteur',
+  'trader',
+  'trader',
 ];
 
 /**
- * Put the 6 hidden merchants on their fixed medium sectors. No client-facing
- * flag: capturing one mints a purchase token (see submission service). A number
- * that does not exist on this map (smaller preset) is simply skipped.
+ * Расставить 6 скрытых персонажей по их клеткам: сами клетки фиксированы, а
+ * кто на какой стоит — случайно каждую генерацию, чтобы прошлая смена не
+ * подсказывала. Клиенту флаг не отдаётся: захват такого сектора чеканит жетон
+ * покупки (см. submission service). Номера, которых на этой карте нет
+ * (меньший пресет), просто пропускаются.
  */
 async function assignMerchantsAfterGeneration(client: PoolClient, seasonId: string): Promise<void> {
   await client.query('UPDATE sectors SET merchant_type = NULL WHERE season_id = $1', [seasonId]);
-  for (const { kind, number } of MERCHANT_PLACEMENT) {
+  const kinds = shuffle([...MERCHANT_KINDS]);
+  for (let i = 0; i < MERCHANT_SECTOR_NUMBERS.length; i++) {
     await client.query(
       `UPDATE sectors s
           SET merchant_type = $1
@@ -407,7 +618,7 @@ async function assignMerchantsAfterGeneration(client: PoolClient, seasonId: stri
           AND s.number = $3
           AND s.is_special = false
           AND s.is_home_base = false`,
-      [kind, seasonId, number],
+      [kinds[i], seasonId, MERCHANT_SECTOR_NUMBERS[i]],
     );
   }
 }

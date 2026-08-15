@@ -53,6 +53,10 @@ export type TaskSubmissionWithDetails = {
   rerolls_max: number;
   /** Hidden character on the sector; admins only, null for players. */
   merchant_type: MerchantType | null;
+  /** «Без очереди» с колеса фортуны — заявка идёт первой в очереди сдачи. */
+  queue_priority: boolean;
+  /** «Рука помощи» — неистраченный доп. реролл сверх лимита удачи. */
+  extra_reroll: boolean;
 };
 
 export function getPendingSubmissions(): Promise<TaskSubmissionWithDetails[]> {

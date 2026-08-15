@@ -223,6 +223,21 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
     };
   }
 
+  // Граффити: сектор свободен, но покрашен в цвет команды. Цвет приглушённый —
+  // краска не владение, поэтому клетка не должна читаться как захваченная.
+  if (s.graffiti_team_id) {
+    const team = teamsById[s.graffiti_team_id];
+    const color = team ? resolveTeamPalette(team) : null;
+    return {
+      fill: color ? color.muted : 'var(--color-neutral-300)',
+      fillOpacity: 1,
+      label: numberLabel,
+      labelFill: INK_ON_DARK,
+      ink: INK_ON_DARK,
+      titleExtra: team ? ` · граффити ${team.name}` : ' · граффити',
+    };
+  }
+
   return {
     fill: 'var(--color-neutral-200)',
     fillOpacity: 1,
@@ -529,9 +544,12 @@ export function HexMap({
       </g>
 
       {/* 5) Difficulty chips — drawn above the fills and the hatching so the
-          one thing a team reads before choosing a sector is never obscured. */}
+          one thing a team reads before choosing a sector is never obscured.
+          Особые события и домашние базы обычным действием не берутся, так что
+          сложность там ничего не значит — чип не рисуем. */}
       <g className="hex-difficulty-layer" pointerEvents="none">
         {sectors.map((s) => {
+          if (s.is_special || s.is_home_base) return null;
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
           return <DifficultyChip key={s.id} x={x} y={y} slug={s.difficulty.slug} />;
         })}

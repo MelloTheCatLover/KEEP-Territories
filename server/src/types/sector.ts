@@ -16,6 +16,12 @@ export interface Sector {
   home_team_id: string | null;
   current_action_type: SectorActionType | null;
   is_special: boolean;
+  /**
+   * Закон «Граффити»: команда, покрасившая сектор. Краска — только цвет: она
+   * не захватывает сектор и ничего не приносит, но считается своей территорией
+   * в правиле соседства, поэтому от покрашенного сектора можно ходить дальше.
+   */
+  graffiti_team_id: string | null;
 }
 
 export type SectorStatus = 'free' | 'capturing' | 'captured';

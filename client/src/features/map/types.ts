@@ -26,6 +26,12 @@ export type Sector = {
   home_team_id: string | null;
   current_action_type: ActionType | null;
   is_special: boolean;
+  /**
+   * Закон «Граффити»: команда, покрасившая сектор. Только цвет — сектор не
+   * захвачен и ничего не приносит, но считается своей территорией в правиле
+   * соседства, так что от него можно ходить дальше.
+   */
+  graffiti_team_id: string | null;
   difficulty: Difficulty;
   /**
    * ID of the team that currently has a pending submission on this sector,

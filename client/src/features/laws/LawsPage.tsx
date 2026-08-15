@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Scale, Check, Ban } from 'lucide-react';
+import { Loader2, Scale, Check, Ban, Sparkles } from 'lucide-react';
 import { ApiError } from '../../shared/api/client';
 import { getPublicLaws, type CongressLaw } from '../admin/congress-api';
+import { getWheelFeed, type LawEffect } from '../admin/laws-api';
 
 export function LawsPage() {
   const [laws, setLaws] = useState<CongressLaw[]>([]);
+  const [spins, setSpins] = useState<LawEffect[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,6 +21,14 @@ export function LawsPage() {
       })
       .finally(() => {
         if (alive) setLoading(false);
+      });
+    // Колесо фортуны — тоже закон съезда: показываем ленту прямо здесь.
+    getWheelFeed()
+      .then((res) => {
+        if (alive) setSpins(res.spins);
+      })
+      .catch(() => {
+        /* лента необязательная — страница живёт и без неё */
       });
     return () => {
       alive = false;
@@ -75,6 +85,46 @@ export function LawsPage() {
             );
           })}
         </div>
+      )}
+
+      {spins.length > 0 && (
+        <section className="mt-8">
+          <div className="flex items-center gap-2 mb-1">
+            <Sparkles className="w-5 h-5 text-brand-400" />
+            <h2 className="font-display text-heading-sm text-neutral-1000">Колесо фортуны</h2>
+          </div>
+          <p className="text-sm text-neutral-700 mb-3">
+            Что выпало командам, которым ведущий дал колесо.
+          </p>
+          <ul className="space-y-1.5">
+            {spins.map((spin) => (
+              <li
+                key={spin.id}
+                className="flex flex-wrap items-center gap-2 border border-neutral-400 rounded-sm px-3 py-2 bg-neutral-100"
+              >
+                <span
+                  className="inline-flex items-center gap-1.5 text-xs font-mono text-neutral-1000"
+                  title={spin.team_name}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full inline-block"
+                    style={{
+                      backgroundColor: spin.team_color ?? 'var(--color-neutral-500)',
+                    }}
+                  />
+                  {spin.team_name}
+                </span>
+                <span className="text-sm text-neutral-1000 font-medium">{spin.title}</span>
+                {spin.note && <span className="text-xs text-neutral-700">{spin.note}</span>}
+                {spin.status === 'armed' && (
+                  <span className="text-2xs uppercase tracking-wider text-warning-text">
+                    ждёт своего момента
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   );

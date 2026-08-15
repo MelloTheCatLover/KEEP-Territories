@@ -346,7 +346,7 @@ async function assertFreeSlot(client: PoolClient, teamId: string): Promise<void>
 }
 
 /** Опыт, которого команде не хватает до следующего уровня. */
-async function experienceToNextLevel(
+export async function experienceToNextLevel(
   client: PoolClient,
   teamId: string,
 ): Promise<number> {
@@ -376,7 +376,7 @@ async function experienceToNextLevel(
   return threshold - remaining;
 }
 
-async function rewardMultiplier(client: PoolClient): Promise<number> {
+export async function rewardMultiplier(client: PoolClient): Promise<number> {
   const res = await client.query<{ value: string }>(
     `SELECT value FROM game_settings WHERE key = 'reward_multiplier'`,
   );
@@ -384,7 +384,8 @@ async function rewardMultiplier(client: PoolClient): Promise<number> {
   return Number.isFinite(value) && value > 0 ? value : 1;
 }
 
-async function bumpAdjustments(
+/** Плюс во влияние/опыт/очки апгрейда через общий журнал правок команды. */
+export async function bumpAdjustments(
   client: PoolClient,
   teamId: string,
   deltas: { influence?: number; experience?: number; upgradePoints?: number },
