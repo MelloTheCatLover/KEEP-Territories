@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Scale, Sparkles, X } from 'lucide-react';
+import { Brush, Droplets, Loader2, Scale, Sparkles, X } from 'lucide-react';
 import {
   applyLawEffect,
   cancelLawEffect,
   getLawEffects,
   getWheelCatalog,
+  paintGraffiti,
   spinWheel,
+  washGraffiti,
   type LawEffect,
   type WheelPrizeDef,
 } from '../admin/laws-api';
@@ -27,13 +29,17 @@ type Props = {
 const MAX_FORTIFICATION = 3;
 
 /**
- * Законы съезда, которые председатель включает руками. Пока закон один —
- * «Колесо фортуны»: председатель даёт колесо команде, крутит его сервер, а
- * панель показывает результат и то, что осталось висеть на командах.
+ * Законы съезда, которые председатель включает руками.
  *
+ * «Колесо фортуны» — председатель даёт колесо команде, крутит его сервер, а
+ * панель показывает результат и то, что осталось висеть на командах.
  * Мгновенные плюшки уже применены к моменту показа колеса; заряженные ждут
  * своего момента — «мешок цемента» просит сектор здесь, «без очереди» гаснет
  * само, когда председатель разберёт заявку команды.
+ *
+ * «Граффити» — команда красит свободный сектор в свой цвет. Краска ничего не
+ * приносит и снимается кнопкой «Смыть», но по покрашенной клетке команда
+ * ходит: от неё можно занимать соседние секторы.
  */
 export function LawPanel({ activeTeam, teams, sectors, onChanged }: Props) {
   const [prizes, setPrizes] = useState<WheelPrizeDef[]>([]);
@@ -44,6 +50,7 @@ export function LawPanel({ activeTeam, teams, sectors, onChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [spun, setSpun] = useState<LawEffect | null>(null);
   const [sectorFor, setSectorFor] = useState<Record<string, string>>({});
+  const [graffitiSectorId, setGraffitiSectorId] = useState('');
 
   const reload = useCallback(async () => {
     try {
@@ -72,6 +79,29 @@ export function LawPanel({ activeTeam, teams, sectors, onChanged }: Props) {
     [teams, teamId],
   );
 
+  /**
+   * Что можно покрасить: свободная клетка, не база, не особый сектор, не ядро
+   * и не занятая другой командой. Зеркало проверок `law.service.paintGraffiti`.
+   */
+  const paintable = useMemo(
+    () =>
+      sectors
+        .filter(
+          (s) =>
+            !s.is_home_base &&
+            !s.is_special &&
+            s.difficulty.slug !== 'core' &&
+            !s.captured_by_team_id &&
+            s.graffiti_team_id !== teamId,
+        )
+        .sort((a, b) =>
+          a.difficulty.slug === b.difficulty.slug
+            ? (a.number ?? 0) - (b.number ?? 0)
+            : a.difficulty.slug.localeCompare(b.difficulty.slug),
+        ),
+    [sectors, teamId],
+  );
+
   /** Свои неукреплённые до потолка сектора — цели «мешка цемента». */
   const ownSectors = useCallback(
     (ofTeamId: string) =>
@@ -97,6 +127,36 @@ export function LawPanel({ activeTeam, teams, sectors, onChanged }: Props) {
       onChanged();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Не удалось крутануть колесо');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function paint() {
+    if (!team || !graffitiSectorId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await paintGraffiti({ team_id: team.id, sector_id: graffitiSectorId });
+      setGraffitiSectorId('');
+      await reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось покрасить сектор');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function wash(id: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await washGraffiti(id);
+      await reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Не удалось смыть краску');
     } finally {
       setBusy(false);
     }
@@ -174,6 +234,38 @@ export function LawPanel({ activeTeam, teams, sectors, onChanged }: Props) {
           приоритет в очереди сдачи, бесплатное укрепление — и редкий джекпот.
         </p>
 
+        <div className="border-t border-neutral-300 pt-2 space-y-1.5">
+          <div className="text-2xs text-neutral-700">Граффити</div>
+          <select
+            value={graffitiSectorId}
+            onChange={(e) => setGraffitiSectorId(e.target.value)}
+            className="w-full px-1.5 py-1 rounded-sm bg-neutral-50 border border-neutral-500 text-neutral-1000"
+          >
+            <option value="">— какой сектор красим —</option>
+            {paintable.map((s) => (
+              <option key={s.id} value={s.id}>
+                {formatSectorLabel(s.difficulty.slug as DifficultySlug, s.number)}
+                {s.graffiti_team_id ? ' · закрасить чужое' : ''}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => void paint()}
+            disabled={!team || !graffitiSectorId || busy}
+            className="w-full inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xs text-2xs font-medium bg-brand-900/40 text-brand-400 border border-brand-700 hover:bg-brand-900/60 transition-colors disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Brush className="w-3 h-3" />}
+            Покрасить сектор
+          </button>
+          <p className="text-2xs text-neutral-700">
+            Только цвет: ни влияния, ни опыта, ни стрика, ни зачёта захватов, и
+            укрепить такой сектор нельзя. Зато по краске команда ходит — от неё
+            можно занимать соседние. Смывается кнопкой, и сама сходит, когда
+            сектор кто-то займёт.
+          </p>
+        </div>
+
         {error && <p className="text-2xs text-danger-text">{error}</p>}
 
         {armed.length > 0 && (
@@ -182,8 +274,16 @@ export function LawPanel({ activeTeam, teams, sectors, onChanged }: Props) {
             <ul className="space-y-1">
               {armed.map((e) => {
                 const targets = ownSectors(e.team_id);
+                const isGraffiti = e.kind === 'graffiti';
                 const needsSector =
                   prizes.find((p) => p.kind === e.kind)?.needs_sector ?? false;
+                const sectorLabel =
+                  e.sector_number != null && e.sector_difficulty_slug
+                    ? formatSectorLabel(
+                        e.sector_difficulty_slug as DifficultySlug,
+                        e.sector_number,
+                      )
+                    : null;
                 return (
                   <li
                     key={e.id}
@@ -191,17 +291,26 @@ export function LawPanel({ activeTeam, teams, sectors, onChanged }: Props) {
                   >
                     <div className="flex items-center gap-2">
                       <div className="flex-1 min-w-0">
-                        <div className="text-2xs text-neutral-1000 truncate">{e.title}</div>
+                        <div className="text-2xs text-neutral-1000 truncate">
+                          {e.title}
+                          {isGraffiti && sectorLabel ? ` · ${sectorLabel}` : ''}
+                        </div>
                         <div className="text-2xs text-neutral-700 truncate">у {e.team_name}</div>
                       </div>
+                      {/* Краска живёт на секторе, поэтому её смывают, а не «снимают»:
+                          снятие записи оставило бы клетку покрашенной. */}
                       <button
                         type="button"
-                        onClick={() => void drop(e.id)}
+                        onClick={() => void (isGraffiti ? wash(e.id) : drop(e.id))}
                         disabled={busy}
-                        title="Снять плюшку"
+                        title={isGraffiti ? 'Смыть краску' : 'Снять плюшку'}
                         className="flex-shrink-0 p-1 rounded-xs text-neutral-700 hover:text-danger-text disabled:opacity-50"
                       >
-                        <X className="w-3 h-3" />
+                        {isGraffiti ? (
+                          <Droplets className="w-3 h-3" />
+                        ) : (
+                          <X className="w-3 h-3" />
+                        )}
                       </button>
                     </div>
 

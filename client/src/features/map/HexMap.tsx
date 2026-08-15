@@ -223,6 +223,21 @@ function resolveStyle(s: Sector, teamsById: Record<string, TeamInfo>): HexStyle 
     };
   }
 
+  // Граффити: сектор свободен, но покрашен в цвет команды. Цвет приглушённый —
+  // краска не владение, поэтому клетка не должна читаться как захваченная.
+  if (s.graffiti_team_id) {
+    const team = teamsById[s.graffiti_team_id];
+    const color = team ? resolveTeamPalette(team) : null;
+    return {
+      fill: color ? color.muted : 'var(--color-neutral-300)',
+      fillOpacity: 1,
+      label: numberLabel,
+      labelFill: INK_ON_DARK,
+      ink: INK_ON_DARK,
+      titleExtra: team ? ` · граффити ${team.name}` : ' · граффити',
+    };
+  }
+
   return {
     fill: 'var(--color-neutral-200)',
     fillOpacity: 1,

@@ -2,6 +2,7 @@ import { Pool, PoolClient } from 'pg';
 import { pool } from '../config/db';
 import { AppError } from '../types/errors';
 import {
+  LawEffectKind,
   LawEffectView,
   WheelPrizeDef,
   WheelPrizeKind,
@@ -119,6 +120,11 @@ export function getPrize(kind: WheelPrizeKind): WheelPrizeDef {
   return def;
 }
 
+/** Заголовок записи журнала: плюшка колеса или краска. */
+function titleOf(kind: LawEffectKind): string {
+  return kind === 'graffiti' ? 'Граффити' : getPrize(kind).title;
+}
+
 /** Взвешенный бросок: шанс сектора пропорционален его весу. */
 function rollPrize(): WheelPrizeDef {
   const total = WHEEL_PRIZES.reduce((sum, p) => sum + p.weight, 0);
@@ -143,7 +149,7 @@ const VIEW_SELECT = `
 type ViewRow = Omit<LawEffectView, 'title'>;
 
 function toView(row: ViewRow): LawEffectView {
-  return { ...row, title: getPrize(row.kind).title };
+  return { ...row, title: titleOf(row.kind) };
 }
 
 type Db = Pool | PoolClient;
@@ -417,6 +423,165 @@ export async function cancel(id: string): Promise<LawEffectView> {
     throw new AppError(404, 'Заряженная плюшка не найдена');
   }
   return getView(pool, id);
+}
+
+/* ── Граффити ─────────────────────────────────────────────────────────────── */
+
+/**
+ * Покрасить сектор в цвет команды. Краска ничего не приносит: сектор остаётся
+ * свободным, награды и стрик не двигаются, укрепить его нельзя (укрепляют
+ * только свой захваченный). Смысл один — по покрашенному сектору команда
+ * «ходит»: он считается своей территорией в правиле соседства
+ * (`submission.service.bordersOwnTerritory`), поэтому от него берут соседние.
+ *
+ * Досягаемость краска не меняет: якорь остаётся последним захваченным
+ * сектором, иначе бесплатная покраска любой клетки обнулила бы передвижение.
+ */
+export async function paintGraffiti(
+  rawTeamId: unknown,
+  rawSectorId: unknown,
+): Promise<LawEffectView> {
+  const teamId = typeof rawTeamId === 'string' ? rawTeamId.trim() : '';
+  const sectorId = typeof rawSectorId === 'string' ? rawSectorId.trim() : '';
+  if (teamId.length === 0) throw new AppError(400, 'Не указана команда');
+  if (sectorId.length === 0) throw new AppError(400, 'Нужно выбрать сектор');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const seasonId = await getActiveSeasonId(client);
+    const teamRes = await client.query<{ id: string }>(
+      'SELECT id FROM teams WHERE id = $1 AND season_id = $2',
+      [teamId, seasonId],
+    );
+    if (teamRes.rows.length === 0) throw new AppError(404, 'Команда не найдена');
+
+    const secRes = await client.query<Sector & { difficulty_slug: string }>(
+      `SELECT s.*, dl.slug AS difficulty_slug
+         FROM sectors s
+         JOIN difficulty_levels dl ON dl.id = s.difficulty_id
+        WHERE s.id = $1 AND s.season_id = $2
+        FOR UPDATE OF s`,
+      [sectorId, seasonId],
+    );
+    if (secRes.rows.length === 0) throw new AppError(404, 'Сектор не найден');
+    const sector = secRes.rows[0];
+
+    if (sector.is_home_base) throw new AppError(400, 'Домашние базы не красят');
+    if (sector.is_special) throw new AppError(400, 'Особые секторы не красят');
+    if (sector.difficulty_slug === 'core') throw new AppError(400, 'Ядро не красят');
+    if (sector.captured_by_team_id && sector.captured_by_team_id !== teamId) {
+      throw new AppError(400, 'Сектор занят другой командой — красить его нельзя');
+    }
+    if (sector.captured_by_team_id === teamId) {
+      throw new AppError(400, 'Сектор и так ваш — краска ему ничего не добавит');
+    }
+    if (sector.graffiti_team_id === teamId) {
+      throw new AppError(409, 'Сектор уже покрашен вашей командой');
+    }
+
+    // Чужая краска перекрывается: сектор свободен, значит и стена ничья.
+    const repaintedOver = sector.graffiti_team_id;
+    if (repaintedOver) {
+      await client.query(
+        `UPDATE team_law_effects
+            SET status = 'consumed', resolved_at = NOW(),
+                note = COALESCE(note, '') || ' · закрашено другой командой'
+          WHERE law = 'graffiti' AND status = 'armed' AND sector_id = $1`,
+        [sector.id],
+      );
+    }
+
+    await client.query('UPDATE sectors SET graffiti_team_id = $1 WHERE id = $2', [
+      teamId,
+      sector.id,
+    ]);
+
+    const inserted = await client.query<{ id: string }>(
+      `INSERT INTO team_law_effects
+         (season_id, law, kind, team_id, sector_id, status, note)
+       VALUES ($1, 'graffiti', 'graffiti', $2, $3, 'armed', $4)
+       RETURNING id`,
+      [
+        seasonId,
+        teamId,
+        sector.id,
+        repaintedOver ? 'Закрашено поверх чужой краски' : 'Сектор покрашен',
+      ],
+    );
+
+    const view = await getView(client, inserted.rows[0].id);
+    await client.query('COMMIT');
+    return view;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Смыть краску — по записи журнала. */
+export async function washGraffiti(id: string): Promise<LawEffectView> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const res = await client.query<{ sector_id: string | null; team_id: string }>(
+      `SELECT sector_id, team_id FROM team_law_effects
+        WHERE id = $1 AND law = 'graffiti' AND status = 'armed'
+        FOR UPDATE`,
+      [id],
+    );
+    if (res.rows.length === 0) throw new AppError(404, 'Краска не найдена');
+    const { sector_id: sectorId, team_id: teamId } = res.rows[0];
+
+    if (sectorId) {
+      await client.query(
+        'UPDATE sectors SET graffiti_team_id = NULL WHERE id = $1 AND graffiti_team_id = $2',
+        [sectorId, teamId],
+      );
+    }
+    await client.query(
+      `UPDATE team_law_effects
+          SET status = 'consumed', resolved_at = NOW(), note = 'Краска смыта'
+        WHERE id = $1`,
+      [id],
+    );
+
+    const view = await getView(client, id);
+    await client.query('COMMIT');
+    return view;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Краска сходит сама, когда сектор кто-то занял: захваченный сектор и так
+ * носит цвет владельца. Вызывается движком захватов внутри его транзакции.
+ */
+export async function clearGraffitiOnCapture(
+  client: PoolClient,
+  sectorId: string,
+): Promise<void> {
+  const res = await client.query(
+    `UPDATE sectors SET graffiti_team_id = NULL
+      WHERE id = $1 AND graffiti_team_id IS NOT NULL`,
+    [sectorId],
+  );
+  if (res.rowCount === 0) return;
+  await client.query(
+    `UPDATE team_law_effects
+        SET status = 'consumed', resolved_at = NOW(),
+            note = COALESCE(note, '') || ' · сектор занят, краска сошла'
+      WHERE law = 'graffiti' AND status = 'armed' AND sector_id = $1`,
+    [sectorId],
+  );
 }
 
 /* ── Движок: снятие заряженных плюшек ─────────────────────────────────────── */

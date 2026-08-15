@@ -140,11 +140,15 @@ export function MapPage() {
 
   // Keys of every sector the acting team already holds — a new target must
   // border one of these (you expand from the frontier, not into empty space).
+  // Покрашенные граффити клетки считаются своими: по краске команда ходит,
+  // хотя сектор ей не принадлежит (зеркало bordersOwnTerritory на сервере).
   const capturedKeys = useMemo(() => {
     const keys = new Set<string>();
     if (!teamId || state.status !== 'ready') return keys;
     state.sectors.forEach((s) => {
-      if (s.captured_by_team_id === teamId) keys.add(axialKey(s.q, s.r));
+      if (s.captured_by_team_id === teamId || s.graffiti_team_id === teamId) {
+        keys.add(axialKey(s.q, s.r));
+      }
     });
     return keys;
   }, [teamId, state]);

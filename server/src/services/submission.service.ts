@@ -54,14 +54,18 @@ const AXIAL_NEIGHBORS: ReadonlyArray<{ q: number; r: number }> = [
   { q: 0, r: -1 }, { q: 1, r: -1 }, { q: -1, r: 1 },
 ];
 
-/** Whether the sector borders at least one sector the team already holds. */
+/**
+ * Whether the sector borders at least one sector the team already holds.
+ * Покрашенные законом «Граффити» клетки считаются своими: краска ничего не
+ * приносит, но по ней команда ходит — от неё можно занимать соседние секторы.
+ */
 async function bordersOwnTerritory(
   client: PoolClient,
   sector: Sector,
   teamId: string,
 ): Promise<boolean> {
   const captured = await client.query<{ q: number; r: number }>(
-    'SELECT q, r FROM sectors WHERE captured_by_team_id = $1',
+    'SELECT q, r FROM sectors WHERE captured_by_team_id = $1 OR graffiti_team_id = $1',
     [teamId],
   );
   const keys = new Set(captured.rows.map((c) => `${c.q},${c.r}`));
@@ -928,6 +932,8 @@ async function applyApprovedEffect(
         'INSERT INTO sector_captures (sector_id, team_id) VALUES ($1, $2)',
         [submission.sector_id, submission.team_id],
       );
+      // Занятый сектор носит цвет владельца — краска граффити на нём сходит.
+      await lawService.clearGraffitiOnCapture(client, submission.sector_id);
 
       if (noRewardId) {
         const rewardRes = await client.query<{ experience: number }>(

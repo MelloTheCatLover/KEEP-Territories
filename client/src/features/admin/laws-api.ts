@@ -1,7 +1,7 @@
 import { api } from '../../shared/api/client';
 
-/** Механические законы съезда. Пока один — колесо фортуны. */
-export type LawKind = 'wheel_of_fortune';
+/** Механические законы съезда: колесо фортуны и граффити. */
+export type LawKind = 'wheel_of_fortune' | 'graffiti';
 
 export type WheelPrizeKind =
   | 'influence'
@@ -12,6 +12,9 @@ export type WheelPrizeKind =
   | 'queue_priority'
   | 'fortification'
   | 'jackpot';
+
+/** Всё, что попадает в журнал законов: плюшка колеса или краска. */
+export type LawEffectKind = WheelPrizeKind | 'graffiti';
 
 export type LawEffectStatus = 'applied' | 'armed' | 'consumed' | 'cancelled';
 
@@ -27,7 +30,7 @@ export interface WheelPrizeDef {
 export interface LawEffect {
   id: string;
   law: LawKind;
-  kind: WheelPrizeKind;
+  kind: LawEffectKind;
   title: string;
   status: LawEffectStatus;
   team_id: string;
@@ -66,6 +69,19 @@ export function spinWheel(teamId: string): Promise<LawEffect> {
 
 export function applyLawEffect(id: string, sectorId: string): Promise<LawEffect> {
   return api.post<LawEffect>(`/laws/${id}/apply`, { sector_id: sectorId });
+}
+
+/** Закон «Граффити»: покрасить сектор в цвет команды. */
+export function paintGraffiti(payload: {
+  team_id: string;
+  sector_id: string;
+}): Promise<LawEffect> {
+  return api.post<LawEffect>('/laws/graffiti', payload);
+}
+
+/** Смыть краску. */
+export function washGraffiti(id: string): Promise<LawEffect> {
+  return api.post<LawEffect>(`/laws/graffiti/${id}/wash`, {});
 }
 
 export function cancelLawEffect(id: string): Promise<LawEffect> {

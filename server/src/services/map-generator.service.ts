@@ -270,6 +270,8 @@ function rowToSectorPublic(row: SectorRow): SectorPublic {
     home_team_id: row.home_team_id,
     current_action_type: row.current_action_type,
     is_special: row.is_special,
+    // Свежесгенерированная карта краски не несёт.
+    graffiti_team_id: null,
     difficulty,
     active_submission_team_id: null,
   };

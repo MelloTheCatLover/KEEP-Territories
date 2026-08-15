@@ -73,6 +73,50 @@ export async function apply(
   }
 }
 
+/** Закон «Граффити»: покрасить сектор в цвет команды. */
+export async function paint(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const view = await lawService.paintGraffiti(req.body?.team_id, req.body?.sector_id);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      teamId: view.team_id,
+      action: 'law.graffiti_paint',
+      entityType: 'law_effect',
+      entityId: view.id,
+      summary: `Граффити команды ${view.team_name} на секторе ${
+        view.sector_number ?? '—'
+      }`,
+      metadata: { law: view.law, sector_id: view.sector_id, note: view.note },
+    });
+    res.status(201).json(view);
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** Смыть краску. */
+export async function wash(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const view = await lawService.washGraffiti(req.params.id);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      teamId: view.team_id,
+      action: 'law.graffiti_wash',
+      entityType: 'law_effect',
+      entityId: view.id,
+      summary: `Смыто граффити команды ${view.team_name}`,
+      metadata: { law: view.law, sector_id: view.sector_id },
+    });
+    res.status(200).json(view);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function cancel(
   req: Request<{ id: string }>,
   res: Response,

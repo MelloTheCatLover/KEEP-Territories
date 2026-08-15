@@ -104,6 +104,8 @@ export function TimelapsePage({ seasonId }: { seasonId?: string } = {}) {
         home_team_id: bs.is_home_base ? captured : null,
         current_action_type: null,
         is_special: false,
+        // Таймлапс — про захваты; временная краска в историю не пишется.
+        graffiti_team_id: null,
         difficulty: {
           id: '',
           name: bs.difficulty_slug,
