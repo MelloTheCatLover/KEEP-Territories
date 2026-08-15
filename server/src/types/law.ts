@@ -1,5 +1,5 @@
 /** Механические законы съезда — то, что председатель включает руками. */
-export type LawKind = 'wheel_of_fortune' | 'graffiti';
+export type LawKind = 'wheel_of_fortune' | 'graffiti' | 'helping_hand';
 
 /** Плюшки колеса фортуны. Мелочь, кроме «джекпота». */
 export type WheelPrizeKind =
@@ -32,8 +32,8 @@ export interface WheelPrizeDef {
   needs_sector: boolean;
 }
 
-/** Всё, что может лежать в журнале законов: плюшка колеса или краска. */
-export type LawEffectKind = WheelPrizeKind | 'graffiti';
+/** Всё, что может лежать в журнале законов: плюшка колеса, краска, реролл. */
+export type LawEffectKind = WheelPrizeKind | 'graffiti' | 'extra_reroll';
 
 export interface LawEffectView {
   id: string;

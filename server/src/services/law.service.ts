@@ -120,9 +120,14 @@ export function getPrize(kind: WheelPrizeKind): WheelPrizeDef {
   return def;
 }
 
-/** Заголовок записи журнала: плюшка колеса или краска. */
+const SPECIAL_TITLES: Partial<Record<LawEffectKind, string>> = {
+  graffiti: 'Граффити',
+  extra_reroll: 'Рука помощи',
+};
+
+/** Заголовок записи журнала: плюшка колеса, краска или доп. реролл. */
 function titleOf(kind: LawEffectKind): string {
-  return kind === 'graffiti' ? 'Граффити' : getPrize(kind).title;
+  return SPECIAL_TITLES[kind] ?? getPrize(kind as WheelPrizeKind).title;
 }
 
 /** Взвешенный бросок: шанс сектора пропорционален его весу. */
@@ -584,6 +589,82 @@ export async function clearGraffitiOnCapture(
   );
 }
 
+/* ── Рука помощи ──────────────────────────────────────────────────────────── */
+
+export interface HelpingHandResult {
+  /** Кому выдали реролл этой раздачей. */
+  granted: string[];
+  /** У кого он уже лежал — таким не выдаём, больше одного не копится. */
+  skipped: string[];
+}
+
+/**
+ * Раздать по одному дополнительному рероллу. Тратится он как обычный —
+ * просто сверх лимита от удачи (`submission.service.rerollTask`).
+ *
+ * Больше одного у команды не бывает: раздача пропускает тех, у кого реролл
+ * ещё не потрачен, поэтому повторное нажатие догоняет отставших, а не удваивает
+ * запас у остальных.
+ */
+export async function grantHelpingHand(): Promise<HelpingHandResult> {
+  const seasonId = await getActiveSeasonId();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const teams = await client.query<{ id: string; name: string; has: boolean }>(
+      `SELECT t.id, t.name,
+              EXISTS (
+                SELECT 1 FROM team_law_effects e
+                 WHERE e.team_id = t.id
+                   AND e.kind = 'extra_reroll'
+                   AND e.status = 'armed'
+              ) AS has
+         FROM teams t
+        WHERE t.season_id = $1
+        ORDER BY t.name ASC
+          FOR UPDATE OF t`,
+      [seasonId],
+    );
+
+    const granted: string[] = [];
+    const skipped: string[] = [];
+    for (const team of teams.rows) {
+      if (team.has) {
+        skipped.push(team.name);
+        continue;
+      }
+      await client.query(
+        `INSERT INTO team_law_effects
+           (season_id, law, kind, team_id, status, note)
+         VALUES ($1, 'helping_hand', 'extra_reroll', $2, 'armed', 'Дополнительный реролл')`,
+        [seasonId, team.id],
+      );
+      granted.push(team.name);
+    }
+
+    await client.query('COMMIT');
+    return { granted, skipped };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Есть ли у команды неистраченный доп. реролл. */
+export async function hasExtraReroll(db: Db, teamId: string): Promise<boolean> {
+  const res = await db.query<{ has: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM team_law_effects
+        WHERE team_id = $1 AND kind = 'extra_reroll' AND status = 'armed'
+     ) AS has`,
+    [teamId],
+  );
+  return res.rows[0]?.has ?? false;
+}
+
 /* ── Движок: снятие заряженных плюшек ─────────────────────────────────────── */
 
 /**
@@ -594,7 +675,7 @@ export async function clearGraffitiOnCapture(
 export async function takeArmed(
   client: PoolClient,
   teamId: string,
-  kind: WheelPrizeKind,
+  kind: LawEffectKind,
 ): Promise<string | null> {
   const res = await client.query<{ id: string }>(
     `SELECT id FROM team_law_effects

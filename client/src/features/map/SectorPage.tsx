@@ -153,6 +153,9 @@ function SubmissionPanel({
   const dropExperience = Math.floor(sector.difficulty.experience_reward / 2);
 
   const rerollsLeft = Math.max(0, submission.rerolls_max - submission.reroll_count);
+  // Закон «Рука помощи»: один реролл сверх лимита удачи. Он тратится, когда
+  // свои кончились, поэтому кнопка живёт и при нулевом остатке.
+  const hasHelpingHand = submission.extra_reroll;
 
   async function handleReroll() {
     setRerolling(true);
@@ -195,13 +198,15 @@ function SubmissionPanel({
         </p>
       )}
 
-      {submission.status === 'pending' && submission.task && submission.rerolls_max > 0 && (
+      {submission.status === 'pending' &&
+        submission.task &&
+        (submission.rerolls_max > 0 || hasHelpingHand) && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button
             variant="secondary"
             onClick={() => void handleReroll()}
             isLoading={rerolling}
-            disabled={rerolling || rerollsLeft === 0}
+            disabled={rerolling || (rerollsLeft === 0 && !hasHelpingHand)}
             className="text-sm"
           >
             <span className="inline-flex items-center gap-1.5">
@@ -212,6 +217,9 @@ function SubmissionPanel({
           <span className="text-xs text-neutral-700">
             Рероллов осталось: <b className="text-neutral-1000">{rerollsLeft}</b> из{' '}
             {submission.rerolls_max}
+            {hasHelpingHand && (
+              <> · плюс реролл от «Руки помощи»</>
+            )}
           </span>
           {rerollError && <span className="text-xs text-danger-text">{rerollError}</span>}
         </div>

@@ -94,6 +94,31 @@ export async function paint(req: Request, res: Response, next: NextFunction): Pr
   }
 }
 
+/** Закон «Рука помощи»: раздать по одному доп. рероллу тем, у кого его нет. */
+export async function helpingHand(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const result = await lawService.grantHelpingHand();
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'law.helping_hand',
+      entityType: 'law_effect',
+      summary:
+        `Рука помощи: доп. реролл получили ${result.granted.length} команд` +
+        (result.skipped.length > 0
+          ? `, пропущено ${result.skipped.length} (реролл уже был)`
+          : ''),
+      metadata: { granted: result.granted, skipped: result.skipped },
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 /** Смыть краску. */
 export async function wash(
   req: Request<{ id: string }>,

@@ -18,6 +18,7 @@ router.get('/wheel/catalog', lawController.getCatalog);
 router.get('/', lawController.list);
 router.post('/wheel/spin', lawController.spin);
 router.post('/graffiti', lawController.paint);
+router.post('/helping-hand', lawController.helpingHand);
 router.post('/graffiti/:id/wash', validateParamId, lawController.wash);
 router.post('/:id/apply', validateParamId, lawController.apply);
 router.post('/:id/cancel', validateParamId, lawController.cancel);

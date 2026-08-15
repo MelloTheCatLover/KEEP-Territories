@@ -687,6 +687,13 @@ const DETAILS_SELECT = `
        WHEN COUNT(*) >= 5 THEN 1
        ELSE 0 END
      FROM team_stat_upgrades WHERE team_id = sub.team_id AND stat_name = 'luck') AS rerolls_max,
+    -- Закон «Рука помощи»: неистраченный доп. реролл сверх лимита удачи.
+    EXISTS (
+      SELECT 1 FROM team_law_effects e
+       WHERE e.team_id = sub.team_id
+         AND e.kind = 'extra_reroll'
+         AND e.status = 'armed'
+    ) AS extra_reroll,
     t.id AS team_row_id,
     t.name AS team_name,
     t.color AS team_color,
@@ -754,6 +761,7 @@ type DetailsRow = {
   user_username: string;
   sector_merchant_type: string | null;
   queue_priority: boolean;
+  extra_reroll: boolean;
 };
 
 function rowToDetails(row: DetailsRow): TaskSubmissionWithDetails {
@@ -805,6 +813,7 @@ function rowToDetails(row: DetailsRow): TaskSubmissionWithDetails {
     // Admin-only: stripped for players in getCurrentForSector below.
     merchant_type: (row.sector_merchant_type ?? null) as MerchantType | null,
     queue_priority: row.queue_priority ?? false,
+    extra_reroll: row.extra_reroll ?? false,
   };
 }
 
@@ -1339,13 +1348,19 @@ export async function rerollTask(
 
     const luck = await getTeamStat(client, teamId, 'luck');
     const cap = rerollsFromLuck(luck);
+    // Закон «Рука помощи» даёт один реролл сверх лимита удачи: он тратится
+    // только когда свои кончились, и гаснет сразу — второго у команды нет.
+    let extraRerollId: string | null = null;
     if (submission.reroll_count >= cap) {
-      throw new AppError(
-        400,
-        cap === 0
-          ? 'Реролл недоступен — нужна удача'
-          : `Рероллы закончились (использовано ${submission.reroll_count} из ${cap})`,
-      );
+      extraRerollId = await lawService.takeArmed(client, teamId, 'extra_reroll');
+      if (!extraRerollId) {
+        throw new AppError(
+          400,
+          cap === 0
+            ? 'Реролл недоступен — нужна удача'
+            : `Рероллы закончились (использовано ${submission.reroll_count} из ${cap})`,
+        );
+      }
     }
 
     const sectorRes = await client.query<Sector>('SELECT * FROM sectors WHERE id = $1', [
@@ -1369,12 +1384,21 @@ export async function rerollTask(
       [picked.id, submissionId],
     );
 
+    if (extraRerollId) {
+      await lawService.consume(client, extraRerollId, {
+        sectorId: submission.sector_id,
+        note: 'Потрачен на перекрут задания',
+      });
+    }
+
     await client.query('COMMIT');
     const updated = await getById(submissionId);
     return {
       submission: updated,
       task_pool: taskPool,
-      rerolls_remaining: cap - updated.reroll_count,
+      // Свои рероллы могли уже кончиться — тогда остаток нулевой, а перекрут
+      // прошёл за счёт «руки помощи».
+      rerolls_remaining: Math.max(0, cap - updated.reroll_count),
     };
   } catch (error) {
     await client.query('ROLLBACK');

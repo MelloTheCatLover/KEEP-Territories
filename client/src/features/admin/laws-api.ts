@@ -1,7 +1,7 @@
 import { api } from '../../shared/api/client';
 
 /** Механические законы съезда: колесо фортуны и граффити. */
-export type LawKind = 'wheel_of_fortune' | 'graffiti';
+export type LawKind = 'wheel_of_fortune' | 'graffiti' | 'helping_hand';
 
 export type WheelPrizeKind =
   | 'influence'
@@ -14,7 +14,7 @@ export type WheelPrizeKind =
   | 'jackpot';
 
 /** Всё, что попадает в журнал законов: плюшка колеса или краска. */
-export type LawEffectKind = WheelPrizeKind | 'graffiti';
+export type LawEffectKind = WheelPrizeKind | 'graffiti' | 'extra_reroll';
 
 export type LawEffectStatus = 'applied' | 'armed' | 'consumed' | 'cancelled';
 
@@ -82,6 +82,11 @@ export function paintGraffiti(payload: {
 /** Смыть краску. */
 export function washGraffiti(id: string): Promise<LawEffect> {
   return api.post<LawEffect>(`/laws/graffiti/${id}/wash`, {});
+}
+
+/** Закон «Рука помощи»: раздать доп. реролл тем, у кого его нет. */
+export function grantHelpingHand(): Promise<{ granted: string[]; skipped: string[] }> {
+  return api.post<{ granted: string[]; skipped: string[] }>('/laws/helping-hand', {});
 }
 
 export function cancelLawEffect(id: string): Promise<LawEffect> {
