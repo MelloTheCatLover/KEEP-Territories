@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Loader2, RefreshCw, Store, X } from 'lucide-react';
+import { Check, Loader2, RefreshCw, Sparkles, Store, X } from 'lucide-react';
 import {
   approveSubmission,
   getPendingSubmissions,
@@ -178,6 +178,16 @@ function QueueCard({
         <span className="px-1.5 py-0.5 rounded-xs text-2xs font-mono bg-brand-900 text-brand-100 border border-brand-700">
           {ACTION_LABELS[item.action_type]}
         </span>
+        {/* Колесо фортуны выдало «Без очереди» — заявка поднята наверх. */}
+        {item.queue_priority && (
+          <span
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs text-2xs font-mono bg-warning-bg text-warning-text border border-warning"
+            title="Колесо фортуны: заявка идёт вне очереди"
+          >
+            <Sparkles className="w-3 h-3" />
+            Без очереди
+          </span>
+        )}
         {/* Hidden character on this sector — only the admin queue shows it. */}
         {item.merchant_type && (
           <span

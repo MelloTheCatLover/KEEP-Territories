@@ -15,6 +15,7 @@ import { PurchaseKind } from '../types/purchase';
 import * as encounterService from './encounter.service';
 import * as diversionService from './diversion.service';
 import * as purchaseService from './purchase.service';
+import * as lawService from './law.service';
 import * as seasonService from './season.service';
 import { experienceExpr } from './score-sql';
 import {
@@ -699,7 +700,14 @@ const DETAILS_SELECT = `
     tk.question AS task_question,
     u.id AS user_row_id,
     u.username AS user_username,
-    s.merchant_type AS sector_merchant_type
+    s.merchant_type AS sector_merchant_type,
+    -- «Без очереди» с колеса фортуны: заявка такой команды идёт первой.
+    EXISTS (
+      SELECT 1 FROM team_law_effects e
+       WHERE e.team_id = sub.team_id
+         AND e.kind = 'queue_priority'
+         AND e.status = 'armed'
+    ) AS queue_priority
   FROM task_submissions sub
   JOIN teams t ON t.id = sub.team_id
   JOIN sectors s ON s.id = sub.sector_id
@@ -741,6 +749,7 @@ type DetailsRow = {
   user_row_id: string;
   user_username: string;
   sector_merchant_type: string | null;
+  queue_priority: boolean;
 };
 
 function rowToDetails(row: DetailsRow): TaskSubmissionWithDetails {
@@ -791,6 +800,7 @@ function rowToDetails(row: DetailsRow): TaskSubmissionWithDetails {
     rerolls_max: row.rerolls_max ?? 0,
     // Admin-only: stripped for players in getCurrentForSector below.
     merchant_type: (row.sector_merchant_type ?? null) as MerchantType | null,
+    queue_priority: row.queue_priority ?? false,
   };
 }
 
@@ -835,9 +845,34 @@ export async function getCurrentForSector(
 
 export async function getPending(): Promise<TaskSubmissionWithDetails[]> {
   const res = await pool.query<DetailsRow>(
-    `${DETAILS_SELECT} WHERE sub.status = 'pending' ORDER BY sub.created_at ASC`,
+    // «Без очереди» поднимает заявку наверх; внутри группы — по времени подачи.
+    `${DETAILS_SELECT} WHERE sub.status = 'pending'
+      ORDER BY queue_priority DESC, sub.created_at ASC`,
   );
   return res.rows.map(rowToDetails);
+}
+
+/**
+ * «Без очереди» с колеса фортуны гаснет, как только председатель разобрал
+ * заявку команды: плюшка про одну проверку вперёд остальных, а не про
+ * постоянный приоритет. Сброс сектора самой командой её не тратит — заявку
+ * никто не проверял.
+ */
+async function consumeQueuePriority(
+  client: PoolClient,
+  submission: TaskSubmission,
+): Promise<void> {
+  const priorityId = await lawService.takeArmed(
+    client,
+    submission.team_id,
+    'queue_priority',
+  );
+  if (priorityId) {
+    await lawService.consume(client, priorityId, {
+      sectorId: submission.sector_id,
+      note: 'Заявка разобрана вне очереди',
+    });
+  }
 }
 
 type ApprovedEffect = { merchant: MerchantType | null; tokenMinted: boolean };
@@ -1020,6 +1055,7 @@ export async function approve(
     }
 
     const effect = await applyApprovedEffect(client, submission);
+    await consumeQueuePriority(client, submission);
 
     await client.query(
       `UPDATE task_submissions SET
@@ -1066,6 +1102,7 @@ export async function reject(
     }
 
     await revertPendingEffect(client, submission);
+    await consumeQueuePriority(client, submission);
 
     await client.query(
       `UPDATE task_submissions SET

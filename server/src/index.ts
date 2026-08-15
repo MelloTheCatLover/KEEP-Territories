@@ -24,6 +24,7 @@ import encounterRoutes from './routes/encounter.routes';
 import merchantRoutes from './routes/merchant.routes';
 import diversionRoutes from './routes/diversion.routes';
 import purchaseRoutes from './routes/purchase.routes';
+import lawRoutes from './routes/law.routes';
 import awardRoutes from './routes/awards.routes';
 import { errorHandler } from './middleware/error.middleware';
 import { AppError } from './types/errors';
@@ -63,6 +64,7 @@ app.use('/api/encounters', encounterRoutes);
 app.use('/api/merchants', merchantRoutes);
 app.use('/api/diversions', diversionRoutes);
 app.use('/api/purchases', purchaseRoutes);
+app.use('/api/laws', lawRoutes);
 app.use('/api/awards', awardRoutes);
 
 // Single-process deploy (shared hosting): serve built SPA from ./public.

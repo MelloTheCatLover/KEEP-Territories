@@ -1,0 +1,96 @@
+import { Request, Response, NextFunction } from 'express';
+import * as lawService from '../services/law.service';
+import * as audit from '../services/audit.service';
+
+export async function getCatalog(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    res.status(200).json({ prizes: lawService.WHEEL_PRIZES });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function list(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.status(200).json(await lawService.list());
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** Лента колеса для участников — что кому выпало. */
+export async function feed(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.status(200).json({ spins: await lawService.listFeed() });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function spin(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const view = await lawService.spinWheel(req.body?.team_id);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      teamId: view.team_id,
+      action: 'law.wheel_spin',
+      entityType: 'law_effect',
+      entityId: view.id,
+      summary: `Колесо фортуны команде ${view.team_name}: «${view.title}»${
+        view.note ? ` — ${view.note}` : ''
+      }`,
+      metadata: { law: view.law, kind: view.kind, status: view.status, note: view.note },
+    });
+    res.status(201).json(view);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function apply(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const view = await lawService.applyArmed(req.params.id, req.body?.sector_id);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      teamId: view.team_id,
+      action: 'law.effect_apply',
+      entityType: 'law_effect',
+      entityId: view.id,
+      summary: `«${view.title}» команды ${view.team_name}: ${view.note ?? 'применено'}`,
+      metadata: { law: view.law, kind: view.kind, sector_id: view.sector_id },
+    });
+    res.status(200).json(view);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function cancel(
+  req: Request<{ id: string }>,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const view = await lawService.cancel(req.params.id);
+    await audit.record({
+      actorUserId: req.user!.userId,
+      teamId: view.team_id,
+      action: 'law.effect_cancel',
+      entityType: 'law_effect',
+      entityId: view.id,
+      summary: `Снята плюшка «${view.title}» у команды ${view.team_name}`,
+      metadata: { law: view.law, kind: view.kind },
+    });
+    res.status(200).json(view);
+  } catch (error) {
+    next(error);
+  }
+}

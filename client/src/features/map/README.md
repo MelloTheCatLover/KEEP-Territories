@@ -15,6 +15,8 @@ the review queue beside the field and team management via the side cards.
 - `AdminReviewQueue.tsx` — one-click approve/reject beside the map
 - `DiversionPanel.tsx` — товары диверсанта: кинуть диверсию за жетон, снять заряженную, журнал
 - `PurchasePanel.tsx` — лавки мастера и торговца: купить товар за жетон, снять заряженный имплант, журнал
+- `LawPanel.tsx` — механические законы съезда: дать команде колесо фортуны, применить/снять заряженную плюшку, журнал
+- `FortuneWheelModal.tsx` — само колесо: сектор тем шире, чем чаще плюшка; результат приходит с сервера, анимация только доигрывает
 - `MerchantTokenTray.tsx` — жетоны покупки, выданные захватом (ручное гашение)
 - `TeamSidePanel.tsx` — team summary cards (click opens TeamManageModal for admins)
 

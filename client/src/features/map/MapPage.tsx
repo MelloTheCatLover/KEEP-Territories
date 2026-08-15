@@ -27,6 +27,7 @@ import { AdminReviewQueue } from './AdminReviewQueue';
 import { MerchantTokenTray } from './MerchantTokenTray';
 import { DiversionPanel } from './DiversionPanel';
 import { PurchasePanel } from './PurchasePanel';
+import { LawPanel } from './LawPanel';
 import { TeamManageModal } from '../admin/team-modals';
 
 type LoadState =
@@ -743,6 +744,15 @@ export function MapPage() {
               />
               <PurchasePanel
                 buyerTeam={state.fullTeams.find((t) => t.id === teamId) ?? null}
+                teams={state.fullTeams}
+                sectors={state.sectors}
+                onChanged={() => {
+                  void fetchMap(true);
+                  reloadMerchants();
+                }}
+              />
+              <LawPanel
+                activeTeam={state.fullTeams.find((t) => t.id === teamId) ?? null}
                 teams={state.fullTeams}
                 sectors={state.sectors}
                 onChanged={() => {
