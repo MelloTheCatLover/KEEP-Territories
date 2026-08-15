@@ -529,9 +529,12 @@ export function HexMap({
       </g>
 
       {/* 5) Difficulty chips — drawn above the fills and the hatching so the
-          one thing a team reads before choosing a sector is never obscured. */}
+          one thing a team reads before choosing a sector is never obscured.
+          Особые события и домашние базы обычным действием не берутся, так что
+          сложность там ничего не значит — чип не рисуем. */}
       <g className="hex-difficulty-layer" pointerEvents="none">
         {sectors.map((s) => {
+          if (s.is_special || s.is_home_base) return null;
           const { x, y } = axialToPixel(s.q, s.r, HEX_SIZE);
           return <DifficultyChip key={s.id} x={x} y={y} slug={s.difficulty.slug} />;
         })}
