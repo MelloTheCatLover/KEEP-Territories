@@ -44,6 +44,32 @@ export async function listPresets(
   }
 }
 
+/** Перетасовать задания по секторам, не трогая карту и захваты. */
+export async function rerollTasks(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const result = await mapGeneratorService.rerollSectorTasks();
+    await audit.record({
+      actorUserId: req.user!.userId,
+      action: 'map.reroll_tasks',
+      entityType: 'map',
+      summary:
+        `Председатель перетасовал задания: ${result.bindings} привязок на ` +
+        `${result.sectors} секторах` +
+        (result.group_sectors > 0
+          ? `, номерных секторов не тронуто: ${result.group_sectors}`
+          : ''),
+      metadata: { ...result },
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function deleteAll(
   req: Request,
   res: Response,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Loader2, RefreshCw, Trash2, Hammer, X } from 'lucide-react';
+import { AlertCircle, Dices, Loader2, RefreshCw, Trash2, Hammer, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -9,6 +9,7 @@ import {
   getAdminMapStatus,
   getMapPresets,
   getSectorsMap,
+  rerollSectorTasks,
   type MapPreset,
   type MapPresetCell,
 } from '../map/api';
@@ -28,7 +29,7 @@ export function AdminMapPage() {
   const [state, setState] = useState<State>({ status: 'loading' });
   const [presets, setPresets] = useState<MapPreset[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'generate' | 'delete' | null>(null);
+  const [busy, setBusy] = useState<'generate' | 'delete' | 'reroll' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -72,6 +73,31 @@ export function AdminMapPage() {
       await refresh();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Ошибка генерации');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleReroll() {
+    setBusy('reroll');
+    setActionError(null);
+    setFlash(null);
+    try {
+      const result = await rerollSectorTasks();
+      const spread = result.by_difficulty
+        .filter((d) => d.slots > 0)
+        .map((d) => `${d.slug}: ${d.used}/${d.bank}`)
+        .join(', ');
+      setFlash(
+        `Задания перетасованы: ${result.bindings} привязок на ${result.sectors} секторах` +
+          (spread ? ` (задействовано ${spread})` : '') +
+          (result.group_sectors > 0
+            ? `. Номерных секторов не тронуто: ${result.group_sectors}.`
+            : '.'),
+      );
+      await refresh();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Ошибка перетасовки заданий');
     } finally {
       setBusy(null);
     }
@@ -193,6 +219,17 @@ export function AdminMapPage() {
             </span>
           </Button>
           <Button
+            variant="secondary"
+            onClick={() => void handleReroll()}
+            disabled={busy !== null || !exists}
+            isLoading={busy === 'reroll'}
+          >
+            <span className="flex items-center gap-2">
+              <Dices className="w-4 h-4" />
+              Перетасовать задания
+            </span>
+          </Button>
+          <Button
             variant="danger"
             onClick={() => setConfirmOpen(true)}
             disabled={busy !== null || !exists}
@@ -208,6 +245,9 @@ export function AdminMapPage() {
           Пересборка сохраняет команды и распределение детей — они переносятся на новые
           домашние базы. Прогресс захватов на поле сбрасывается. Нужны задания: 1 core,
           6 easy, 5 medium; сложные сектора получают весь пул сложных.
+          «Перетасовать задания» карту не трогает: раздаёт весь банк заданий по секторам
+          заново, по кругу — каждое задание уходит в дело раньше, чем повторится.
+          Секторы номерных групп («Рассмешить», «Нарисовать номер») остаются как есть.
         </p>
       </Card>
 

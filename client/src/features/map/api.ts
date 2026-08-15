@@ -127,6 +127,18 @@ export function deleteAllSectors(): Promise<{ deleted_count: number; deleted_tea
   return api.delete<{ deleted_count: number; deleted_teams_count: number }>('/sectors/all');
 }
 
+export interface TaskRerollResult {
+  sectors: number;
+  bindings: number;
+  group_sectors: number;
+  by_difficulty: Array<{ slug: string; bank: number; used: number; slots: number }>;
+}
+
+/** Перетасовать задания по секторам, не трогая карту и захваты. */
+export function rerollSectorTasks(): Promise<TaskRerollResult> {
+  return api.post<TaskRerollResult>('/sectors/reroll-tasks', {});
+}
+
 export function getAdminMapStatus(): Promise<{ teams_count: number }> {
   return api.get<{ teams_count: number }>('/sectors/admin/status');
 }
