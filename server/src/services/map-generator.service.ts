@@ -465,17 +465,22 @@ export async function rerollSectorTasks(): Promise<TaskRerollResult> {
     const slugById: Record<string, DifficultySlug> = {};
     for (const d of diffsRes.rows) slugById[d.id] = d.slug;
 
-    // Секторы, где сейчас лежит номерная группа, — их оставляем как есть.
+    // Групповой сектор — тот, где лежит **только** номерная группа и ничего
+    // больше (мигр. 061): колесо на нём всегда выдаёт номер отряда. Сектор, куда
+    // номерное задание попало вперемешку с обычными, групповым не считается —
+    // иначе одно «Рассмешить» замораживало бы пол-карты.
     const groupTaskIds = new Set(
       tasksRes.rows.filter((t) => isGroupTask(t.title)).map((t) => t.id),
     );
     const groupSectorIds = new Set<string>();
     if (groupTaskIds.size > 0) {
       const bound = await client.query<{ sector_id: string }>(
-        `SELECT DISTINCT st.sector_id
+        `SELECT st.sector_id
            FROM sector_tasks st
            JOIN sectors s ON s.id = st.sector_id
-          WHERE s.season_id = $1 AND st.task_id = ANY($2::uuid[])`,
+          WHERE s.season_id = $1
+          GROUP BY st.sector_id
+         HAVING bool_and(st.task_id = ANY($2::uuid[]))`,
         [seasonId, [...groupTaskIds]],
       );
       for (const row of bound.rows) groupSectorIds.add(row.sector_id);
