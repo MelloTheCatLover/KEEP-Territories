@@ -40,7 +40,10 @@ const MAX_FORTIFICATION = 3;
  *
  * «Граффити» — команда красит свободный сектор в свой цвет. Краска ничего не
  * приносит и снимается кнопкой «Смыть», но по покрашенной клетке команда
- * ходит: от неё можно занимать соседние секторы.
+ * ходит: от неё можно занимать соседние секторы. Закрашенная чужая краска не
+ * пропадает, а лежит слоем под верхней (`status: 'covered'`) и возвращается на
+ * сектор, когда верхнюю смывают, — сектор откатывается к состоянию до
+ * покраски.
  *
  * «Рука помощи» — раздача доп. реролла: получают только те, у кого его сейчас
  * нет, поэтому больше одного у команды не копится.
@@ -292,7 +295,8 @@ export function LawPanel({ activeTeam, teams, sectors, onChanged }: Props) {
             Только цвет: ни влияния, ни опыта, ни стрика, ни зачёта захватов, и
             укрепить такой сектор нельзя. Зато по краске команда ходит — от неё
             можно занимать соседние. Смывается кнопкой, и сама сходит, когда
-            сектор кто-то займёт.
+            сектор кто-то займёт. Закрашенная чужая краска лежит слоем под
+            верхней: смыли верхнюю — сектор вернулся к прежней.
           </p>
         </div>
 
@@ -323,6 +327,9 @@ export function LawPanel({ activeTeam, teams, sectors, onChanged }: Props) {
               {armed.map((e) => {
                 const targets = ownSectors(e.team_id);
                 const isGraffiti = e.kind === 'graffiti';
+                // Слой под чужой краской: цвета сектора он сейчас не носит,
+                // но вернёт его, когда верхнюю краску смоют.
+                const isCovered = e.status === 'covered';
                 const needsSector =
                   prizes.find((p) => p.kind === e.kind)?.needs_sector ?? false;
                 const sectorLabel =
@@ -342,16 +349,25 @@ export function LawPanel({ activeTeam, teams, sectors, onChanged }: Props) {
                         <div className="text-2xs text-neutral-1000 truncate">
                           {e.title}
                           {isGraffiti && sectorLabel ? ` · ${sectorLabel}` : ''}
+                          {isCovered ? ' · под чужой краской' : ''}
                         </div>
                         <div className="text-2xs text-neutral-700 truncate">у {e.team_name}</div>
                       </div>
                       {/* Краска живёт на секторе, поэтому её смывают, а не «снимают»:
-                          снятие записи оставило бы клетку покрашенной. */}
+                          снятие записи оставило бы клетку покрашенной. Смыв
+                          верхнего слоя возвращает сектору краску из-под него;
+                          слой из стопки уходит, не трогая верхний цвет. */}
                       <button
                         type="button"
                         onClick={() => void (isGraffiti ? wash(e.id) : drop(e.id))}
                         disabled={busy}
-                        title={isGraffiti ? 'Смыть краску' : 'Снять плюшку'}
+                        title={
+                          isCovered
+                            ? 'Стереть слой из-под чужой краски'
+                            : isGraffiti
+                              ? 'Смыть краску — сектор вернётся к тому, что было под ней'
+                              : 'Снять плюшку'
+                        }
                         className="flex-shrink-0 p-1 rounded-xs text-neutral-700 hover:text-danger-text disabled:opacity-50"
                       >
                         {isGraffiti ? (

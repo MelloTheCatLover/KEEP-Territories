@@ -19,7 +19,16 @@ export type WheelPrizeKind =
  */
 export type LawEffectTiming = 'instant' | 'armed';
 
-export type LawEffectStatus = 'applied' | 'armed' | 'consumed' | 'cancelled';
+/**
+ * `covered` — краска граффити, закрашенная сверху чужой: запись жива и
+ * вернётся на сектор, когда верхний слой смоют (`law.service.washGraffiti`).
+ */
+export type LawEffectStatus =
+  | 'applied'
+  | 'armed'
+  | 'covered'
+  | 'consumed'
+  | 'cancelled';
 
 export interface WheelPrizeDef {
   kind: WheelPrizeKind;

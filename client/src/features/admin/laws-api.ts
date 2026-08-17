@@ -16,7 +16,13 @@ export type WheelPrizeKind =
 /** Всё, что попадает в журнал законов: плюшка колеса или краска. */
 export type LawEffectKind = WheelPrizeKind | 'graffiti' | 'extra_reroll';
 
-export type LawEffectStatus = 'applied' | 'armed' | 'consumed' | 'cancelled';
+/** `covered` — краска под чужой закраской: вернётся, когда верхнюю смоют. */
+export type LawEffectStatus =
+  | 'applied'
+  | 'armed'
+  | 'covered'
+  | 'consumed'
+  | 'cancelled';
 
 export interface WheelPrizeDef {
   kind: WheelPrizeKind;

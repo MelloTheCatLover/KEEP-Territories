@@ -166,22 +166,28 @@ async function getView(db: Db, id: string): Promise<LawEffectView> {
 }
 
 export interface LawEffectsResponse {
-  /** Плюшки, которые ещё ждут своего момента. */
+  /**
+   * Плюшки, которые ещё ждут своего момента, и живая краска — включая слои
+   * под чужой закраской ('covered'): они вернутся, когда верхний смоют,
+   * поэтому председателю их видно здесь, а не в закрытом журнале.
+   */
   armed: LawEffectView[];
   /** Сработавшие / снятые — журнал председателя. */
   history: LawEffectView[];
 }
 
+const LIVE_STATUSES = "('armed', 'covered')";
+
 export async function list(limit = 30): Promise<LawEffectsResponse> {
   const seasonId = await getActiveSeasonId();
   const [armed, history] = await Promise.all([
     pool.query<ViewRow>(
-      `${VIEW_SELECT} WHERE e.season_id = $1 AND e.status = 'armed'
+      `${VIEW_SELECT} WHERE e.season_id = $1 AND e.status IN ${LIVE_STATUSES}
         ORDER BY e.created_at ASC`,
       [seasonId],
     ),
     pool.query<ViewRow>(
-      `${VIEW_SELECT} WHERE e.season_id = $1 AND e.status <> 'armed'
+      `${VIEW_SELECT} WHERE e.season_id = $1 AND e.status NOT IN ${LIVE_STATUSES}
         ORDER BY COALESCE(e.resolved_at, e.created_at) DESC
         LIMIT $2`,
       [seasonId, limit],
@@ -417,11 +423,13 @@ export async function applyArmed(
 
 /** Снять заряженную плюшку, не дожидаясь срабатывания. */
 export async function cancel(id: string): Promise<LawEffectView> {
+  // Краску тут не снимают: запись ушла бы в 'cancelled', а сектор остался бы
+  // покрашенным. Для граффити есть `washGraffiti` — он трогает и сектор.
   const res = await pool.query(
     `UPDATE team_law_effects
         SET status = 'cancelled', resolved_at = NOW(),
             note = COALESCE(note, 'Снята председателем')
-      WHERE id = $1 AND status = 'armed'`,
+      WHERE id = $1 AND status = 'armed' AND law <> 'graffiti'`,
     [id],
   );
   if (res.rowCount === 0) {
@@ -486,17 +494,30 @@ export async function paintGraffiti(
       throw new AppError(409, 'Сектор уже покрашен вашей командой');
     }
 
-    // Чужая краска перекрывается: сектор свободен, значит и стена ничья.
+    // Чужая краска перекрывается: сектор свободен, значит и стена ничья. Но
+    // прежний слой не пропадает — он уходит под верхний ('covered') и
+    // вернётся, когда верхний смоют (см. `washGraffiti`).
     const repaintedOver = sector.graffiti_team_id;
     if (repaintedOver) {
       await client.query(
         `UPDATE team_law_effects
-            SET status = 'consumed', resolved_at = NOW(),
-                note = COALESCE(note, '') || ' · закрашено другой командой'
+            SET status = 'covered',
+                note = COALESCE(note, '') || ' · закрашено сверху'
           WHERE law = 'graffiti' AND status = 'armed' AND sector_id = $1`,
         [sector.id],
       );
     }
+
+    // Своя прежняя краска слоями не копится: команда стоит в стопке один раз,
+    // иначе смыв верхнего слоя возвращал бы её же старую покраску.
+    await client.query(
+      `UPDATE team_law_effects
+          SET status = 'consumed', resolved_at = NOW(),
+              note = COALESCE(note, '') || ' · перекрашено заново'
+        WHERE law = 'graffiti' AND status = 'covered'
+          AND sector_id = $1 AND team_id = $2`,
+      [sector.id, teamId],
+    );
 
     await client.query('UPDATE sectors SET graffiti_team_id = $1 WHERE id = $2', [
       teamId,
@@ -527,32 +548,79 @@ export async function paintGraffiti(
   }
 }
 
-/** Смыть краску — по записи журнала. */
+/**
+ * Смыть краску — по записи журнала.
+ *
+ * Верхний слой ('armed') снимается вместе с цветом сектора, но не в пустоту:
+ * если под ним лежит закрашенная чужая краска ('covered'), она поднимается
+ * обратно и сектор возвращается в состояние до последней покраски. Слой из
+ * стопки ('covered') смывают так же — он просто уходит, не трогая верхний цвет.
+ */
 export async function washGraffiti(id: string): Promise<LawEffectView> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const res = await client.query<{ sector_id: string | null; team_id: string }>(
-      `SELECT sector_id, team_id FROM team_law_effects
-        WHERE id = $1 AND law = 'graffiti' AND status = 'armed'
+    const res = await client.query<{
+      sector_id: string | null;
+      team_id: string;
+      status: string;
+    }>(
+      `SELECT sector_id, team_id, status FROM team_law_effects
+        WHERE id = $1 AND law = 'graffiti' AND status IN ('armed', 'covered')
         FOR UPDATE`,
       [id],
     );
     if (res.rows.length === 0) throw new AppError(404, 'Краска не найдена');
-    const { sector_id: sectorId, team_id: teamId } = res.rows[0];
+    const { sector_id: sectorId, team_id: teamId, status } = res.rows[0];
 
-    if (sectorId) {
-      await client.query(
-        'UPDATE sectors SET graffiti_team_id = NULL WHERE id = $1 AND graffiti_team_id = $2',
-        [sectorId, teamId],
+    // Что вернулось из-под смытого слоя — для журнала председателя.
+    let restoredTeam: string | null = null;
+
+    if (sectorId && status === 'armed') {
+      // Под верхним слоем может лежать стопка: поднимаем самый свежий слой.
+      const under = await client.query<{ id: string; team_id: string; team_name: string }>(
+        `SELECT e.id, e.team_id, t.name AS team_name
+           FROM team_law_effects e
+           JOIN teams t ON t.id = e.team_id
+          WHERE e.law = 'graffiti' AND e.status = 'covered'
+            AND e.sector_id = $1 AND e.id <> $2
+          ORDER BY e.created_at DESC
+          LIMIT 1
+          FOR UPDATE OF e`,
+        [sectorId, id],
       );
+      const previous = under.rows[0] ?? null;
+
+      await client.query(
+        'UPDATE sectors SET graffiti_team_id = $3 WHERE id = $1 AND graffiti_team_id = $2',
+        [sectorId, teamId, previous ? previous.team_id : null],
+      );
+
+      if (previous) {
+        restoredTeam = previous.team_name;
+        await client.query(
+          `UPDATE team_law_effects
+              SET status = 'armed',
+                  note = COALESCE(note, '') || ' · краска сверху смыта, слой вернулся'
+            WHERE id = $1`,
+          [previous.id],
+        );
+      }
     }
+
     await client.query(
       `UPDATE team_law_effects
-          SET status = 'consumed', resolved_at = NOW(), note = 'Краска смыта'
+          SET status = 'consumed', resolved_at = NOW(), note = $2
         WHERE id = $1`,
-      [id],
+      [
+        id,
+        restoredTeam
+          ? `Краска смыта · сектор вернулся под краску ${restoredTeam}`
+          : status === 'covered'
+            ? 'Слой смыт из-под чужой краски'
+            : 'Краска смыта',
+      ],
     );
 
     const view = await getView(client, id);
@@ -580,11 +648,13 @@ export async function clearGraffitiOnCapture(
     [sectorId],
   );
   if (res.rowCount === 0) return;
+  // Сносит всю стопку, а не только верхний слой: возвращать к чужой краске
+  // уже нечего — сектор носит цвет владельца.
   await client.query(
     `UPDATE team_law_effects
         SET status = 'consumed', resolved_at = NOW(),
             note = COALESCE(note, '') || ' · сектор занят, краска сошла'
-      WHERE law = 'graffiti' AND status = 'armed' AND sector_id = $1`,
+      WHERE law = 'graffiti' AND status IN ('armed', 'covered') AND sector_id = $1`,
     [sectorId],
   );
 }
