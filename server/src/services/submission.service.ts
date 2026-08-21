@@ -159,11 +159,11 @@ async function assertWithinReach(
 }
 
 /**
- * Validate and charge a teleport under the active "Телепорт" law. The target
- * must be the same difficulty as the team's anchor (its last-captured sector);
- * reach and the border rule are skipped. Costs a flat experience amount, booked
- * as a team_penalty (reason 'teleport') within the caller's transaction, so a
- * later rollback undoes the charge. Throws AppError on any failed precondition.
+ * Validate and charge a teleport under the active "Телепорт" law. Any sector on
+ * the map is a legal target — reach, the border rule and difficulty are all
+ * skipped. Costs a flat experience amount, booked as a team_penalty (reason
+ * 'teleport') within the caller's transaction, so a later rollback undoes the
+ * charge. Throws AppError on any failed precondition.
  */
 async function assertTeleport(
   client: PoolClient,
@@ -180,27 +180,6 @@ async function assertTeleport(
   );
   if (lawRes.rows[0]?.value !== 'teleport') {
     throw new AppError(400, 'Закон «Телепорт» сейчас не действует');
-  }
-
-  // Anchor = the sector the team stands on (its most recent capture).
-  const anchorRes = await client.query<{ difficulty_id: string }>(
-    `SELECT s.difficulty_id
-       FROM sector_captures sc
-       JOIN sectors s ON s.id = sc.sector_id
-      WHERE sc.team_id = $1
-      ORDER BY sc.captured_at DESC
-      LIMIT 1`,
-    [teamId],
-  );
-  const anchorDifficulty = anchorRes.rows[0]?.difficulty_id;
-  if (!anchorDifficulty) {
-    throw new AppError(400, 'У команды нет захваченных секторов — телепорт невозможен');
-  }
-  if (sector.difficulty_id !== anchorDifficulty) {
-    throw new AppError(
-      400,
-      'Телепорт возможен только на сектор той же сложности, что и ваш последний захват',
-    );
   }
 
   // Affordability — canonical experience formula (score-sql).
@@ -480,10 +459,10 @@ export async function startAction(
     let jumped = false;
 
     if (teleport) {
-      // Teleport law ("Телепорт"): the team jumps to a sector of the SAME
-      // difficulty as its anchor (last-captured sector), ignoring reach and the
-      // border rule, for a flat experience cost. Unlimited uses. Only a
-      // (re)capture can teleport — fortifying an owned sector never needs it.
+      // Teleport law ("Телепорт"): the team jumps to ANY sector on the map,
+      // ignoring reach, the border rule and difficulty, for a flat experience
+      // cost. Unlimited uses. Only a (re)capture can teleport — fortifying an
+      // owned sector never needs it.
       await assertTeleport(client, sector, teamId, actionType);
     } else {
       // Every action targets a sector on (or next to) the team's territory, so it

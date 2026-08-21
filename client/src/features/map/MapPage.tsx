@@ -809,12 +809,6 @@ export function MapPage() {
           anchor={state.fullTeams.find((t) => t.id === teamId)?.anchor ?? null}
           bordersTerritory={bordersTerritory(actionFor)}
           teleportActive={activeLaw === 'teleport'}
-          anchorDifficulty={(() => {
-            const anchorId = state.fullTeams.find((t) => t.id === teamId)?.anchor?.sector_id;
-            return anchorId
-              ? state.sectors.find((s) => s.id === anchorId)?.difficulty.slug ?? null
-              : null;
-          })()}
           teamExperience={state.fullTeams.find((t) => t.id === teamId)?.experience ?? 0}
           userActiveSectorId={userActiveSectorId}
           onCancel={() => setActionFor(null)}

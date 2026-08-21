@@ -47,7 +47,6 @@ type Props = {
   /** "Телепорт" law active — allows same-difficulty jumps for an XP cost. */
   teleportActive: boolean;
   /** Difficulty slug of the team's anchor (its last-captured sector). */
-  anchorDifficulty: string | null;
   /** Team's current experience — gates whether it can afford a teleport. */
   teamExperience: number;
   userActiveSectorId: string | null;
@@ -209,7 +208,6 @@ export function SectorActionModal({
   anchor,
   bordersTerritory,
   teleportActive,
-  anchorDifficulty,
   teamExperience,
   userActiveSectorId,
   onCancel,
@@ -274,30 +272,44 @@ export function SectorActionModal({
     return computeAvailable(sector, userTeamId, userStrength, userEndurance, anchor, bordersTerritory);
   }, [sector, userTeamId, userStrength, userEndurance, anchor, bordersTerritory, hasActiveElsewhere, isThisSectorActive]);
 
-  // Teleport (active law): a same-difficulty (re)capture beyond normal reach,
-  // for an XP cost. Only offered when the ordinary action is NOT available (out
-  // of reach / not bordering) — otherwise the free normal action already shows.
+  // Teleport (active law): a (re)capture of ANY sector on the map, past reach,
+  // the border rule and difficulty, for an XP cost. Only offered when the
+  // ordinary action is NOT available (out of reach / not bordering) — otherwise
+  // the free normal action already shows. When the jump is impossible the panel
+  // still renders with the blocking reason, so the law never fails silently.
   const teleport = useMemo(() => {
     if (!teleportActive || hasActiveElsewhere || isThisSectorActive) return null;
-    if (sector.current_action_type !== null || sector.is_home_base) return null;
-    if (anchorDifficulty === null || anchorDifficulty !== sector.difficulty.slug) return null;
+    if (sector.is_home_base) return null;
+    if (sector.current_action_type !== null) {
+      return { type: null, blocked: 'По сектору уже идёт чужое действие.' };
+    }
     if (sector.captured_by_team_id === userTeamId) return null;
     let type: ActionType | null = null;
     if (sector.status === 'free') {
       type = 'capture';
     } else if (sector.status === 'captured' && sector.captured_by_team_id) {
-      if (sector.fortification_level <= penetrationFromStrength(userStrength)) {
-        type = 'recapture';
+      const penetration = penetrationFromStrength(userStrength);
+      if (sector.fortification_level > penetration) {
+        return {
+          type: null,
+          blocked:
+            `Сектор укреплён (уровень ${sector.fortification_level}), ` +
+            `пробитие вашей силы — ${penetration}.`,
+        };
       }
+      type = 'recapture';
     }
     if (type === null || actions.some((a) => a.type === type)) return null;
-    return { type, affordable: teamExperience >= TELEPORT_COST };
+    const blocked =
+      teamExperience >= TELEPORT_COST
+        ? null
+        : `Нужно ${TELEPORT_COST} опыта, у вас ${teamExperience}.`;
+    return { type, blocked };
   }, [
     teleportActive,
     hasActiveElsewhere,
     isThisSectorActive,
     sector,
-    anchorDifficulty,
     userTeamId,
     userStrength,
     actions,
@@ -337,6 +349,9 @@ export function SectorActionModal({
       setBusy(null);
     }
   }
+
+  // Narrowed into a const so the button's closure keeps the non-null type.
+  const teleportType: ActionType | null = teleport ? teleport.type : null;
 
   const inWheel = wheel !== null;
   const inEncounter = encounter !== null;
@@ -446,24 +461,29 @@ export function SectorActionModal({
               <div className="flex items-center gap-2 mb-1">
                 <Rocket className="w-4 h-4 text-brand-500" />
                 <span className="font-display text-sm text-neutral-1000">
-                  Телепорт · {teleport.type === 'capture' ? 'захват' : 'перезахват'}
+                  {teleport.type === null
+                    ? 'Телепорт'
+                    : `Телепорт · ${teleport.type === 'capture' ? 'захват' : 'перезахват'}`}
                 </span>
               </div>
               <p className="text-xs text-neutral-700 mb-2">
-                Прыжок на сектор той же сложности, минуя дальность и границу.
+                Прыжок на любой сектор карты, минуя дальность, границу и сложность.
                 Цена — {TELEPORT_COST} опыта (у вас {teamExperience}).
               </p>
-              <Button
-                variant="primary"
-                onClick={() => void handleStart(teleport.type, true)}
-                disabled={busy !== null || !teleport.affordable}
-                isLoading={busy === teleport.type}
-              >
-                <Rocket className="w-4 h-4" />
-                {teleport.affordable
-                  ? `Телепортироваться (−${TELEPORT_COST} опыта)`
-                  : 'Недостаточно опыта'}
-              </Button>
+              {teleport.blocked && (
+                <p className="text-xs text-danger-text mb-2">{teleport.blocked}</p>
+              )}
+              {teleportType !== null && (
+                <Button
+                  variant="primary"
+                  onClick={() => void handleStart(teleportType, true)}
+                  disabled={busy !== null || teleport.blocked !== null}
+                  isLoading={busy === teleportType}
+                >
+                  <Rocket className="w-4 h-4" />
+                  Телепортироваться (−{TELEPORT_COST} опыта)
+                </Button>
+              )}
             </div>
           )}
 
