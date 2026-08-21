@@ -867,7 +867,12 @@ async function consumeQueuePriority(
   }
 }
 
-type ApprovedEffect = { merchant: MerchantType | null; tokenMinted: boolean };
+type ApprovedEffect = {
+  merchant: MerchantType | null;
+  tokenMinted: boolean;
+  /** Жетон торговца, отчеканенный поднятым уровнем укрепления. */
+  fortifyToken: boolean;
+};
 
 async function applyApprovedEffect(
   client: PoolClient,
@@ -961,7 +966,7 @@ async function applyApprovedEffect(
         );
         tokenMinted = (ins.rowCount ?? 0) > 0;
       }
-      return { merchant: merchantType, tokenMinted };
+      return { merchant: merchantType, tokenMinted, fortifyToken: false };
     }
     case 'fortify': {
       const next = Math.min(sector.fortification_level + 1, MAX_FORTIFICATION);
@@ -974,13 +979,22 @@ async function applyApprovedEffect(
       );
       // Опыт за укрепление не сгорает — пишем в журнал, как захват в
       // sector_captures. Упёршийся в потолок уровень ничего не приносит.
-      if (next > sector.fortification_level) {
+      const raised = next > sector.fortification_level;
+      if (raised) {
         await client.query(
           'INSERT INTO sector_fortification_awards (sector_id, team_id) VALUES ($1, $2)',
           [submission.sector_id, submission.team_id],
         );
+        // Поднятый уровень укрепления чеканит жетон торговца. Жетон плавающий
+        // (sector_id NULL), как купон с колеса: к сектору он не привязан, иначе
+        // UNIQUE(team_id, sector_id) столкнулся бы с жетоном за захват.
+        await client.query(
+          `INSERT INTO team_purchase_tokens (team_id, sector_id, merchant_type)
+           VALUES ($1, NULL, 'trader')`,
+          [submission.team_id],
+        );
       }
-      return { merchant: null, tokenMinted: false };
+      return { merchant: null, tokenMinted: false, fortifyToken: raised };
     }
     case 'remove_fortification': {
       const next = Math.max(sector.fortification_level - 1, 0);
@@ -991,10 +1005,10 @@ async function applyApprovedEffect(
          WHERE id = $2`,
         [next, submission.sector_id],
       );
-      return { merchant: null, tokenMinted: false };
+      return { merchant: null, tokenMinted: false, fortifyToken: false };
     }
   }
-  return { merchant: null, tokenMinted: false };
+  return { merchant: null, tokenMinted: false, fortifyToken: false };
 }
 
 async function revertPendingEffect(
@@ -1024,6 +1038,8 @@ export type ApproveResult = TaskSubmissionWithDetails & {
   merchant: MerchantType | null;
   /** True only when a fresh purchase token was minted (not a re-looted sector). */
   merchant_token_minted: boolean;
+  /** Жетон торговца за поднятый уровень укрепления. */
+  fortify_token_minted: boolean;
 };
 
 export async function approve(
@@ -1064,7 +1080,12 @@ export async function approve(
 
     await client.query('COMMIT');
     const details = await getById(id);
-    return { ...details, merchant: effect.merchant, merchant_token_minted: effect.tokenMinted };
+    return {
+      ...details,
+      merchant: effect.merchant,
+      merchant_token_minted: effect.tokenMinted,
+      fortify_token_minted: effect.fortifyToken,
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

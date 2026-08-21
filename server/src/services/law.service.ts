@@ -97,7 +97,7 @@ export const WHEEL_PRIZES: ReadonlyArray<WheelPrizeDef> = [
     kind: 'fortification',
     title: 'Мешок цемента',
     description:
-      'Бесплатное укрепление одного своего сектора: уровень поднимается без задания, с обычной наградой за укрепление. Сектор выбирается при применении.',
+      'Бесплатное укрепление одного своего сектора: уровень поднимается без задания, с обычной наградой за укрепление (включая жетон торговца). Сектор выбирается при применении.',
     timing: 'armed',
     weight: 10,
     needs_sector: true,
@@ -391,17 +391,18 @@ export async function applyArmed(
       sector.id,
     ]);
     // Награда за укрепление — та же, что за выполненное задание (score-sql
-    // считает её по этому журналу).
+    // считает её по этому журналу), включая жетон торговца за поднятый уровень.
     await client.query(
       'INSERT INTO sector_fortification_awards (sector_id, team_id) VALUES ($1, $2)',
       [sector.id, teamId],
     );
+    await mintToken(client, teamId, 'trader');
 
     await client.query(
       `UPDATE team_law_effects
           SET status = 'consumed', sector_id = $2, note = $3, resolved_at = NOW()
         WHERE id = $1`,
-      [id, sector.id, `Укрепление ${sector.fortification_level} → ${next}`],
+      [id, sector.id, `Укрепление ${sector.fortification_level} → ${next}, жетон торговца`],
     );
 
     const view = await getView(client, id);

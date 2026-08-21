@@ -68,6 +68,8 @@ export type ApproveResult = TaskSubmissionWithDetails & {
   merchant: MerchantType | null;
   /** True only when a fresh purchase token was minted (not a re-looted sector). */
   merchant_token_minted: boolean;
+  /** Жетон торговца за поднятый уровень укрепления. */
+  fortify_token_minted: boolean;
 };
 
 export function approveSubmission(

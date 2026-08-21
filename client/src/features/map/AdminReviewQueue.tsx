@@ -54,14 +54,16 @@ export function AdminReviewQueue({ refreshKey = 0, onActed }: Props) {
       // No comment required for either decision — reject sends null.
       if (decision === 'approve') {
         const res = await approveSubmission(id, null);
+        const team = res.team?.name ? `«${res.team.name}»` : 'команда';
         if (res.merchant) {
           const name = MERCHANT_MARK[res.merchant].label;
-          const team = res.team?.name ? `«${res.team.name}»` : 'команда';
           setMerchantNotice(
             res.merchant_token_minted
               ? `На секторе был персонаж: ${name}! ${team} получила жетон покупки.`
               : `На секторе персонаж: ${name} — жетон уже был получен ранее.`,
           );
+        } else if (res.fortify_token_minted) {
+          setMerchantNotice(`Уровень укрепления поднят: ${team} получила жетон торговца.`);
         }
       } else {
         await rejectSubmission(id, null);
