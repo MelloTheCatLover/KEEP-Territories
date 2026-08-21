@@ -26,6 +26,23 @@ export async function list(_req: Request, res: Response, next: NextFunction): Pr
   }
 }
 
+/**
+ * Заряженные импланты команды вызывающего — карта решает по ним, какие
+ * действия показать. Открыто любой команде (в отличие от остальных ручек лавок).
+ */
+export async function listMine(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const actingTeamId =
+      typeof req.query.team_id === 'string' && req.query.team_id.length > 0
+        ? req.query.team_id
+        : undefined;
+    const armed = await purchaseService.armedKindsForUser(req.user!.userId, actingTeamId);
+    res.status(200).json({ armed });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function buy(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const teamId = req.body?.team_id;

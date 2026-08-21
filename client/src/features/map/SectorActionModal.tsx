@@ -11,6 +11,7 @@ import {
   ArrowRight,
   Rocket,
   Bomb,
+  Split,
 } from 'lucide-react';
 import { Button, ErrorBanner } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
@@ -44,7 +45,9 @@ type Props = {
   anchor: { q: number; r: number } | null;
   /** Whether this sector borders the team's captured territory. */
   bordersTerritory: boolean;
-  /** "Телепорт" law active — allows same-difficulty jumps for an XP cost. */
+  /** "Раздвоение" мастера заряжено — команда ведёт вторую заявку параллельно. */
+  splitArmed: boolean;
+  /** "Телепорт" law active — allows jumps to any sector for an XP cost. */
   teleportActive: boolean;
   /** Difficulty slug of the team's anchor (its last-captured sector). */
   /** Team's current experience — gates whether it can afford a teleport. */
@@ -208,6 +211,7 @@ export function SectorActionModal({
   anchor,
   bordersTerritory,
   teleportActive,
+  splitArmed,
   teamExperience,
   userActiveSectorId,
   onCancel,
@@ -264,13 +268,16 @@ export function SectorActionModal({
   const isThisSectorActive = userActiveSectorId === sector.id;
   const hasActiveElsewhere =
     userActiveSectorId !== null && userActiveSectorId !== sector.id;
+  // Раздвоение снимает запрет на второе действие: заявок разрешено две, имплант
+  // тратится на этой. Сервер решает то же самое в startAction.
+  const blockedElsewhere = hasActiveElsewhere && !splitArmed;
 
   const { actions, reason } = useMemo(() => {
-    if (hasActiveElsewhere || isThisSectorActive) {
+    if (blockedElsewhere || isThisSectorActive) {
       return { actions: [] as AvailableAction[], reason: null };
     }
     return computeAvailable(sector, userTeamId, userStrength, userEndurance, anchor, bordersTerritory);
-  }, [sector, userTeamId, userStrength, userEndurance, anchor, bordersTerritory, hasActiveElsewhere, isThisSectorActive]);
+  }, [sector, userTeamId, userStrength, userEndurance, anchor, bordersTerritory, blockedElsewhere, isThisSectorActive]);
 
   // Teleport (active law): a (re)capture of ANY sector on the map, past reach,
   // the border rule and difficulty, for an XP cost. Only offered when the
@@ -278,7 +285,7 @@ export function SectorActionModal({
   // the free normal action already shows. When the jump is impossible the panel
   // still renders with the blocking reason, so the law never fails silently.
   const teleport = useMemo(() => {
-    if (!teleportActive || hasActiveElsewhere || isThisSectorActive) return null;
+    if (!teleportActive || blockedElsewhere || isThisSectorActive) return null;
     if (sector.is_home_base) return null;
     if (sector.current_action_type !== null) {
       return { type: null, blocked: 'По сектору уже идёт чужое действие.' };
@@ -307,7 +314,7 @@ export function SectorActionModal({
     return { type, blocked };
   }, [
     teleportActive,
-    hasActiveElsewhere,
+    blockedElsewhere,
     isThisSectorActive,
     sector,
     userTeamId,
@@ -357,7 +364,7 @@ export function SectorActionModal({
   const inEncounter = encounter !== null;
   const lockClose = busy !== null || inWheel || inEncounter;
   const showActions =
-    !inWheel && !inEncounter && !hasActiveElsewhere && !isThisSectorActive;
+    !inWheel && !inEncounter && !blockedElsewhere && !isThisSectorActive;
   const { bg: emblemBg, fg: emblemFg } = emblemColors(sector.difficulty.slug);
 
   return (
@@ -431,10 +438,21 @@ export function SectorActionModal({
             <EncounterPanel inst={encounter} busy={resolving} onResolve={resolveEnc} />
           )}
 
-          {!inWheel && !inEncounter && hasActiveElsewhere && userActiveSectorId && (
+          {!inWheel && !inEncounter && blockedElsewhere && userActiveSectorId && (
             <BlockedElsewherePanel
               onNavigate={() => onNavigateToActive(userActiveSectorId)}
             />
+          )}
+
+          {showActions && hasActiveElsewhere && (
+            <div className="flex gap-2 p-3 bg-brand-100 border border-brand-400 rounded-sm">
+              <Split className="w-4 h-4 flex-shrink-0 text-brand-500 mt-0.5" />
+              <p className="text-xs text-neutral-700 leading-relaxed">
+                <b className="text-neutral-1000">Раздвоение заряжено.</b> Команда
+                ведёт вторую заявку параллельно первой — имплант потратится на
+                этом действии.
+              </p>
+            </div>
           )}
 
           {!inWheel && !inEncounter && isThisSectorActive && (

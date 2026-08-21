@@ -3,6 +3,7 @@ import type { ActionType, DifficultySlug, Sector } from './types';
 import type { TaskSubmissionWithDetails } from '../admin/submissions-api';
 import type { EncounterInstance } from '../admin/encounters-api';
 import type { DiversionKind } from '../admin/diversion-api';
+import type { PurchaseKind } from '../admin/purchase-api';
 
 export type TaskBrief = { id: string; title: string; question: string };
 export type StartActionResponse = {
@@ -32,6 +33,16 @@ export function startAction(
     ...(teamId ? { team_id: teamId } : {}),
     ...(teleport ? { teleport: true } : {}),
   });
+}
+
+/**
+ * Свои заряженные импланты (лавки мастера и торговца). Карта решает по ним,
+ * какие действия предложить: раздвоение разрешает вторую заявку параллельно.
+ */
+export function getMyArmedPurchases(teamId?: string): Promise<{ armed: PurchaseKind[] }> {
+  return api.get<{ armed: PurchaseKind[] }>(
+    `/purchases/mine${teamId ? `?team_id=${encodeURIComponent(teamId)}` : ''}`,
+  );
 }
 
 export type ActiveLaw = 'none' | 'teleport';

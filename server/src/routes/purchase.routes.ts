@@ -7,7 +7,12 @@ import { validateParamId } from '../middleware/validate.middleware';
 const router = Router();
 
 router.use(authenticate);
-// Лавки скрыты от команд, как и остальные персонажи: покупку проводит
+
+// Единственная ручка лавок, открытая командам: свои заряженные импланты. Карта
+// показывает по ним действия, которые имплант разрешает (раздвоение).
+router.get('/mine', purchaseController.listMine);
+
+// Остальное скрыто от команд, как и прочие персонажи: покупку проводит
 // председатель КТП у сектора персонажа.
 router.use(requireAdmin);
 

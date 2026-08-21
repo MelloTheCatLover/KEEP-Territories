@@ -673,6 +673,43 @@ export async function takeArmed(
   return res.rows[0]?.id ?? null;
 }
 
+/**
+ * Заряженные импланты команды — то немногое из лавок, что видит сама команда.
+ * Карта спрашивает это, чтобы показать действия, которые имплант разрешает
+ * (раздвоение — вторую заявку параллельно первой). Чужие импланты по-прежнему
+ * закрыты: эндпоинт отдаёт только команду вызывающего.
+ */
+export async function armedKindsForUser(
+  userId: string,
+  actingTeamId?: string,
+): Promise<PurchaseKind[]> {
+  let teamId: string | null;
+  if (actingTeamId) {
+    const userRes = await pool.query<{ role: string }>(
+      'SELECT role FROM users WHERE id = $1',
+      [userId],
+    );
+    if (userRes.rows[0]?.role !== 'admin') {
+      throw new AppError(403, 'Только председатель КТП может играть за команду');
+    }
+    teamId = actingTeamId;
+  } else {
+    const userRes = await pool.query<{ team_id: string | null }>(
+      'SELECT team_id FROM users WHERE id = $1',
+      [userId],
+    );
+    teamId = userRes.rows[0]?.team_id ?? null;
+  }
+  if (!teamId) return [];
+
+  const res = await pool.query<{ kind: PurchaseKind }>(
+    `SELECT DISTINCT kind FROM team_purchases
+      WHERE team_id = $1 AND status = 'armed' AND charges_left > 0`,
+    [teamId],
+  );
+  return res.rows.map((r) => r.kind);
+}
+
 /** Сколько срабатываний импланта такого вида осталось у команды. */
 export async function chargesLeft(
   client: PoolClient,

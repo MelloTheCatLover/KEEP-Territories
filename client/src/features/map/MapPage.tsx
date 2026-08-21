@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Loader2, MapPin, Users, SlidersHorizontal, ChevronDown } from 'lucide-react';
-import { getSectorsMap, getActiveLaw, type ActiveLaw } from './api';
+import { getSectorsMap, getActiveLaw, getMyArmedPurchases, type ActiveLaw } from './api';
 import type { Sector, DifficultySlug, SectorStatus } from './types';
 import { HexMap, type TeamInfo, type MerchantMarker, MERCHANT_MARK } from './HexMap';
 import { getMerchantSectors, type MerchantSector } from '../admin/merchant-api';
@@ -27,6 +27,7 @@ import { AdminReviewQueue } from './AdminReviewQueue';
 import { MerchantTokenTray } from './MerchantTokenTray';
 import { DiversionPanel } from './DiversionPanel';
 import { PurchasePanel } from './PurchasePanel';
+import type { PurchaseKind } from '../admin/purchase-api';
 import { LawPanel } from './LawPanel';
 import { TeamManageModal } from '../admin/team-modals';
 
@@ -137,6 +138,27 @@ export function MapPage() {
     );
     return found?.id ?? null;
   }, [state, teamId]);
+
+  // Свои заряженные импланты: карта показывает по ним действия, которые
+  // имплант разрешает (раздвоение — вторую заявку параллельно первой).
+  const [armedPurchases, setArmedPurchases] = useState<PurchaseKind[]>([]);
+  useEffect(() => {
+    if (!teamId) {
+      setArmedPurchases([]);
+      return;
+    }
+    let alive = true;
+    void getMyArmedPurchases(isAdmin ? teamId : undefined)
+      .then((r) => {
+        if (alive) setArmedPurchases(r.armed);
+      })
+      .catch(() => {
+        if (alive) setArmedPurchases([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [teamId, isAdmin, state]);
 
   // Keys of every sector the acting team already holds — a new target must
   // border one of these (you expand from the frontier, not into empty space).
@@ -809,6 +831,7 @@ export function MapPage() {
           anchor={state.fullTeams.find((t) => t.id === teamId)?.anchor ?? null}
           bordersTerritory={bordersTerritory(actionFor)}
           teleportActive={activeLaw === 'teleport'}
+          splitArmed={armedPurchases.includes('split_capture')}
           teamExperience={state.fullTeams.find((t) => t.id === teamId)?.experience ?? 0}
           userActiveSectorId={userActiveSectorId}
           onCancel={() => setActionFor(null)}
