@@ -35,12 +35,20 @@ export function startAction(
   });
 }
 
+/** Заряженный имплант глазами самой команды. */
+export type ArmedImplant = {
+  kind: PurchaseKind;
+  title: string;
+  description: string;
+  charges_left: number;
+};
+
 /**
  * Свои заряженные импланты (лавки мастера и торговца). Карта решает по ним,
  * какие действия предложить: раздвоение разрешает вторую заявку параллельно.
  */
-export function getMyArmedPurchases(teamId?: string): Promise<{ armed: PurchaseKind[] }> {
-  return api.get<{ armed: PurchaseKind[] }>(
+export function getMyArmedPurchases(teamId?: string): Promise<{ armed: ArmedImplant[] }> {
+  return api.get<{ armed: ArmedImplant[] }>(
     `/purchases/mine${teamId ? `?team_id=${encodeURIComponent(teamId)}` : ''}`,
   );
 }

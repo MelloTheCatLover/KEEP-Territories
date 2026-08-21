@@ -673,16 +673,25 @@ export async function takeArmed(
   return res.rows[0]?.id ?? null;
 }
 
+/** Заряженный имплант глазами самой команды. */
+export type ArmedImplant = {
+  kind: PurchaseKind;
+  title: string;
+  description: string;
+  charges_left: number;
+};
+
 /**
  * Заряженные импланты команды — то немногое из лавок, что видит сама команда.
  * Карта спрашивает это, чтобы показать действия, которые имплант разрешает
- * (раздвоение — вторую заявку параллельно первой). Чужие импланты по-прежнему
+ * (раздвоение — вторую заявку параллельно первой), а страница команды — чтобы
+ * команда вообще знала, что у неё заряжено. Чужие импланты по-прежнему
  * закрыты: эндпоинт отдаёт только команду вызывающего.
  */
-export async function armedKindsForUser(
+export async function armedForUser(
   userId: string,
   actingTeamId?: string,
-): Promise<PurchaseKind[]> {
+): Promise<ArmedImplant[]> {
   let teamId: string | null;
   if (actingTeamId) {
     const userRes = await pool.query<{ role: string }>(
@@ -702,12 +711,22 @@ export async function armedKindsForUser(
   }
   if (!teamId) return [];
 
-  const res = await pool.query<{ kind: PurchaseKind }>(
-    `SELECT DISTINCT kind FROM team_purchases
-      WHERE team_id = $1 AND status = 'armed' AND charges_left > 0`,
+  const res = await pool.query<{ kind: PurchaseKind; charges_left: number }>(
+    `SELECT kind, SUM(charges_left)::int AS charges_left
+       FROM team_purchases
+      WHERE team_id = $1 AND status = 'armed' AND charges_left > 0
+      GROUP BY kind`,
     [teamId],
   );
-  return res.rows.map((r) => r.kind);
+  return res.rows.map((row) => {
+    const def = getDef(row.kind);
+    return {
+      kind: row.kind,
+      title: def.title,
+      description: def.description,
+      charges_left: row.charges_left,
+    };
+  });
 }
 
 /** Сколько срабатываний импланта такого вида осталось у команды. */

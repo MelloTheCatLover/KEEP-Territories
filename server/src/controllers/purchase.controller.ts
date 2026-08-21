@@ -36,7 +36,7 @@ export async function listMine(req: Request, res: Response, next: NextFunction):
       typeof req.query.team_id === 'string' && req.query.team_id.length > 0
         ? req.query.team_id
         : undefined;
-    const armed = await purchaseService.armedKindsForUser(req.user!.userId, actingTeamId);
+    const armed = await purchaseService.armedForUser(req.user!.userId, actingTeamId);
     res.status(200).json({ armed });
   } catch (error) {
     next(error);

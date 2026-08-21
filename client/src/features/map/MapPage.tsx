@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Loader2, MapPin, Users, SlidersHorizontal, ChevronDown } from 'lucide-react';
-import { getSectorsMap, getActiveLaw, getMyArmedPurchases, type ActiveLaw } from './api';
+import {
+  getSectorsMap,
+  getActiveLaw,
+  getMyArmedPurchases,
+  type ActiveLaw,
+  type ArmedImplant,
+} from './api';
 import type { Sector, DifficultySlug, SectorStatus } from './types';
 import { HexMap, type TeamInfo, type MerchantMarker, MERCHANT_MARK } from './HexMap';
 import { getMerchantSectors, type MerchantSector } from '../admin/merchant-api';
@@ -27,7 +33,6 @@ import { AdminReviewQueue } from './AdminReviewQueue';
 import { MerchantTokenTray } from './MerchantTokenTray';
 import { DiversionPanel } from './DiversionPanel';
 import { PurchasePanel } from './PurchasePanel';
-import type { PurchaseKind } from '../admin/purchase-api';
 import { LawPanel } from './LawPanel';
 import { TeamManageModal } from '../admin/team-modals';
 
@@ -131,17 +136,18 @@ export function MapPage() {
     return Object.values(state.teamsById).sort((a, b) => a.index - b.index);
   }, [state]);
 
-  const userActiveSectorId = useMemo(() => {
-    if (!teamId || state.status !== 'ready') return null;
-    const found = state.sectors.find(
-      (s) => s.active_submission_team_id === teamId,
-    );
-    return found?.id ?? null;
+  // Секторы с открытой заявкой команды. Обычно один, но заряженное раздвоение
+  // разрешает вести два сразу — поэтому список, а не одна клетка.
+  const userActiveSectorIds = useMemo<string[]>(() => {
+    if (!teamId || state.status !== 'ready') return [];
+    return state.sectors
+      .filter((s) => s.active_submission_team_id === teamId)
+      .map((s) => s.id);
   }, [state, teamId]);
 
   // Свои заряженные импланты: карта показывает по ним действия, которые
   // имплант разрешает (раздвоение — вторую заявку параллельно первой).
-  const [armedPurchases, setArmedPurchases] = useState<PurchaseKind[]>([]);
+  const [armedPurchases, setArmedPurchases] = useState<ArmedImplant[]>([]);
   useEffect(() => {
     if (!teamId) {
       setArmedPurchases([]);
@@ -330,7 +336,7 @@ export function MapPage() {
   // a base, or watching its own open submission. The reachable frontier is a
   // standing fact, not a prompt, so it gets the quiet dashed outline.
   const highlightTone: 'strong' | 'subtle' =
-    canCreateTeam || userActiveSectorId ? 'strong' : 'subtle';
+    canCreateTeam || userActiveSectorIds.length > 0 ? 'strong' : 'subtle';
 
   const highlightIds = useMemo(() => {
     if (isObserver) return undefined;
@@ -341,11 +347,11 @@ export function MapPage() {
       });
       return set;
     }
-    if (userActiveSectorId) {
-      return new Set<string>([userActiveSectorId]);
+    if (userActiveSectorIds.length > 0) {
+      return new Set<string>(userActiveSectorIds);
     }
     return reachableIds;
-  }, [canCreateTeam, state, reachableIds, userActiveSectorId, isObserver]);
+  }, [canCreateTeam, state, reachableIds, userActiveSectorIds, isObserver]);
 
   const handleClick = useCallback(
     (s: Sector) => {
@@ -831,9 +837,9 @@ export function MapPage() {
           anchor={state.fullTeams.find((t) => t.id === teamId)?.anchor ?? null}
           bordersTerritory={bordersTerritory(actionFor)}
           teleportActive={activeLaw === 'teleport'}
-          splitArmed={armedPurchases.includes('split_capture')}
+          splitArmed={armedPurchases.some((p) => p.kind === 'split_capture')}
           teamExperience={state.fullTeams.find((t) => t.id === teamId)?.experience ?? 0}
-          userActiveSectorId={userActiveSectorId}
+          userActiveSectorIds={userActiveSectorIds}
           onCancel={() => setActionFor(null)}
           onStarted={(submissionId) => {
             setActionFor(null);

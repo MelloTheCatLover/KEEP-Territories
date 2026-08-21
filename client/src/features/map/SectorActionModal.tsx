@@ -52,7 +52,8 @@ type Props = {
   /** Difficulty slug of the team's anchor (its last-captured sector). */
   /** Team's current experience — gates whether it can afford a teleport. */
   teamExperience: number;
-  userActiveSectorId: string | null;
+  /** Секторы с открытой заявкой команды — с раздвоением их бывает два. */
+  userActiveSectorIds: string[];
   onCancel: () => void;
   onStarted: (submissionId: string) => void;
   onNavigateToActive: (sectorId: string) => void;
@@ -213,7 +214,7 @@ export function SectorActionModal({
   teleportActive,
   splitArmed,
   teamExperience,
-  userActiveSectorId,
+  userActiveSectorIds,
   onCancel,
   onStarted,
   onNavigateToActive,
@@ -265,9 +266,10 @@ export function SectorActionModal({
     }
   }
 
-  const isThisSectorActive = userActiveSectorId === sector.id;
-  const hasActiveElsewhere =
-    userActiveSectorId !== null && userActiveSectorId !== sector.id;
+  const isThisSectorActive = userActiveSectorIds.includes(sector.id);
+  const otherActiveSectorId =
+    userActiveSectorIds.find((id) => id !== sector.id) ?? null;
+  const hasActiveElsewhere = otherActiveSectorId !== null;
   // Раздвоение снимает запрет на второе действие: заявок разрешено две, имплант
   // тратится на этой. Сервер решает то же самое в startAction.
   const blockedElsewhere = hasActiveElsewhere && !splitArmed;
@@ -438,9 +440,9 @@ export function SectorActionModal({
             <EncounterPanel inst={encounter} busy={resolving} onResolve={resolveEnc} />
           )}
 
-          {!inWheel && !inEncounter && blockedElsewhere && userActiveSectorId && (
+          {!inWheel && !inEncounter && blockedElsewhere && otherActiveSectorId && (
             <BlockedElsewherePanel
-              onNavigate={() => onNavigateToActive(userActiveSectorId)}
+              onNavigate={() => onNavigateToActive(otherActiveSectorId)}
             />
           )}
 

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Bomb, Crown, Hammer, LogOut, Loader2, Palette, ShieldCheck, Store, Ticket, UserCog, Users } from 'lucide-react';
+import { AlertTriangle, Bomb, Crown, Hammer, LogOut, Loader2, Palette, ShieldCheck, Store, Ticket, UserCog, Users, Zap } from 'lucide-react';
 import { Button, Card, ErrorBanner, Input, Label } from '../../shared/ui';
 import { ApiError } from '../../shared/api/client';
 import { useAuth } from '../auth/AuthContext';
 import { getSettings, type GameSetting } from '../admin/settings-api';
 import { getTeamStats, leaveTeam, setTeamIdentity, transferCaptain, upgradeStat } from './api';
+import { getMyArmedPurchases, type ArmedImplant } from '../map/api';
 import type { MerchantType, StatName, TeamFullStats } from './types';
 import {
   teamColors, TEAM_COLOR_ORDER, findTeamColorKey, type TeamColorKey,
@@ -272,6 +273,8 @@ export function TeamPage() {
       </div>
 
       <TokensSection tokens={data.purchase_tokens} />
+
+      <ImplantsSection />
 
       <section>
         <div className="flex items-center justify-between mb-3">
@@ -549,6 +552,58 @@ function TeamSetupCard({
         </form>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Заряженные импланты: купленное у мастера и торговца, что ждёт хода команды.
+ * Команда не видит лавок, но обязана знать, что у неё на руках, — иначе
+ * «Раздвоение» и «Батут» лежат мёртвым грузом.
+ */
+function ImplantsSection() {
+  const [armed, setArmed] = useState<ArmedImplant[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    void getMyArmedPurchases()
+      .then((r) => {
+        if (alive) setArmed(r.armed);
+      })
+      .catch(() => {
+        if (alive) setArmed([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (armed.length === 0) return null;
+
+  return (
+    <section>
+      <div className="flex items-center gap-2 mb-2">
+        <Zap className="w-5 h-5 text-brand-400" />
+        <h2 className="font-display text-heading-sm text-neutral-1000">Импланты</h2>
+      </div>
+      <p className="text-sm text-neutral-700 mb-3">
+        Заряжены и ждут вашего хода — тратятся сами, на подходящем действии.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {armed.map((implant) => (
+          <Card key={implant.kind}>
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <div className="font-display text-lg text-neutral-1000">{implant.title}</div>
+              {implant.charges_left > 1 && (
+                <span className="font-mono text-sm text-neutral-700 flex-shrink-0">
+                  ×{implant.charges_left}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-neutral-700 leading-relaxed">{implant.description}</p>
+          </Card>
+        ))}
+      </div>
+    </section>
   );
 }
 
